@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import re
+
 import frappe
 from frappe import _
 
@@ -7,119 +10,363 @@ from ukrainian_integrations.shipment.ukr_poshta.api import UkrPoshtaClient
 from ukrainian_integrations.utils.logger import log_event
 
 
+# ── Config helpers ────────────────────────────────────────────────────────────
+
 def _cfg(key: str, default=None):
     return frappe.conf.get(key, default)
 
 
-def get_client() -> UkrPoshtaClient:
-    ecom = _cfg('ukrposhta_ecom_token')
-    tracking = _cfg('ukrposhta_tracking_token')
-    api_base = _cfg('ukrposhta_api_base', 'https://www.ukrposhta.ua/ecom/0.0.1')
-    if not ecom:
-        frappe.throw(_('Не задано ukrposhta_ecom_token у site_config.json'))
-    return UkrPoshtaClient(ecom_token=ecom, tracking_token=tracking, api_base=api_base)
+def _normalize_phone(phone: str) -> str:
+    """Strip non-digits, ensure +380 prefix."""
+    digits = re.sub(r"\D", "", phone or "")
+    if digits.startswith("380"):
+        return "+" + digits
+    if digits.startswith("0") and len(digits) == 10:
+        return "+38" + digits
+    if len(digits) == 9:
+        return "+380" + digits
+    return "+" + digits if digits else ""
 
+
+# ── Client factory ────────────────────────────────────────────────────────────
+
+def get_client() -> UkrPoshtaClient:
+    ecom = _cfg("ukrposhta_ecom_token")
+    tracking = _cfg("ukrposhta_tracking_token")
+    counterparty = _cfg("ukrposhta_counterparty_token")
+    api_base = _cfg("ukrposhta_api_base", "https://www.ukrposhta.ua/ecom/0.0.1")
+    if not ecom:
+        frappe.throw(_("Не задано ukrposhta_ecom_token у site_config.json"))
+    return UkrPoshtaClient(
+        ecom_token=ecom,
+        tracking_token=tracking,
+        counterparty_token=counterparty,
+        api_base=api_base,
+    )
+
+
+# ── Address ───────────────────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def up_create_address(address_payload: dict) -> dict:
+    """POST /addresses → {ok, address_id, raw}."""
+    if isinstance(address_payload, str):
+        address_payload = json.loads(address_payload)
+    req = {
+        "postcode": address_payload.get("postcode"),
+        "country": address_payload.get("country") or "UA",
+        "region": address_payload.get("region"),
+        "city": address_payload.get("city"),
+        "district": address_payload.get("district"),
+        "street": address_payload.get("street"),
+        "houseNumber": address_payload.get("houseNumber"),
+        "apartmentNumber": address_payload.get("apartmentNumber") or "",
+    }
+    missing = [k for k in ("postcode", "region", "city", "street", "houseNumber") if not req.get(k)]
+    if missing:
+        frappe.throw("Не заповнені поля адреси Укрпошти: " + ", ".join(missing))
+
+    client = get_client()
+    try:
+        out = client.create_address(req)
+        log_event("ukr_poshta", "success", "create_address", request_payload=req, response_payload=out)
+    except Exception:
+        log_event("ukr_poshta", "error", "create_address failed", request_payload=req, error_trace=frappe.get_traceback())
+        raise
+
+    addr_id = out.get("id")
+    if not addr_id:
+        frappe.throw("Укрпошта не повернула id адреси")
+    return {"ok": True, "address_id": str(addr_id), "raw": out}
+
+
+# ── Client ────────────────────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def up_create_client(client_payload: dict) -> dict:
+    """POST /clients?token=<counterparty> → {ok, client_uuid, raw}."""
+    if isinstance(client_payload, str):
+        client_payload = json.loads(client_payload)
+
+    ctype = client_payload.get("type") or "INDIVIDUAL"
+    full_name = (client_payload.get("name") or "").strip()
+    parts = [x for x in full_name.split() if x]
+    first = client_payload.get("firstName") or (parts[0] if parts else "Test")
+    last = client_payload.get("lastName") or (" ".join(parts[1:]) if len(parts) > 1 else "Client")
+
+    req: dict = {
+        "type": ctype,
+        "phoneNumber": _normalize_phone(client_payload.get("phoneNumber") or ""),
+        "email": client_payload.get("email") or "",
+        "addressId": client_payload.get("addressId"),
+        "externalId": client_payload.get("externalId") or "",
+    }
+    if ctype == "INDIVIDUAL":
+        req["firstName"] = first
+        req["lastName"] = last
+    else:
+        req["name"] = full_name or client_payload.get("companyName") or "Company"
+
+    missing = [k for k in ("phoneNumber", "addressId") if not req.get(k)]
+    if missing:
+        frappe.throw("Не заповнені поля клієнта Укрпошти: " + ", ".join(missing))
+
+    client = get_client()
+    try:
+        out = client.create_client(req)
+        log_event("ukr_poshta", "success", "create_client", request_payload=req, response_payload=out)
+    except Exception:
+        log_event("ukr_poshta", "error", "create_client failed", request_payload=req, error_trace=frappe.get_traceback())
+        raise
+
+    uuid = out.get("uuid") or out.get("id")
+    if not uuid:
+        frappe.throw("Укрпошта не повернула uuid клієнта")
+    return {"ok": True, "client_uuid": str(uuid), "raw": out}
+
+
+# ── Tracking ──────────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
 def track_barcode(barcode: str) -> dict:
     if not barcode:
-        frappe.throw(_('Barcode is required'))
+        frappe.throw(_("Barcode is required"))
     try:
         row = get_client().track(barcode)
-        log_event('ukr_poshta', 'success', f'Track {barcode}', request_payload={'barcode': barcode}, response_payload=row)
-        return {'ok': True, 'barcode': barcode, 'raw': row}
+        log_event("ukr_poshta", "success", f"Track {barcode}", request_payload={"barcode": barcode}, response_payload=row)
+        return {"ok": True, "barcode": barcode, "raw": row}
     except Exception:
-        log_event('ukr_poshta', 'error', f'Track failed {barcode}', request_payload={'barcode': barcode}, error_trace=frappe.get_traceback())
+        log_event("ukr_poshta", "error", f"Track failed {barcode}", request_payload={"barcode": barcode}, error_trace=frappe.get_traceback())
         raise
 
 
 @frappe.whitelist()
 def sync_sales_invoice_up_statuses(limit: int = 50) -> dict:
     docs = frappe.get_all(
-        'Sales Invoice',
-        filters={'up_barcode': ['is', 'set']},
-        fields=['name', 'up_barcode', 'up_status'],
-        order_by='modified desc',
+        "Sales Invoice",
+        filters={"up_barcode": ["is", "set"]},
+        fields=["name", "up_barcode", "up_status"],
+        order_by="modified desc",
         limit=max(1, min(int(limit or 50), 500)),
     )
     if not docs:
-        return {'ok': True, 'checked': 0, 'updated': 0}
+        return {"ok": True, "checked": 0, "updated": 0}
 
     client = get_client()
     updated = 0
     for d in docs:
-        code = d.get('up_barcode')
+        code = d.get("up_barcode")
         if not code:
             continue
         try:
             row = client.track(code)
-            status = row.get('status') or row.get('eventName') or row.get('state') or ''
-            if status and status != (d.get('up_status') or ''):
-                frappe.db.set_value('Sales Invoice', d['name'], 'up_status', status, update_modified=False)
+            status = row.get("status") or row.get("eventName") or row.get("state") or ""
+            if status and status != (d.get("up_status") or ""):
+                frappe.db.set_value("Sales Invoice", d["name"], "up_status", status, update_modified=False)
                 updated += 1
         except Exception:
             log_event(
-                'ukr_poshta',
-                'error',
+                "ukr_poshta",
+                "error",
                 f"Sync failed for {d['name']}",
-                reference_doctype='Sales Invoice',
-                reference_name=d['name'],
-                request_payload={'barcode': code},
+                reference_doctype="Sales Invoice",
+                reference_name=d["name"],
+                request_payload={"barcode": code},
                 error_trace=frappe.get_traceback(),
             )
 
     if updated:
         frappe.db.commit()
-    return {'ok': True, 'checked': len(docs), 'updated': updated}
+    return {"ok": True, "checked": len(docs), "updated": updated}
 
+
+# ── Full 3-step shipment creation ─────────────────────────────────────────────
 
 @frappe.whitelist()
-def create_shipment_from_sales_invoice(sales_invoice: str, recipient: dict | None = None, parcel: dict | None = None) -> dict:
+def create_shipment_from_sales_invoice(
+    sales_invoice: str,
+    recipient: dict | None = None,
+    parcel: dict | None = None,
+) -> dict:
+    """
+    Full Ukrposhta eCom 3-step flow:
+      1) POST /addresses  (sender + recipient)
+      2) POST /clients?token=<counterparty>  (sender + recipient)
+      3) POST /shipments?token=<counterparty>
+    Saves barcode + shipment_id to Sales Invoice custom fields when present.
+    """
     if not sales_invoice:
-        frappe.throw(_('Sales Invoice is required'))
+        frappe.throw(_("Sales Invoice is required"))
 
-    si = frappe.get_doc('Sales Invoice', sales_invoice)
+    if isinstance(recipient, str):
+        recipient = json.loads(recipient)
+    if isinstance(parcel, str):
+        parcel = json.loads(parcel)
+
     recipient = recipient or {}
     parcel = parcel or {}
 
-    sender = {
-        'name': _cfg('ukrposhta_sender_name', 'HUNTER'),
-        'phoneNumber': _cfg('ukrposhta_sender_phone', ''),
-        'address': {
-            'postcode': _cfg('ukrposhta_sender_postcode', ''),
-            'country': 'UA',
-            'region': _cfg('ukrposhta_sender_region', ''),
-            'city': _cfg('ukrposhta_sender_city', ''),
-            'street': _cfg('ukrposhta_sender_street', ''),
-            'houseNumber': _cfg('ukrposhta_sender_house', ''),
-        },
+    si = frappe.get_doc("Sales Invoice", sales_invoice)
+    client = get_client()
+
+    # ── 1a. Sender address ────────────────────────────────────────────────────
+    sender_addr_payload = {
+        "postcode": _cfg("ukrposhta_sender_postcode", ""),
+        "country": "UA",
+        "region": _cfg("ukrposhta_sender_region", ""),
+        "city": _cfg("ukrposhta_sender_city", ""),
+        "street": _cfg("ukrposhta_sender_street", ""),
+        "houseNumber": _cfg("ukrposhta_sender_house", ""),
+        "apartmentNumber": _cfg("ukrposhta_sender_apartment", "") or "",
+    }
+    missing_sender = [k for k in ("postcode", "region", "city", "street", "houseNumber") if not sender_addr_payload.get(k)]
+    if missing_sender:
+        frappe.throw("Не задані параметри відправника в site_config: " + ", ".join(f"ukrposhta_sender_{k.lower()}" for k in missing_sender))
+
+    sender_addr_out = client.create_address(sender_addr_payload)
+    sender_address_id = str(sender_addr_out.get("id") or "")
+    if not sender_address_id:
+        frappe.throw("Укрпошта не повернула id адреси відправника")
+
+    # ── 1b. Recipient address ─────────────────────────────────────────────────
+    recv_postcode = recipient.get("postcode") or ""
+    recv_region = recipient.get("region") or ""
+    recv_city = recipient.get("city") or ""
+    recv_street = recipient.get("street") or ""
+    recv_house = recipient.get("house") or recipient.get("houseNumber") or ""
+
+    missing_recv = [k for k, v in {"postcode": recv_postcode, "region": recv_region, "city": recv_city, "street": recv_street, "houseNumber": recv_house}.items() if not v]
+    if missing_recv:
+        frappe.throw("Не задані поля адреси одержувача: " + ", ".join(missing_recv))
+
+    recv_addr_payload = {
+        "postcode": recv_postcode,
+        "country": "UA",
+        "region": recv_region,
+        "city": recv_city,
+        "street": recv_street,
+        "houseNumber": recv_house,
+        "apartmentNumber": recipient.get("apartment") or recipient.get("apartmentNumber") or "",
+    }
+    recv_addr_out = client.create_address(recv_addr_payload)
+    recv_address_id = str(recv_addr_out.get("id") or "")
+    if not recv_address_id:
+        frappe.throw("Укрпошта не повернула id адреси одержувача")
+
+    # ── 2a. Sender client ─────────────────────────────────────────────────────
+    sender_name = (_cfg("ukrposhta_sender_name", "") or "").strip()
+    sender_phone = _normalize_phone(_cfg("ukrposhta_sender_phone", "") or "")
+    sender_email = _cfg("ukrposhta_sender_email", "") or ""
+
+    sender_parts = [x for x in sender_name.split() if x]
+    sender_req = {
+        "type": "INDIVIDUAL",
+        "firstName": sender_parts[0] if sender_parts else "Sender",
+        "lastName": " ".join(sender_parts[1:]) if len(sender_parts) > 1 else "Company",
+        "phoneNumber": sender_phone,
+        "email": sender_email,
+        "addressId": sender_address_id,
+    }
+    sender_client_out = client.create_client(sender_req)
+    sender_uuid = str(sender_client_out.get("uuid") or sender_client_out.get("id") or "")
+    if not sender_uuid:
+        frappe.throw("Укрпошта не повернула uuid відправника")
+
+    # ── 2b. Recipient client ──────────────────────────────────────────────────
+    recv_name = (recipient.get("name") or si.customer_name or si.customer or "").strip()
+    recv_phone = _normalize_phone(
+        recipient.get("phone") or recipient.get("phoneNumber") or
+        getattr(si, "contact_mobile", None) or getattr(si, "contact_phone", None) or ""
+    )
+    recv_email = recipient.get("email") or ""
+
+    recv_parts = [x for x in recv_name.split() if x]
+    recv_req = {
+        "type": "INDIVIDUAL",
+        "firstName": recv_parts[0] if recv_parts else "Customer",
+        "lastName": " ".join(recv_parts[1:]) if len(recv_parts) > 1 else "Client",
+        "phoneNumber": recv_phone,
+        "email": recv_email,
+        "addressId": recv_address_id,
+    }
+    recv_client_out = client.create_client(recv_req)
+    recv_uuid = str(recv_client_out.get("uuid") or recv_client_out.get("id") or "")
+    if not recv_uuid:
+        frappe.throw("Укрпошта не повернула uuid одержувача")
+
+    # ── 3. Create shipment ────────────────────────────────────────────────────
+    weight = int(round(float(parcel.get("weight") or 1)))
+    length = int(round(float(parcel.get("length") or 10)))
+    width = int(round(float(parcel.get("width") or 10)))
+    height = int(round(float(parcel.get("height") or 5)))
+    declared_value = float(parcel.get("declaredPrice") or parcel.get("declared_value") or si.grand_total or 1)
+    post_pay = float(parcel.get("postPay") or 0)
+    delivery_type = parcel.get("deliveryType") or "W2W"
+    on_fail = parcel.get("onFailReceiveType") or "RETURN"
+    if on_fail not in {"RETURN", "PROCESS_AS_REFUSAL"}:
+        on_fail = "RETURN"
+
+    shipment_req = {
+        "sender": {"uuid": sender_uuid},
+        "recipient": {"uuid": recv_uuid},
+        "deliveryType": delivery_type,
+        "weight": weight,
+        "length": length,
+        "width": width,
+        "height": height,
+        "postPay": post_pay,
+        "recommended": bool(parcel.get("recommended", True)),
+        "sms": bool(parcel.get("sms", True)),
+        "paidByRecipient": bool(parcel.get("paidByRecipient", False)),
+        "description": parcel.get("description") or f"Замовлення {si.name}",
+        "onFailReceiveType": on_fail,
+        "parcels": parcel.get("parcels") or [
+            {
+                "name": parcel.get("parcel_name") or "Parcel",
+                "weight": weight,
+                "length": length,
+                "width": width,
+                "height": height,
+                "declaredPrice": int(round(declared_value)),
+            }
+        ],
     }
 
-    recv = {
-        'name': recipient.get('name') or si.customer_name or si.customer,
-        'phoneNumber': recipient.get('phone') or getattr(si, 'contact_mobile', None) or getattr(si, 'contact_phone', None) or getattr(si, 'contact_display', None) or '',
-        'address': {
-            'postcode': recipient.get('postcode') or '',
-            'country': 'UA',
-            'region': recipient.get('region') or '',
-            'city': recipient.get('city') or '',
-            'street': recipient.get('street') or '',
-            'houseNumber': recipient.get('house') or '',
-            'apartmentNumber': recipient.get('apartment') or '',
-        },
-    }
+    try:
+        out = client.create_shipment(shipment_req)
+        log_event("ukr_poshta", "success", f"create_shipment {si.name}", request_payload=shipment_req, response_payload=out)
+    except Exception:
+        log_event("ukr_poshta", "error", f"create_shipment failed {si.name}", request_payload=shipment_req, error_trace=frappe.get_traceback())
+        raise
 
-    payload = {
-        'sender': sender,
-        'recipient': recv,
-        'deliveryType': parcel.get('deliveryType') or 'W2W',
-        'weight': float(parcel.get('weight') or 1.0),
-        'declaredPrice': float(parcel.get('declaredPrice') or si.grand_total or 1),
-        'description': parcel.get('description') or f'Замовлення {si.name}',
-    }
+    barcode = out.get("barcode") or out.get("shipmentBarcode") or out.get("ttn") or out.get("number") or ""
+    shipment_id = out.get("uuid") or out.get("id") or out.get("shipmentId") or ""
+    status = out.get("status") or out.get("state") or "created"
 
-    out = get_client().request('shipments', method='POST', payload=payload, token_kind='ecom')
-    barcode = out.get('barcode') or out.get('barcodeNumber') or ''
-    if 'up_barcode' in si.meta.get_valid_columns() and barcode:
-        si.db_set('up_barcode', barcode, update_modified=False)
-    return {'ok': True, 'sales_invoice': si.name, 'barcode': barcode, 'raw': out}
+    valid_cols = si.meta.get_valid_columns()
+    if "up_barcode" in valid_cols and barcode:
+        si.db_set("up_barcode", barcode, update_modified=False)
+    if "up_shipment_id" in valid_cols and shipment_id:
+        si.db_set("up_shipment_id", shipment_id, update_modified=False)
+    if "up_status" in valid_cols:
+        si.db_set("up_status", status, update_modified=False)
+
+    try:
+        frappe.get_doc({
+            "doctype": "Comment",
+            "comment_type": "Info",
+            "reference_doctype": "Sales Invoice",
+            "reference_name": si.name,
+            "content": f"Укрпошта відправлення створено: barcode={barcode or '—'}, id={shipment_id or '—'}",
+        }).insert(ignore_permissions=True)
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "sales_invoice": si.name,
+        "barcode": barcode,
+        "shipment_id": shipment_id,
+        "status": status,
+        "raw": out,
+    }
