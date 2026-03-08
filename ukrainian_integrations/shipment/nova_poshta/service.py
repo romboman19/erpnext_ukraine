@@ -274,6 +274,12 @@ def create_ttn_from_sales_invoice(
         "CityRecipient": recipient_city_ref,
         "RecipientCity": recipient_settlement_ref or recipient_city_ref,
         "RecipientAddress": recipient_warehouse_ref,
+        "OptionsSeat": [{
+            "volumetricWidth": "11",
+            "volumetricLength": "11",
+            "volumetricHeight": "5",
+            "weight": str(float(weight or 1.0)),
+        }],
     }
 
     out = cli.call("InternetDocument", "save", payload, api_key=profile_api_key)
