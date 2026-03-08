@@ -11,9 +11,15 @@ class NovaPoshtaClient:
         if not self.api_key:
             raise ValueError("Nova Poshta API key is required")
 
-    def call(self, model_name: str, called_method: str, method_properties: dict | None = None) -> dict:
+    def call(
+        self,
+        model_name: str,
+        called_method: str,
+        method_properties: dict | None = None,
+        api_key: str | None = None,
+    ) -> dict:
         payload = {
-            "apiKey": self.api_key,
+            "apiKey": (api_key or self.api_key),
             "modelName": model_name,
             "calledMethod": called_method,
             "methodProperties": method_properties or {},
