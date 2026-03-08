@@ -11,6 +11,7 @@ scheduler_events = {
         "*/30 * * * *": [
             "ukrainian_integrations.shipment.nova_poshta.scheduler.sync_ttn_statuses",
             "ukrainian_integrations.shipment.ukr_poshta.scheduler.sync_ttn_statuses",
+            "ukrainian_integrations.payments.privatbank.scheduler.run_auto_import",
         ],
         "*/10 * * * *": [
             "ukrainian_integrations.ecommerce.core.scheduler.sync_orders_all",
