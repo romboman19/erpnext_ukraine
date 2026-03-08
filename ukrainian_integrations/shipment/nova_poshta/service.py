@@ -105,7 +105,7 @@ def create_ttn_from_sales_invoice(
         'CityRecipient': recipient_city_ref,
         'RecipientAddress': recipient_warehouse_ref,
         'ContactRecipient': si.customer_name or si.customer,
-        'RecipientsPhone': (getattr(si, contact_mobile, None) or getattr(si, contact_phone, None) or getattr(si, contact_display, None) or '').strip(),
+        'RecipientsPhone': (getattr(si, 'contact_mobile', None) or getattr(si, 'contact_phone', None) or getattr(si, 'contact_display', None) or '').strip(),
     }
 
     out = get_client().call('InternetDocument', 'save', payload)
