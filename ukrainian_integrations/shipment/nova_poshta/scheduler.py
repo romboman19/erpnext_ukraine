@@ -1,2 +1,5 @@
+from .service import sync_sales_invoice_ttn_statuses
+
+
 def sync_ttn_statuses():
-    return {"ok": True, "carrier": "nova_poshta", "msg": "stub"}
+    return sync_sales_invoice_ttn_statuses(limit=100)
