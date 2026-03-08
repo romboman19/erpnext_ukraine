@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import frappe
 from frappe import _
 
@@ -18,71 +20,81 @@ def _client() -> MonobankClient:
     return MonobankClient(token)
 
 
+def _to_unix_range(days_back: int = 1) -> tuple[int, int]:
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=max(0, int(days_back)))
+    return int(start.timestamp()), int(now.timestamp())
+
+
 @frappe.whitelist()
-def mono_create_invoice(sales_invoice: str, amount: float | None = None) -> dict:
-    if not sales_invoice:
-        frappe.throw(_("Sales Invoice is required"))
+def mono_statements_fetch(account: str | None = None, from_ts: int | None = None, to_ts: int | None = None, days_back: int = 1) -> dict:
+    acc = (account or _cfg("monobank_account") or "").strip()
+    if not acc:
+        frappe.throw(_("Не задано рахунок: передай account або monobank_account у site_config"))
 
-    si = frappe.get_doc("Sales Invoice", sales_invoice)
-    amt = float(amount) if amount is not None else float(si.grand_total or 0)
-    if amt <= 0:
-        frappe.throw(_("Amount must be > 0"))
+    if from_ts is None or to_ts is None:
+        from_ts, to_ts = _to_unix_range(days_back=days_back)
 
-    amount_kopecks = int(round(amt * 100))
-    order_ref = f"SI-{si.name}"
-    merchant_info = {
-        "reference": order_ref,
-        "destination": f"Оплата рахунку {si.name}",
-        "basketOrder": [{"name": si.name, "qty": 1, "sum": amount_kopecks}],
-    }
-
+    req = {"account": acc, "from_ts": int(from_ts), "to_ts": int(to_ts)}
+    log_event("monobank", "queued", "Fetch statements", request_payload=req)
     try:
-        out = _client().create_invoice(
-            amount_kopecks=amount_kopecks,
-            merchant_paym_info=merchant_info,
-            redirect_url=_cfg("monobank_redirect_url"),
-            web_hook_url=_cfg("monobank_webhook_url"),
-        )
-        log_event(
-            "monobank",
-            "success",
-            f"Invoice created for {si.name}",
-            reference_doctype="Sales Invoice",
-            reference_name=si.name,
-            request_payload={"amount": amt, "amount_kopecks": amount_kopecks, "reference": order_ref},
-            response_payload=out,
-        )
-        return {"ok": True, "sales_invoice": si.name, "response": out}
+        rows = _client().statements(account=acc, from_ts=int(from_ts), to_ts=int(to_ts))
+        log_event("monobank", "success", f"Statements fetched: {len(rows)}", request_payload=req, response_payload={"count": len(rows)})
+        return {"ok": True, "count": len(rows), "data": rows}
     except Exception:
-        log_event(
-            "monobank",
-            "error",
-            f"Invoice create failed for {si.name}",
-            reference_doctype="Sales Invoice",
-            reference_name=si.name,
-            request_payload={"amount": amt, "amount_kopecks": amount_kopecks, "reference": order_ref},
-            error_trace=frappe.get_traceback(),
-        )
+        log_event("monobank", "error", "Fetch statements failed", request_payload=req, error_trace=frappe.get_traceback())
         raise
 
 
-@frappe.whitelist(allow_guest=True)
-def mono_webhook():
-    payload = frappe.request.get_json(silent=True) or {}
-    invoice_id = payload.get("invoiceId") or ""
-    status = payload.get("status") or ""
+@frappe.whitelist()
+def mono_statements_import_to_bank_transactions(account: str | None = None, from_ts: int | None = None, to_ts: int | None = None, days_back: int = 1, company: str | None = None) -> dict:
+    fetched = mono_statements_fetch(account=account, from_ts=from_ts, to_ts=to_ts, days_back=days_back)
+    rows = fetched.get("data") or []
 
-    # idempotency guard by invoiceId
-    if invoice_id and frappe.db.exists(
-        "Hunter Integration Log",
-        {"integration": "monobank", "status": "success", "message": ["like", f"%invoice:{invoice_id}%"]},
-    ):
-        return {"ok": True, "idempotent": True}
+    created = 0
+    skipped = 0
+    comp = company or _cfg("default_company")
+
+    for row in rows:
+        tx_id = str(row.get("id") or row.get("statementItemId") or "").strip()
+        if not tx_id:
+            skipped += 1
+            continue
+
+        exists = frappe.db.exists("Bank Transaction", {"description": ["like", f"%MBX:{tx_id}%"]})
+        if exists:
+            skipped += 1
+            continue
+
+        amount = float(row.get("amount") or 0) / 100.0
+        ts = int(row.get("time") or 0)
+        posting_date = datetime.fromtimestamp(ts, tz=timezone.utc).date().isoformat() if ts else frappe.utils.nowdate()
+
+        description = row.get("description") or row.get("comment") or ""
+
+        doc = frappe.get_doc(
+            {
+                "doctype": "Bank Transaction",
+                "date": posting_date,
+                "deposit": amount if amount > 0 else 0,
+                "withdrawal": abs(amount) if amount < 0 else 0,
+                "currency": "UAH",
+                "description": f"MBX:{tx_id} | {description}",
+                "bank_account_no": (account or _cfg("monobank_account") or ""),
+                "company": comp,
+            }
+        )
+        doc.insert(ignore_permissions=True)
+        created += 1
+
+    if created:
+        frappe.db.commit()
 
     log_event(
         "monobank",
         "success",
-        f"Webhook status:{status} invoice:{invoice_id}",
-        request_payload=payload,
+        f"Imported statements to Bank Transaction: created={created}, skipped={skipped}",
+        request_payload={"account": account, "from_ts": from_ts, "to_ts": to_ts, "days_back": days_back},
+        response_payload={"created": created, "skipped": skipped},
     )
-    return {"ok": True}
+    return {"ok": True, "created": created, "skipped": skipped}

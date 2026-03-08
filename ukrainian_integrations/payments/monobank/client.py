@@ -14,23 +14,14 @@ class MonobankClient:
     def _headers(self) -> dict:
         return {"X-Token": self.token, "Content-Type": "application/json"}
 
-    def create_invoice(self, amount_kopecks: int, ccy: int = 980, merchant_paym_info: dict | None = None, redirect_url: str | None = None, web_hook_url: str | None = None) -> dict:
-        payload = {
-            "amount": int(amount_kopecks),
-            "ccy": int(ccy),
-        }
-        if merchant_paym_info:
-            payload["merchantPaymInfo"] = merchant_paym_info
-        if redirect_url:
-            payload["redirectUrl"] = redirect_url
-        if web_hook_url:
-            payload["webHookUrl"] = web_hook_url
-
-        r = requests.post(f"{MONOBANK_API}/api/merchant/invoice/create", json=payload, headers=self._headers(), timeout=30)
+    def statements(self, account: str, from_ts: int, to_ts: int) -> list[dict]:
+        # Monobank personal API style endpoint
+        # /personal/statement/{account}/{from}/{to}
+        r = requests.get(
+            f"{MONOBANK_API}/personal/statement/{account}/{int(from_ts)}/{int(to_ts)}",
+            headers=self._headers(),
+            timeout=30,
+        )
         r.raise_for_status()
-        return r.json() if (r.text or "").strip() else {}
-
-    def get_invoice_status(self, invoice_id: str) -> dict:
-        r = requests.get(f"{MONOBANK_API}/api/merchant/invoice/status?invoiceId={invoice_id}", headers=self._headers(), timeout=20)
-        r.raise_for_status()
-        return r.json() if (r.text or "").strip() else {}
+        data = r.json() if (r.text or "").strip() else []
+        return data if isinstance(data, list) else []
