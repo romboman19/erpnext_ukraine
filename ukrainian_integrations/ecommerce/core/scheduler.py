@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ukrainian_integrations.ecommerce.core.orchestrator import sync_orders_all, sync_stock_all
 
 
