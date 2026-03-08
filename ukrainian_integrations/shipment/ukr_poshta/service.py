@@ -61,7 +61,7 @@ def sync_sales_invoice_up_statuses(limit: int = 50) -> dict:
             log_event(
                 'ukr_poshta',
                 'error',
-                fSync failed for {d[name]},
+                f"Sync failed for {d["name"]}",
                 reference_doctype='Sales Invoice',
                 reference_name=d['name'],
                 request_payload={'barcode': code},
