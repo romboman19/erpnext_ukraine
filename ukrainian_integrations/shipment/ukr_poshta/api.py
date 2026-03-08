@@ -17,8 +17,15 @@ class UkrPoshtaClient:
         token = self.tracking_token if token_kind == "tracking" and self.tracking_token else self.ecom_token
         return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-    def request(self, path: str, method: str = "GET", payload: dict | None = None, params: dict | None = None, token_kind: str = "ecom") -> dict:
-        url = f"{self.api_base}/{path.lstrip("/")}"
+    def request(
+        self,
+        path: str,
+        method: str = "GET",
+        payload: dict | None = None,
+        params: dict | None = None,
+        token_kind: str = "ecom",
+    ) -> dict:
+        url = f"{self.api_base}/{path.lstrip(/)}"
         is_body = method.upper() not in {"GET", "HEAD"}
         resp = requests.request(
             method.upper(),
