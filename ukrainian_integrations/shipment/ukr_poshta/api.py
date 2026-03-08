@@ -25,7 +25,7 @@ class UkrPoshtaClient:
         params: dict | None = None,
         token_kind: str = "ecom",
     ) -> dict:
-        url = f"{self.api_base}/{path.lstrip(/)}"
+        url = f"{self.api_base}/{path.lstrip('/')}"
         is_body = method.upper() not in {"GET", "HEAD"}
         resp = requests.request(
             method.upper(),
