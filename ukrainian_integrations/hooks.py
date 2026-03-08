@@ -6,6 +6,10 @@ app_email = "it@hunter.rv.ua"
 app_license = "MIT"
 required_apps = ["erpnext"]
 
+doctype_js = {
+    "Sales Invoice": "public/js/sales_invoice_shipment_actions.js",
+}
+
 scheduler_events = {
     "cron": {
         "*/30 * * * *": [
