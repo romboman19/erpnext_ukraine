@@ -27,6 +27,21 @@ def _default_range(days: int = 1) -> tuple[str, str]:
     return start.isoformat(), end.isoformat()
 
 
+def _normalize_amount(raw_amount) -> float:
+    """Normalize PrivatBank statement amount to major currency units.
+
+    Controlled by `privatbank_amount_in_minor_units` (site_config, default=1).
+    If 1, divide by 100 (kopecks -> UAH).
+    If 0, keep as-is (already UAH).
+    """
+    try:
+        value = float(raw_amount or 0)
+    except Exception:
+        return 0.0
+    in_minor = int(_cfg("privatbank_amount_in_minor_units", 1) or 1) == 1
+    return value / 100.0 if in_minor else value
+
+
 @frappe.whitelist()
 def pb_statements_fetch(account: str | None = None, start_date: str | None = None, end_date: str | None = None, limit: int = 1000, offset: int = 0) -> dict:
     acc = (account or _cfg('privatbank_account') or '').strip()
