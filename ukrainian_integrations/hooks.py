@@ -14,7 +14,10 @@ scheduler_events = {
             "ukrainian_integrations.payments.core.bank_import_scheduler.run_all_bank_imports",
         ],
         "*/10 * * * *": [
-            "ukrainian_integrations.ecommerce.core.scheduler.sync_orders_all",
+            "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_orders",
+        ],
+        "*/20 * * * *": [
+            "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_stock",
         ],
     }
 }

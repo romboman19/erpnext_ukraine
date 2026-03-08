@@ -1,2 +1,9 @@
-def sync_orders_all():
-    return {"ok": True, "msg": "stub"}
+from ukrainian_integrations.ecommerce.core.orchestrator import sync_orders_all, sync_stock_all
+
+
+def cron_sync_orders():
+    return sync_orders_all()
+
+
+def cron_sync_stock():
+    return sync_stock_all()
