@@ -7,7 +7,11 @@ app_license = "MIT"
 required_apps = ["erpnext"]
 
 doctype_js = {
-    "Sales Invoice": "public/js/sales_invoice_shipment_actions.js",
+    "Sales Invoice": [
+        "public/js/sales_invoice_shipment_actions.js",
+        "public/js/sales_invoice_vitalpbx_actions.js",
+    ],
+    "Customer": "public/js/customer_vitalpbx_actions.js",
 }
 
 scheduler_events = {
