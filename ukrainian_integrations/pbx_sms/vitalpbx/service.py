@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+import frappe
+from frappe import _
+
+from ukrainian_integrations.pbx_sms.vitalpbx.client import VitalPBXClient
+from ukrainian_integrations.utils.logger import log_event
+
+
+def _cfg(key: str, default=None):
+    return frappe.conf.get(key, default)
+
+
+def _client() -> VitalPBXClient:
+    base_url = _cfg('vitalpbx_base_url')
+    api_key = _cfg('vitalpbx_api_key')
+    timeout = _cfg('vitalpbx_timeout', 20)
+    if not base_url:
+        frappe.throw(_('Не задано vitalpbx_base_url у site_config.json'))
+    if not api_key:
+        frappe.throw(_('Не задано vitalpbx_api_key у site_config.json'))
+    return VitalPBXClient(base_url=base_url, api_key=api_key, timeout=timeout)
+
+
+def _normalize_phone(phone: str) -> str:
+    p = ''.join(ch for ch in (phone or '') if ch.isdigit() or ch == '+')
+    if p.startswith('0'):
+        p = '+38' + p
+    if p.startswith('380'):
+        p = '+' + p
+    return p
+
+
+@frappe.whitelist()
+def vitalpbx_healthcheck() -> dict:
+    try:
+        out = _client().health()
+        log_event('vitalpbx', 'success', 'Healthcheck OK', response_payload=out)
+        return {'ok': True, 'response': out}
+    except Exception:
+        log_event('vitalpbx', 'error', 'Healthcheck failed', error_trace=frappe.get_traceback())
+        raise
+
+
+@frappe.whitelist()
+def click_to_call(extension: str, destination: str) -> dict:
+    if not extension:
+        frappe.throw(_('Extension is required'))
+    dst = _normalize_phone(destination)
+    if not dst:
+        frappe.throw(_('Destination phone is invalid'))
+
+    req = {'extension': extension, 'destination': dst}
+    log_event('vitalpbx', 'queued', 'Click2Call request', request_payload=req)
+    try:
+        out = _client().click_to_call(extension=extension, destination=dst)
+        log_event('vitalpbx', 'success', 'Click2Call success', request_payload=req, response_payload=out)
+        return {'ok': True, 'response': out}
+    except Exception:
+        log_event('vitalpbx', 'error', 'Click2Call failed', request_payload=req, error_trace=frappe.get_traceback())
+        raise
+
+
+@frappe.whitelist()
+def click_to_call_customer(customer: str, extension: str) -> dict:
+    if not customer:
+        frappe.throw(_('Customer is required'))
+    c = frappe.get_doc('Customer', customer)
+    phone = c.get('mobile_no') or c.get('phone')
+    if not phone:
+        frappe.throw(_('У клієнта не заповнений телефон'))
+    return click_to_call(extension=extension, destination=phone)
