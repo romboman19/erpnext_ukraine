@@ -97,7 +97,7 @@ def create_shipment_from_sales_invoice(sales_invoice: str, recipient: dict | Non
 
     recv = {
         'name': recipient.get('name') or si.customer_name or si.customer,
-        'phoneNumber': recipient.get('phone') or si.contact_mobile or si.contact_phone or '',
+        'phoneNumber': recipient.get('phone') or getattr(si, contact_mobile, None) or getattr(si, contact_phone, None) or getattr(si, contact_display, None) or '',
         'address': {
             'postcode': recipient.get('postcode') or '',
             'country': 'UA',
