@@ -55,7 +55,7 @@ def sync_sales_invoice_ttn_statuses(limit: int = 50) -> dict:
                 frappe.db.set_value('Sales Invoice', d['name'], 'np_status', status, update_modified=False)
                 updated += 1
         except Exception:
-            frappe.log_error(frappe.get_traceback(), f"Nova Poshta sync failed for {d["name"]}")
+            frappe.log_error(frappe.get_traceback(), f"Nova Poshta sync failed for {d['name']}")
 
     if updated:
         frappe.db.commit()
