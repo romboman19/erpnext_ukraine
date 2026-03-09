@@ -39,13 +39,28 @@ def _sender_profiles_from_doctype() -> list[dict]:
     out = []
     for r in rows:
         doc = frappe.get_doc("NP Sender Profile", r["name"])
+        sender_city_ref = r.get("default_settlement_ref")
+        sender_address_ref = r.get("default_warehouse_ref")
+        if not sender_city_ref or not sender_address_ref:
+            branches = doc.get("sender_branches") or []
+            preferred = None
+            for b in branches:
+                if b.get("is_default"):
+                    preferred = b
+                    break
+            if not preferred and branches:
+                preferred = branches[0]
+            if preferred:
+                sender_city_ref = sender_city_ref or preferred.get("settlement_ref")
+                sender_address_ref = sender_address_ref or preferred.get("warehouse_ref")
+
         out.append({
             "name": r.get("profile_name") or r.get("name"),
             "default": bool(r.get("is_default")),
             "api_key": doc.get_password("api_key") or _cfg("novaposhta_api_key"),
             "sender_ref": r.get("sender_ref"),
-            "sender_city_ref": r.get("default_settlement_ref"),
-            "sender_address_ref": r.get("default_warehouse_ref"),
+            "sender_city_ref": sender_city_ref,
+            "sender_address_ref": sender_address_ref,
             "contact_sender_ref": r.get("contact_ref"),
             "sender_phone": r.get("phone"),
         })
