@@ -22,14 +22,15 @@ def _settings_value(fieldname: str):
 
 def _client() -> VitalPBXClient:
     base_url = _cfg('vitalpbx_base_url') or _settings_value('base_url')
-    api_key = _cfg('vitalpbx_api_key') or _settings_value('api_key')
+    api_key = _cfg('vitalpbx_app_key') or _cfg('vitalpbx_app_key') or _cfg('vitalpbx_api_key') or _settings_value('api_key')
     timeout = _cfg('vitalpbx_timeout', 20)
     verify_ssl = int(_cfg('vitalpbx_verify_ssl', 1) or 1) == 1
+    tenant = _cfg('vitalpbx_tenant') or _settings_value('tenant')
     if not base_url:
         frappe.throw(_('Не задано vitalpbx_base_url (site_config або VitalPBX Settings)'))
     if not api_key:
         frappe.throw(_('Не задано vitalpbx_api_key (site_config або VitalPBX Settings)'))
-    return VitalPBXClient(base_url=base_url, api_key=api_key, timeout=timeout, verify_ssl=verify_ssl)
+    return VitalPBXClient(base_url=base_url, api_key=api_key, timeout=timeout, verify_ssl=verify_ssl, tenant=tenant)
 
 
 def _normalize_phone(phone: str) -> str:
