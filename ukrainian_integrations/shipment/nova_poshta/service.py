@@ -284,12 +284,12 @@ def create_ttn_from_sales_invoice(
 
     cost = float(declared_cost) if declared_cost is not None else float(si.grand_total or 0)
     payload = {
-        "PayerType": "Recipient",
-        "PaymentMethod": "Cash",
+        "PayerType": payer_type or "Recipient",
+        "PaymentMethod": payment_method or "Cash",
         "DateTime": _today_np(),
-        "CargoType": "Parcel",
+        "CargoType": cargo_type or "Parcel",
         "Weight": float(weight or 1.0),
-        "ServiceType": "WarehouseWarehouse",
+        "ServiceType": service_type or "WarehouseWarehouse",
         "SeatsAmount": int(seats_amount or 1),
         "Description": f"Замовлення {si.name}",
         "Cost": max(1, int(round(cost))),
@@ -307,12 +307,23 @@ def create_ttn_from_sales_invoice(
         "RecipientCity": recipient_settlement_ref or recipient_city_ref,
         "RecipientAddress": recipient_warehouse_ref,
         "OptionsSeat": [{
-            "volumetricWidth": "11",
-            "volumetricLength": "11",
-            "volumetricHeight": "5",
+            "volumetricWidth": str(int(round(float(width or 15)))),
+            "volumetricLength": str(int(round(float(length or 10)))),
+            "volumetricHeight": str(int(round(float(height or 5)))),
             "weight": str(float(weight or 1.0)),
         }],
     }
+
+
+    if cod_amount and float(cod_amount) > 0:
+        payload["BackwardDeliveryData"] = [{
+            "PayerType": "Recipient",
+            "CargoType": return_delivery_type or "Money",
+            "RedeliveryString": str(int(round(float(cod_amount)))),
+        }]
+
+    if order_no:
+        payload["InfoRegClientBarcodes"] = order_no
 
     out = cli.call("InternetDocument", "save", payload, api_key=profile_api_key)
     row = (out.get("data") or [{}])[0]
@@ -339,6 +350,17 @@ def create_ttn_standalone(
     declared_cost: float = 100.0,
     weight: float = 1.0,
     seats_amount: int = 1,
+    cargo_type: str | None = None,
+    payer_type: str | None = None,
+    payment_method: str | None = None,
+    service_type: str | None = None,
+    width: float | None = None,
+    length: float | None = None,
+    height: float | None = None,
+    cod_amount: float | None = None,
+    return_delivery_type: str | None = None,
+    note: str | None = None,
+    order_no: str | None = None,
 ) -> dict:
     if not recipient_name:
         frappe.throw(_("Вкажіть ПІБ отримувача"))
@@ -391,14 +413,14 @@ def create_ttn_standalone(
         frappe.throw(_("НП не повернула контакт отримувача"))
 
     payload = {
-        "PayerType": "Recipient",
-        "PaymentMethod": "Cash",
+        "PayerType": payer_type or "Recipient",
+        "PaymentMethod": payment_method or "Cash",
         "DateTime": _today_np(),
-        "CargoType": "Parcel",
+        "CargoType": cargo_type or "Parcel",
         "Weight": float(weight or 1.0),
-        "ServiceType": "WarehouseWarehouse",
+        "ServiceType": service_type or "WarehouseWarehouse",
         "SeatsAmount": int(seats_amount or 1),
-        "Description": (description or "Ручна ТТН з ERP")[:90],
+        "Description": (description or note or "Ручна ТТН з ERP")[:90],
         "Cost": max(1, int(round(float(declared_cost or 1)))),
         "CitySender": sender_city_ref,
         "Sender": sender_ref,
@@ -414,12 +436,23 @@ def create_ttn_standalone(
         "RecipientCity": recipient_settlement_ref or recipient_city_ref,
         "RecipientAddress": recipient_warehouse_ref,
         "OptionsSeat": [{
-            "volumetricWidth": "11",
-            "volumetricLength": "11",
-            "volumetricHeight": "5",
+            "volumetricWidth": str(int(round(float(width or 15)))),
+            "volumetricLength": str(int(round(float(length or 10)))),
+            "volumetricHeight": str(int(round(float(height or 5)))),
             "weight": str(float(weight or 1.0)),
         }],
     }
+
+
+    if cod_amount and float(cod_amount) > 0:
+        payload["BackwardDeliveryData"] = [{
+            "PayerType": "Recipient",
+            "CargoType": return_delivery_type or "Money",
+            "RedeliveryString": str(int(round(float(cod_amount)))),
+        }]
+
+    if order_no:
+        payload["InfoRegClientBarcodes"] = order_no
 
     out = cli.call("InternetDocument", "save", payload, api_key=profile_api_key)
     row = (out.get("data") or [{}])[0]
