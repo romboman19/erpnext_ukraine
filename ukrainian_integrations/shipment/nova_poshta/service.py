@@ -478,3 +478,20 @@ def create_ttn_standalone(
         "print_url": row.get("Ref") and f"https://my.novaposhta.ua/orders/printDocument/orders[]/{row.get('Ref')}/type/pdf/apiKey/{profile_api_key}",
         "raw": row,
     }
+
+
+@frappe.whitelist()
+def np_debug_resolve_profile(sender_profile: str | None = None) -> dict:
+    p = _resolve_profile(sender_profile)
+    chk = {
+        'sender_ref': p.get('sender_ref'),
+        'sender_city_ref': p.get('sender_city_ref'),
+        'sender_address_ref': p.get('sender_address_ref'),
+        'contact_sender_ref': p.get('contact_sender_ref'),
+        'sender_phone': _normalize_phone(p.get('sender_phone') or ''),
+        'api_key': (p.get('api_key') or '')[:8] + '...' if p.get('api_key') else '',
+        'name': p.get('name'),
+        'default': p.get('default'),
+    }
+    missing = [k for k,v in chk.items() if k in ('sender_ref','sender_city_ref','sender_address_ref','contact_sender_ref','sender_phone','api_key') and not v]
+    return {'ok': True, 'profile': chk, 'missing': missing}
