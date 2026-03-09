@@ -7,10 +7,11 @@ frappe.ui.form.on('NP Sender Profile', {
           { fieldname: 'recipient_name', label: 'Одержувач', fieldtype: 'Data', reqd: 1 },
           { fieldname: 'recipient_phone', label: 'Телефон', fieldtype: 'Data', reqd: 1 },
           { fieldname: 'settlement_query', label: 'Пошук міста', fieldtype: 'Data', reqd: 1 },
-          { fieldname: 'recipient_settlement_ref', label: 'Settlement Ref', fieldtype: 'Data', read_only: 1, reqd: 1 },
-          { fieldname: 'recipient_city_ref', label: 'City Ref', fieldtype: 'Data', read_only: 1, reqd: 1 },
+          { fieldname: 'recipient_settlement_ref', label: 'Settlement Ref', fieldtype: 'Data', read_only: 1, reqd: 1, hidden: 1 },
+          { fieldname: 'recipient_city_ref', label: 'City Ref', fieldtype: 'Data', read_only: 1, reqd: 1, hidden: 1 },
           { fieldname: 'warehouse_query', label: 'Пошук відділення/поштомата', fieldtype: 'Data' },
-          { fieldname: 'recipient_warehouse_ref', label: 'Warehouse Ref', fieldtype: 'Data', reqd: 1 },
+          { fieldname: 'selected_warehouse', label: 'Обране відділення', fieldtype: 'Data', read_only: 1 },
+          { fieldname: 'recipient_warehouse_ref', label: 'Warehouse Ref', fieldtype: 'Data', reqd: 1, hidden: 1 },
           { fieldname: 'section_break_1', fieldtype: 'Section Break', label: 'Параметри відправлення' },
           { fieldname: 'cargo_type', label: 'Тип вантажу', fieldtype: 'Select', options: 'Parcel\nCargo\nDocuments\nTiresWheels', default: 'Parcel' },
           { fieldname: 'service_type', label: 'Тип доставки', fieldtype: 'Select', options: 'WarehouseWarehouse\nDoorsWarehouse\nWarehouseDoors\nDoorsDoors', default: 'WarehouseWarehouse' },
@@ -51,6 +52,7 @@ frappe.ui.form.on('NP Sender Profile', {
         const r = await frappe.call({ method:'ukrainian_integrations.shipment.nova_poshta.service.np_search_warehouses', args:{ settlement_ref, query, sender_profile: frm.doc.profile_name || frm.doc.name }});
         const items = (r.message && r.message.items) || []; if (!items.length) return;
         d.set_value('recipient_warehouse_ref', items[0].ref || '');
+        d.set_value('selected_warehouse', items[0].label || items[0].short || '');
       });
 
       d.show();

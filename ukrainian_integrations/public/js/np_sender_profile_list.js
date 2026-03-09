@@ -10,10 +10,11 @@ frappe.listview_settings['NP Sender Profile'] = {
           { fieldname: 'recipient_name', label: 'Одержувач', fieldtype: 'Data', reqd: 1 },
           { fieldname: 'recipient_phone', label: 'Телефон', fieldtype: 'Data', reqd: 1 },
           { fieldname: 'settlement_query', label: 'Пошук міста', fieldtype: 'Data', reqd: 1 },
-          { fieldname: 'recipient_settlement_ref', label: 'Settlement Ref', fieldtype: 'Data', read_only: 1, reqd: 1 },
-          { fieldname: 'recipient_city_ref', label: 'City Ref', fieldtype: 'Data', read_only: 1, reqd: 1 },
+          { fieldname: 'recipient_settlement_ref', label: 'Settlement Ref', fieldtype: 'Data', read_only: 1, reqd: 1, hidden: 1 },
+          { fieldname: 'recipient_city_ref', label: 'City Ref', fieldtype: 'Data', read_only: 1, reqd: 1, hidden: 1 },
           { fieldname: 'warehouse_query', label: 'Пошук відділення/поштомата', fieldtype: 'Data' },
-          { fieldname: 'recipient_warehouse_ref', label: 'Warehouse Ref', fieldtype: 'Data', reqd: 1 },
+          { fieldname: 'selected_warehouse', label: 'Обране відділення', fieldtype: 'Data', read_only: 1 },
+          { fieldname: 'recipient_warehouse_ref', label: 'Warehouse Ref', fieldtype: 'Data', reqd: 1, hidden: 1 },
           { fieldname: 'description', label: 'Опис', fieldtype: 'Data' },
           { fieldname: 'declared_cost', label: 'Оголошена вартість', fieldtype: 'Currency', default: 100 },
           { fieldname: 'weight', label: 'Вага, кг', fieldtype: 'Float', default: 1 },
@@ -53,6 +54,7 @@ frappe.listview_settings['NP Sender Profile'] = {
         const items = (r3.message && r3.message.items) || [];
         if (!items.length) return;
         d.set_value('recipient_warehouse_ref', items[0].ref || '');
+        d.set_value('selected_warehouse', items[0].label || items[0].short || '');
       });
 
       d.show();
