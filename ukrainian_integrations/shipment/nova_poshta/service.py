@@ -24,6 +24,38 @@ def _today_np() -> str:
     return frappe.utils.now_datetime().strftime("%d.%m.%Y")
 
 
+def _pick_np_contact(contacts: list[dict], recipient_phone: str, recipient_name: str) -> dict | None:
+    if not contacts:
+        return None
+    phone_digits = _normalize_phone(recipient_phone or "")
+    name_l = (recipient_name or "").strip().lower()
+
+    def phones(c):
+        vals = str(c.get("Phones") or c.get("Phone") or "")
+        return _normalize_phone(vals)
+
+    # 1) exact phone match + name hint
+    for c in contacts:
+        ph = phones(c)
+        desc = str(c.get("Description") or c.get("FullName") or "").lower()
+        if ph and phone_digits and phone_digits in ph and (not name_l or name_l in desc):
+            return c
+
+    # 2) phone match only
+    for c in contacts:
+        ph = phones(c)
+        if ph and phone_digits and phone_digits in ph:
+            return c
+
+    # 3) name hint only
+    for c in contacts:
+        desc = str(c.get("Description") or c.get("FullName") or "").lower()
+        if name_l and name_l in desc:
+            return c
+
+    return contacts[0]
+
+
 def _sender_profiles_from_doctype() -> list[dict]:
     if not frappe.db.exists("DocType", "NP Sender Profile"):
         return []
@@ -337,7 +369,8 @@ def create_ttn_from_sales_invoice(
         {"Ref": recip_row.get("Ref")},
         api_key=profile_api_key,
     )
-    recip_contact_row = (recip_contacts.get("data") or [None])[0]
+    recip_contact_candidates = recip_contacts.get("data") or []
+    recip_contact_row = _pick_np_contact(recip_contact_candidates, rec_phone, rec_name)
     if not recip_contact_row:
         frappe.throw(_("НП не повернула контакт отримувача"))
 
@@ -482,7 +515,8 @@ def create_ttn_standalone(
         {"Ref": recip_row.get("Ref")},
         api_key=profile_api_key,
     )
-    recip_contact_row = (recip_contacts.get("data") or [None])[0]
+    recip_contact_candidates = recip_contacts.get("data") or []
+    recip_contact_row = _pick_np_contact(recip_contact_candidates, rec_phone, rec_name)
     if not recip_contact_row:
         frappe.throw(_("НП не повернула контакт отримувача"))
 
