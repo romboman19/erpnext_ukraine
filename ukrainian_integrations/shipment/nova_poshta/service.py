@@ -534,8 +534,8 @@ def create_ttn_standalone(
         "ok": True,
         "ttn_number": row.get("IntDocNumber") or "",
         "ttn_ref": row.get("Ref") or "",
-        "print_url": row.get("Ref") and f"https://my.novaposhta.ua/orders/printMarking100x100/orders[]/{row.get('Ref')}",
-        "sticker_url": row.get("Ref") and f"https://my.novaposhta.ua/orders/printMarking100x100/orders[]/{row.get('Ref')}",
+        "print_url": row.get("Ref") and f"https://my.novaposhta.ua/orders/printMarking100x100/orders[]/{row.get('Ref')}/apiKey/{profile_api_key}",
+        "sticker_url": row.get("Ref") and f"https://my.novaposhta.ua/orders/printMarking100x100/orders[]/{row.get('Ref')}/apiKey/{profile_api_key}",
         "raw": row,
     }
 
