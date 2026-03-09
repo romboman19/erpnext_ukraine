@@ -23,7 +23,7 @@ frappe.listview_settings['NP Sender Profile'] = {
         primary_action_label: 'Створити',
         primary_action: async (v) => {
           const x = await frappe.call({ method: 'ukrainian_integrations.shipment.nova_poshta.service.create_ttn_standalone', args: v });
-          frappe.msgprint('ТТН: ' + ((x.message || {}).ttn_number || '-'));
+          const m=(x.message||{}); const stickerUrl=m.sticker_url || (m.ttn_ref ? `https://my.novaposhta.ua/orders/printMarking100x100/orders[]/${m.ttn_ref}` : (m.print_url||'')); frappe.msgprint('ТТН: ' + (m.ttn_number || '-') + (stickerUrl ? `<br><a href=\"${stickerUrl}\" target=\"_blank\">Друк стікера 11x11</a>` : ''));
           d.hide();
         }
       });
