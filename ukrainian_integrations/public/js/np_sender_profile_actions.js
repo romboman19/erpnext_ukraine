@@ -4,6 +4,7 @@ frappe.ui.form.on('NP Sender Profile', {
       const d = new frappe.ui.Dialog({
         title: 'НП ТТН із профілю (розширено)',
         fields: [
+          { fieldname: 'sender_branch', label: 'Відправляти з відділення', fieldtype: 'Select' },
           { fieldname: 'recipient_name', label: 'Одержувач', fieldtype: 'Data', reqd: 1 },
           { fieldname: 'recipient_phone', label: 'Телефон', fieldtype: 'Data', reqd: 1 },
           { fieldname: 'settlement_query', label: 'Пошук міста', fieldtype: 'Data', reqd: 1 },
@@ -31,13 +32,22 @@ frappe.ui.form.on('NP Sender Profile', {
         size: 'extra-large',
         primary_action_label: 'Створити',
         primary_action: async (v) => {
-          const r = await frappe.call({ method: 'ukrainian_integrations.shipment.nova_poshta.service.create_ttn_standalone', args: { ...v, sender_profile: frm.doc.profile_name || frm.doc.name } });
+          const r = await frappe.call({ method: 'ukrainian_integrations.shipment.nova_poshta.service.create_ttn_standalone', args: { ...v, sender_profile: frm.doc.profile_name || frm.doc.name, sender_branch: ((v.sender_branch||"").split("::")[0] || "") } });
           const m = (r.message || {});
           const stickerUrl = m.sticker_url || (m.ttn_ref ? `https://my.novaposhta.ua/orders/printMarking100x100/orders[]/${m.ttn_ref}` : (m.print_url || ''));
           frappe.msgprint(`ТТН: ${m.ttn_number || '-'}${stickerUrl ? `<br><a href="${stickerUrl}" target="_blank">Друк стікера 11x11</a>` : ''}`);
           d.hide();
         }
       });
+
+      try {
+        const br = await frappe.call({ method: 'ukrainian_integrations.shipment.nova_poshta.service.np_sender_branches', args: { sender_profile: frm.doc.profile_name || frm.doc.name } });
+        const items = (br.message && br.message.items) || [];
+        const opts = items.map(i => `${i.name}::${i.label}`);
+        d.set_df_property('sender_branch', 'options', opts.join('\n'));
+        const def = items.find(i => i.default) || items[0];
+        if (def) d.set_value('sender_branch', `${def.name}::${def.label}`);
+      } catch (_) {}
 
       d.get_field('settlement_query').$input.on('change', async () => {
         const q = (d.get_value('settlement_query') || '').trim(); if (!q) return;

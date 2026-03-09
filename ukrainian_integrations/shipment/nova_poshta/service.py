@@ -184,6 +184,36 @@ def np_search_warehouses(settlement_ref: str, query: str | None = None, sender_p
 
 
 @frappe.whitelist()
+def np_sender_branches(sender_profile: str | None = None) -> dict:
+    profile = _resolve_profile(sender_profile)
+    name = profile.get("name") or sender_profile
+    if not name:
+        return {"ok": True, "items": []}
+
+    # find profile doc by profile_name or name
+    prof_name = frappe.db.get_value("NP Sender Profile", {"profile_name": name}, "name") or frappe.db.get_value("NP Sender Profile", name, "name")
+    if not prof_name:
+        return {"ok": True, "items": []}
+
+    rows = frappe.get_all(
+        "NP Sender Branch Row",
+        fields=["name", "settlement_ref", "warehouse_ref", "warehouse_label", "is_default"],
+        filters={"parent": prof_name},
+        order_by="is_default desc, idx asc",
+    )
+    items=[]
+    for r in rows:
+        items.append({
+            "name": r.get("name"),
+            "label": r.get("warehouse_label") or r.get("warehouse_ref"),
+            "settlement_ref": r.get("settlement_ref"),
+            "warehouse_ref": r.get("warehouse_ref"),
+            "default": 1 if r.get("is_default") else 0,
+        })
+    return {"ok": True, "items": items}
+
+
+@frappe.whitelist()
 def track_ttn(ttn: str) -> dict:
     if not ttn:
         frappe.throw(_("TTN is required"))
@@ -250,6 +280,11 @@ def create_ttn_from_sales_invoice(
     contact_sender_ref = profile.get("contact_sender_ref") or _cfg("novaposhta_contact_sender_ref")
     sender_phone = _normalize_phone(profile.get("sender_phone") or _cfg("novaposhta_sender_phone") or "")
     profile_api_key = profile.get("api_key") or _cfg("novaposhta_api_key")
+
+    if sender_branch and frappe.db.exists("NP Sender Branch Row", sender_branch):
+        br = frappe.get_doc("NP Sender Branch Row", sender_branch)
+        sender_city_ref = br.get("settlement_ref") or sender_city_ref
+        sender_address_ref = br.get("warehouse_ref") or sender_address_ref
 
     if not all([sender_ref, sender_city_ref, sender_address_ref, contact_sender_ref, sender_phone, profile_api_key]):
         # final fallback to site defaults only
@@ -385,6 +420,7 @@ def create_ttn_standalone(
     return_delivery_type: str | None = None,
     note: str | None = None,
     order_no: str | None = None,
+    sender_branch: str | None = None,
 ) -> dict:
     if not recipient_name:
         frappe.throw(_("Вкажіть ПІБ отримувача"))
@@ -401,6 +437,11 @@ def create_ttn_standalone(
     contact_sender_ref = profile.get("contact_sender_ref") or _cfg("novaposhta_contact_sender_ref")
     sender_phone = _normalize_phone(profile.get("sender_phone") or _cfg("novaposhta_sender_phone") or "")
     profile_api_key = profile.get("api_key") or _cfg("novaposhta_api_key")
+
+    if sender_branch and frappe.db.exists("NP Sender Branch Row", sender_branch):
+        br = frappe.get_doc("NP Sender Branch Row", sender_branch)
+        sender_city_ref = br.get("settlement_ref") or sender_city_ref
+        sender_address_ref = br.get("warehouse_ref") or sender_address_ref
 
     if not all([sender_ref, sender_city_ref, sender_address_ref, contact_sender_ref, sender_phone, profile_api_key]):
         # final fallback to site defaults only
