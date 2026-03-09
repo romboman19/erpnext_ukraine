@@ -27,24 +27,37 @@ class VitalPBXClient:
         return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
     def health(self) -> dict:
-        params = {"tenant": self.tenant} if self.tenant else None
-        for mode in ("app-key", "x-api-key", "raw-auth", "apikey", "bearer"):
-            r = requests.get(f"{self.base_url}/api/ping", headers=self._headers(mode), params=params, timeout=self.timeout, verify=self.verify_ssl)
-            if r.status_code != 401:
-                r.raise_for_status()
-                return r.json() if (r.text or "").strip() else {"ok": True}
+        headers = {
+            "Content-Type": "application/json",
+            "app-key": self.api_key,
+            "tenant": self.tenant or "VitalPBX",
+        }
+        # best-effort probe
+        r = requests.get(f"{self.base_url}/api/v2/core/click_to_call", headers=headers, timeout=self.timeout, verify=self.verify_ssl)
+        if r.status_code in (200, 204, 400, 405):
+            return {"ok": True, "status_code": r.status_code}
         r.raise_for_status()
-        return {"ok": False}
+        return {"ok": True, "status_code": r.status_code}
 
     def click_to_call(self, extension: str, destination: str) -> dict:
-        payload = {"extension": str(extension), "destination": str(destination)}
-        last = None
-        params = {"tenant": self.tenant} if self.tenant else None
-        for mode in ("app-key", "x-api-key", "raw-auth", "apikey", "bearer"):
-            r = requests.post(f"{self.base_url}/api/click2call", headers=self._headers(mode), params=params, json=payload, timeout=self.timeout, verify=self.verify_ssl)
-            last = r
-            if r.status_code != 401:
-                r.raise_for_status()
-                return r.json() if (r.text or "").strip() else {"ok": True}
-        last.raise_for_status()
-        return {"ok": False}
+        payload = {
+            "caller": str(extension),
+            "callee": str(destination),
+            "cos_id": 1,
+            "cid_name": str(destination),
+            "cid_number": str(destination),
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "app-key": self.api_key,
+            "tenant": self.tenant or "VitalPBX",
+        }
+        r = requests.post(
+            f"{self.base_url}/api/v2/core/click_to_call",
+            headers=headers,
+            json=payload,
+            timeout=self.timeout,
+            verify=self.verify_ssl,
+        )
+        r.raise_for_status()
+        return r.json() if (r.text or "").strip() else {"ok": True}
