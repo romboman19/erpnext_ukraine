@@ -493,7 +493,8 @@ def create_ttn_standalone(
         "ok": True,
         "ttn_number": row.get("IntDocNumber") or "",
         "ttn_ref": row.get("Ref") or "",
-        "print_url": row.get("Ref") and f"https://my.novaposhta.ua/orders/printDocument/orders[]/{row.get('Ref')}/type/pdf/apiKey/{profile_api_key}",
+        "print_url": row.get("Ref") and f"https://my.novaposhta.ua/orders/printMarking100x100/orders[]/{row.get('Ref')}",
+        "sticker_url": row.get("Ref") and f"https://my.novaposhta.ua/orders/printMarking100x100/orders[]/{row.get('Ref')}",
         "raw": row,
     }
 
