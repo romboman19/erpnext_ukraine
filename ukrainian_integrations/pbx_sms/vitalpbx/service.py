@@ -11,14 +11,23 @@ def _cfg(key: str, default=None):
     return frappe.conf.get(key, default)
 
 
+def _settings_value(fieldname: str):
+    if not frappe.db.exists('DocType', 'VitalPBX Settings'):
+        return None
+    try:
+        return frappe.db.get_single_value('VitalPBX Settings', fieldname)
+    except Exception:
+        return None
+
+
 def _client() -> VitalPBXClient:
-    base_url = _cfg('vitalpbx_base_url')
-    api_key = _cfg('vitalpbx_api_key')
+    base_url = _cfg('vitalpbx_base_url') or _settings_value('base_url')
+    api_key = _cfg('vitalpbx_api_key') or _settings_value('api_key')
     timeout = _cfg('vitalpbx_timeout', 20)
     if not base_url:
-        frappe.throw(_('Не задано vitalpbx_base_url у site_config.json'))
+        frappe.throw(_('Не задано vitalpbx_base_url (site_config або VitalPBX Settings)'))
     if not api_key:
-        frappe.throw(_('Не задано vitalpbx_api_key у site_config.json'))
+        frappe.throw(_('Не задано vitalpbx_api_key (site_config або VitalPBX Settings)'))
     return VitalPBXClient(base_url=base_url, api_key=api_key, timeout=timeout)
 
 
