@@ -81,3 +81,48 @@ def click_to_call_customer(customer: str, extension: str) -> dict:
     if not phone:
         frappe.throw(_('У клієнта не заповнений телефон'))
     return click_to_call(extension=extension, destination=phone)
+
+
+@frappe.whitelist()
+def dialer_call(
+    number: str,
+    cos_id: int,
+    destination_category_id: int,
+    destination_id: int,
+    cid_number: str | None = None,
+    cid_name: str | None = None,
+    timeout: int | None = None,
+) -> dict:
+    if not number:
+        frappe.throw(_('Number is required'))
+
+    normalized = _normalize_phone(number)
+    if normalized.startswith('+'):
+        normalized = normalized[1:]
+
+    req = {
+        'number': normalized,
+        'cos_id': int(cos_id),
+        'destination_category_id': int(destination_category_id),
+        'destination_id': int(destination_id),
+        'cid_number': cid_number,
+        'cid_name': cid_name,
+        'timeout': timeout,
+    }
+
+    log_event('vitalpbx', 'queued', 'Dialer call request', request_payload=req)
+    try:
+        out = _client().dialer_call(
+            number=normalized,
+            cos_id=int(cos_id),
+            destination_category_id=int(destination_category_id),
+            destination_id=int(destination_id),
+            cid_number=cid_number,
+            cid_name=cid_name,
+            timeout=timeout,
+        )
+        log_event('vitalpbx', 'success', 'Dialer call queued', request_payload=req, response_payload=out)
+        return {'ok': True, 'response': out}
+    except Exception:
+        log_event('vitalpbx', 'error', 'Dialer call failed', request_payload=req, error_trace=frappe.get_traceback())
+        raise

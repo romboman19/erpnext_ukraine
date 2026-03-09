@@ -61,3 +61,42 @@ class VitalPBXClient:
         )
         r.raise_for_status()
         return r.json() if (r.text or "").strip() else {"ok": True}
+
+
+    def dialer_call(
+        self,
+        number: str,
+        cos_id: int,
+        destination_category_id: int,
+        destination_id: int,
+        cid_number: str | None = None,
+        cid_name: str | None = None,
+        timeout: int | None = None,
+    ) -> dict:
+        payload = {
+            "number": str(number),
+            "cos_id": int(cos_id),
+            "destination_category_id": int(destination_category_id),
+            "destination_id": int(destination_id),
+        }
+        if cid_number:
+            payload["cid_number"] = str(cid_number)
+        if cid_name:
+            payload["cid_name"] = str(cid_name)
+        if timeout is not None:
+            payload["timeout"] = int(timeout)
+
+        headers = {
+            "Content-Type": "application/json",
+            "app-key": self.api_key,
+            "tenant": self.tenant or "VitalPBX",
+        }
+        r = requests.post(
+            f"{self.base_url}/api/v2/core/dialer_call",
+            headers=headers,
+            json=payload,
+            timeout=self.timeout,
+            verify=self.verify_ssl,
+        )
+        r.raise_for_status()
+        return r.json() if (r.text or "").strip() else {"ok": True}
