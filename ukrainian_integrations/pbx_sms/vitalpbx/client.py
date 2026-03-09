@@ -14,19 +14,32 @@ class VitalPBXClient:
         if not self.api_key:
             raise ValueError("vitalpbx_api_key is required")
 
-    def _headers(self) -> dict:
-        return {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+    def _headers(self, mode: str = "bearer") -> dict:
+        if mode == "x-api-key":
+            return {"X-API-Key": self.api_key, "Content-Type": "application/json"}
+        if mode == "raw-auth":
+            return {"Authorization": self.api_key, "Content-Type": "application/json"}
+        if mode == "apikey":
+            return {"apikey": self.api_key, "Content-Type": "application/json"}
+        return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
     def health(self) -> dict:
-        r = requests.get(f"{self.base_url}/api/ping", headers=self._headers(), timeout=self.timeout, verify=self.verify_ssl)
+        for mode in ("bearer", "x-api-key", "raw-auth", "apikey"):
+            r = requests.get(f"{self.base_url}/api/ping", headers=self._headers(mode), timeout=self.timeout, verify=self.verify_ssl)
+            if r.status_code != 401:
+                r.raise_for_status()
+                return r.json() if (r.text or "").strip() else {"ok": True}
         r.raise_for_status()
-        return r.json() if (r.text or "").strip() else {"ok": True}
+        return {"ok": False}
 
     def click_to_call(self, extension: str, destination: str) -> dict:
         payload = {"extension": str(extension), "destination": str(destination)}
-        r = requests.post(f"{self.base_url}/api/click2call", headers=self._headers(), json=payload, timeout=self.timeout, verify=self.verify_ssl)
-        r.raise_for_status()
-        return r.json() if (r.text or "").strip() else {"ok": True}
+        last = None
+        for mode in ("bearer", "x-api-key", "raw-auth", "apikey"):
+            r = requests.post(f"{self.base_url}/api/click2call", headers=self._headers(mode), json=payload, timeout=self.timeout, verify=self.verify_ssl)
+            last = r
+            if r.status_code != 401:
+                r.raise_for_status()
+                return r.json() if (r.text or "").strip() else {"ok": True}
+        last.raise_for_status()
+        return {"ok": False}
