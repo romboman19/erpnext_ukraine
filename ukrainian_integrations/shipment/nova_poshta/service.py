@@ -24,7 +24,39 @@ def _today_np() -> str:
     return frappe.utils.now_datetime().strftime("%d.%m.%Y")
 
 
+def _sender_profiles_from_doctype() -> list[dict]:
+    if not frappe.db.exists("DocType", "NP Sender Profile"):
+        return []
+    rows = frappe.get_all(
+        "NP Sender Profile",
+        fields=[
+            "name", "profile_name", "is_active", "is_default", "sender_ref",
+            "default_settlement_ref", "default_warehouse_ref", "contact_ref", "phone",
+        ],
+        filters={"is_active": 1},
+        order_by="is_default desc, modified desc",
+    )
+    out = []
+    for r in rows:
+        doc = frappe.get_doc("NP Sender Profile", r["name"])
+        out.append({
+            "name": r.get("profile_name") or r.get("name"),
+            "default": bool(r.get("is_default")),
+            "api_key": doc.get_password("api_key") or _cfg("novaposhta_api_key"),
+            "sender_ref": r.get("sender_ref"),
+            "sender_city_ref": r.get("default_settlement_ref"),
+            "sender_address_ref": r.get("default_warehouse_ref"),
+            "contact_sender_ref": r.get("contact_ref"),
+            "sender_phone": r.get("phone"),
+        })
+    return out
+
+
 def _sender_profiles() -> list[dict]:
+    doctype_profiles = _sender_profiles_from_doctype()
+    if doctype_profiles:
+        return doctype_profiles
+
     raw = _cfg("novaposhta_senders", [])
     if isinstance(raw, str):
         try:

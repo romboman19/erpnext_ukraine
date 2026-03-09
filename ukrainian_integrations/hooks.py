@@ -12,6 +12,8 @@ doctype_js = {
         "public/js/sales_invoice_vitalpbx_actions.js",
     ],
     "Customer": "public/js/customer_vitalpbx_actions.js",
+    "NP Sender Profile": "public/js/np_sender_profile_actions.js",
+    "UP Sender Profile": "public/js/up_sender_profile_actions.js",
 }
 
 scheduler_events = {
@@ -33,3 +35,9 @@ scheduler_events = {
 after_migrate = [
     "ukrainian_integrations.pbx_sms.vitalpbx.custom_fields.ensure_user_vitalpbx_extension_field",
 ]
+
+
+doctype_list_js = {
+    "NP Sender Profile": "public/js/np_sender_profile_list.js",
+    "UP Sender Profile": "public/js/up_sender_profile_list.js",
+}

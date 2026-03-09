@@ -90,9 +90,15 @@ frappe.ui.form.on('Sales Invoice', {
     });
 
     frm.add_custom_button('UP: Створити відправлення', async () => {
+      let upSenderOptions = [];
+      try {
+        const p = await frappe.call({ method: 'ukrainian_integrations.shipment.ukr_poshta.service.up_sender_profiles_list' });
+        upSenderOptions = ((p.message && p.message.items) || []).map(x => x.name).filter(Boolean);
+      } catch (_) {}
       const d = new frappe.ui.Dialog({
         title: 'Укрпошта: створити відправлення',
         fields: [
+          { fieldname: 'up_sender_profile', label: 'Профіль відправника УП', fieldtype: 'Select', options: upSenderOptions.join('\n') },
           { fieldname: 'name', label: 'Отримувач', fieldtype: 'Data' },
           { fieldname: 'phone', label: 'Телефон', fieldtype: 'Data' },
           { fieldname: 'postcode', label: 'Індекс', fieldtype: 'Data' },
@@ -127,7 +133,7 @@ frappe.ui.form.on('Sales Invoice', {
             };
             const r = await frappe.call({
               method: 'ukrainian_integrations.shipment.ukr_poshta.service.create_shipment_from_sales_invoice',
-              args: { sales_invoice: frm.doc.name, recipient, parcel }
+              args: { sales_invoice: frm.doc.name, sender_profile: values.up_sender_profile, recipient, parcel }
             });
             const m = (r && r.message) || {};
             frappe.msgprint(`Відправлення створено: ${m.barcode || '-'}`);

@@ -28,6 +28,92 @@ def _normalize_phone(phone: str) -> str:
     return "+" + digits if digits else ""
 
 
+
+
+def _up_sender_profiles_list() -> list[dict]:
+    if not frappe.db.exists("DocType", "UP Sender Profile"):
+        return []
+    rows = frappe.get_all(
+        "UP Sender Profile",
+        fields=[
+            "name", "profile_name", "is_active", "is_default", "sender_name", "sender_phone", "sender_email",
+            "postcode", "region", "city", "street", "house_number", "apartment_number", "api_base",
+        ],
+        filters={"is_active": 1},
+        order_by="is_default desc, modified desc",
+    )
+    out=[]
+    for r in rows:
+        doc = frappe.get_doc("UP Sender Profile", r["name"])
+        out.append({
+            "name": r.get("profile_name") or r.get("name"),
+            "default": bool(r.get("is_default")),
+            "sender_name": r.get("sender_name"),
+            "sender_phone": r.get("sender_phone"),
+            "sender_email": r.get("sender_email"),
+            "postcode": r.get("postcode"),
+            "region": r.get("region"),
+            "city": r.get("city"),
+            "street": r.get("street"),
+            "house_number": r.get("house_number"),
+            "apartment_number": r.get("apartment_number"),
+            "api_base": r.get("api_base"),
+            "ecom_token": doc.get_password("ecom_token") or _cfg("ukrposhta_ecom_token"),
+            "tracking_token": doc.get_password("tracking_token") or _cfg("ukrposhta_tracking_token"),
+            "counterparty_token": doc.get_password("counterparty_token") or _cfg("ukrposhta_counterparty_token"),
+        })
+    return out
+
+
+def _resolve_up_profile(sender_profile: str | None = None) -> dict:
+    profiles = _up_sender_profiles_list()
+    if profiles:
+        if sender_profile:
+            for p in profiles:
+                if (p.get("name") or "") == sender_profile:
+                    return p
+        for p in profiles:
+            if p.get("default"):
+                return p
+        return profiles[0]
+    return {
+        "name": "default",
+        "sender_name": _cfg("ukrposhta_sender_name", "HUNTER"),
+        "sender_phone": _cfg("ukrposhta_sender_phone", ""),
+        "sender_email": _cfg("ukrposhta_sender_email", ""),
+        "postcode": profile.get("postcode") or _cfg("ukrposhta_sender_postcode", ""),
+        "region": profile.get("region") or _cfg("ukrposhta_sender_region", ""),
+        "city": profile.get("city") or _cfg("ukrposhta_sender_city", ""),
+        "street": profile.get("street") or _cfg("ukrposhta_sender_street", ""),
+        "house_number": _cfg("ukrposhta_sender_house", ""),
+        "apartment_number": _cfg("ukrposhta_sender_apartment", ""),
+        "api_base": _cfg("ukrposhta_api_base", "https://www.ukrposhta.ua/ecom/0.0.1"),
+        "ecom_token": _cfg("ukrposhta_ecom_token"),
+        "tracking_token": _cfg("ukrposhta_tracking_token"),
+        "counterparty_token": _cfg("ukrposhta_counterparty_token"),
+    }
+
+
+def _client_from_profile(profile: dict) -> UkrPoshtaClient:
+    ecom = profile.get("ecom_token")
+    if not ecom:
+        frappe.throw(_("Не задано ecom_token для профілю Укрпошти"))
+    return UkrPoshtaClient(
+        ecom_token=ecom,
+        tracking_token=profile.get("tracking_token"),
+        counterparty_token=profile.get("counterparty_token"),
+        api_base=profile.get("api_base") or _cfg("ukrposhta_api_base", "https://www.ukrposhta.ua/ecom/0.0.1"),
+    )
+
+
+@frappe.whitelist()
+def up_sender_profiles_list() -> dict:
+    items=[{"name": p.get("name"), "default": 1 if p.get("default") else 0} for p in _up_sender_profiles_list()]
+    if not items:
+        items=[{"name":"default", "default":1}]
+    return {"ok": True, "items": items}
+
+
 # ── Client factory ────────────────────────────────────────────────────────────
 
 def get_client() -> UkrPoshtaClient:
@@ -187,6 +273,7 @@ def create_shipment_from_sales_invoice(
     sales_invoice: str,
     recipient: dict | None = None,
     parcel: dict | None = None,
+    sender_profile: str | None = None,
 ) -> dict:
     """
     Full Ukrposhta eCom 3-step flow:
@@ -207,17 +294,18 @@ def create_shipment_from_sales_invoice(
     parcel = parcel or {}
 
     si = frappe.get_doc("Sales Invoice", sales_invoice)
-    client = get_client()
+    profile = _resolve_up_profile(sender_profile)
+    client = _client_from_profile(profile)
 
     # ── 1a. Sender address ────────────────────────────────────────────────────
     sender_addr_payload = {
-        "postcode": _cfg("ukrposhta_sender_postcode", ""),
+        "postcode": profile.get("postcode") or _cfg("ukrposhta_sender_postcode", ""),
         "country": "UA",
-        "region": _cfg("ukrposhta_sender_region", ""),
-        "city": _cfg("ukrposhta_sender_city", ""),
-        "street": _cfg("ukrposhta_sender_street", ""),
-        "houseNumber": _cfg("ukrposhta_sender_house", ""),
-        "apartmentNumber": _cfg("ukrposhta_sender_apartment", "") or "",
+        "region": profile.get("region") or _cfg("ukrposhta_sender_region", ""),
+        "city": profile.get("city") or _cfg("ukrposhta_sender_city", ""),
+        "street": profile.get("street") or _cfg("ukrposhta_sender_street", ""),
+        "houseNumber": profile.get("house_number") or _cfg("ukrposhta_sender_house", ""),
+        "apartmentNumber": profile.get("apartment_number") or _cfg("ukrposhta_sender_apartment", "") or "",
     }
     missing_sender = [k for k in ("postcode", "region", "city", "street", "houseNumber") if not sender_addr_payload.get(k)]
     if missing_sender:
@@ -254,9 +342,9 @@ def create_shipment_from_sales_invoice(
         frappe.throw("Укрпошта не повернула id адреси одержувача")
 
     # ── 2a. Sender client ─────────────────────────────────────────────────────
-    sender_name = (_cfg("ukrposhta_sender_name", "") or "").strip()
-    sender_phone = _normalize_phone(_cfg("ukrposhta_sender_phone", "") or "")
-    sender_email = _cfg("ukrposhta_sender_email", "") or ""
+    sender_name = (profile.get("sender_name") or _cfg("ukrposhta_sender_name", "") or "").strip()
+    sender_phone = _normalize_phone(profile.get("sender_phone") or _cfg("ukrposhta_sender_phone", "") or "")
+    sender_email = profile.get("sender_email") or _cfg("ukrposhta_sender_email", "") or ""
 
     sender_parts = [x for x in sender_name.split() if x]
     sender_req = {
