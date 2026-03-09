@@ -1,11 +1,10 @@
 frappe.ui.form.on('UP Sender Profile', {
   refresh(frm) {
-    frm.add_custom_button('Створити відправлення (Sales Invoice)', async () => {
+    frm.add_custom_button('Створити відправлення (довільно)', async () => {
       const d = new frappe.ui.Dialog({
         title: 'УП відправлення із профілю',
         fields: [
-          {fieldname:'sales_invoice', label:'Sales Invoice', fieldtype:'Link', options:'Sales Invoice', reqd:1},
-          {fieldname:'name', label:'Отримувач', fieldtype:'Data', reqd:1},
+                    {fieldname:'name', label:'Отримувач', fieldtype:'Data', reqd:1},
           {fieldname:'phone', label:'Телефон', fieldtype:'Data', reqd:1},
           {fieldname:'postcode', label:'Індекс', fieldtype:'Data', reqd:1},
           {fieldname:'region', label:'Область', fieldtype:'Data', reqd:1},
@@ -17,8 +16,8 @@ frappe.ui.form.on('UP Sender Profile', {
         primary_action: async (v) => {
           const recipient = {name:v.name, phone:v.phone, postcode:v.postcode, region:v.region, city:v.city, street:v.street, house:v.house};
           const r = await frappe.call({
-            method: 'ukrainian_integrations.shipment.ukr_poshta.service.create_shipment_from_sales_invoice',
-            args: {sales_invoice: v.sales_invoice, sender_profile: frm.doc.profile_name || frm.doc.name, recipient, parcel:{}}
+            method: 'ukrainian_integrations.shipment.ukr_poshta.service.create_shipment_standalone',
+            args: {sender_profile: frm.doc.profile_name || frm.doc.name, recipient, parcel:{}}
           });
           frappe.msgprint('Barcode: ' + ((r.message||{}).barcode || '-'));
           d.hide();

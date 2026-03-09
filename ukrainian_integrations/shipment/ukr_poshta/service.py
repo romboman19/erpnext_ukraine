@@ -458,3 +458,118 @@ def create_shipment_from_sales_invoice(
         "status": status,
         "raw": out,
     }
+
+
+@frappe.whitelist()
+def create_shipment_standalone(
+    sender_profile: str | None = None,
+    recipient: dict | None = None,
+    parcel: dict | None = None,
+) -> dict:
+    if isinstance(recipient, str):
+        recipient = json.loads(recipient)
+    if isinstance(parcel, str):
+        parcel = json.loads(parcel)
+
+    recipient = recipient or {}
+    parcel = parcel or {}
+
+    profile = _resolve_up_profile(sender_profile)
+    client = _client_from_profile(profile)
+
+    sender_addr_payload = {
+        "postcode": profile.get("postcode") or _cfg("ukrposhta_sender_postcode", ""),
+        "country": "UA",
+        "region": profile.get("region") or _cfg("ukrposhta_sender_region", ""),
+        "city": profile.get("city") or _cfg("ukrposhta_sender_city", ""),
+        "street": profile.get("street") or _cfg("ukrposhta_sender_street", ""),
+        "houseNumber": profile.get("house_number") or _cfg("ukrposhta_sender_house", ""),
+        "apartmentNumber": profile.get("apartment_number") or _cfg("ukrposhta_sender_apartment", "") or "",
+    }
+    sender_addr_out = client.create_address(sender_addr_payload)
+    sender_address_id = str(sender_addr_out.get("id") or "")
+    if not sender_address_id:
+        frappe.throw("Укрпошта не повернула id адреси відправника")
+
+    recv_addr_payload = {
+        "postcode": recipient.get("postcode") or "",
+        "country": "UA",
+        "region": recipient.get("region") or "",
+        "city": recipient.get("city") or "",
+        "street": recipient.get("street") or "",
+        "houseNumber": recipient.get("house") or recipient.get("houseNumber") or "",
+        "apartmentNumber": recipient.get("apartment") or recipient.get("apartmentNumber") or "",
+    }
+    missing_recv = [k for k, v in {"postcode": recv_addr_payload["postcode"], "region": recv_addr_payload["region"], "city": recv_addr_payload["city"], "street": recv_addr_payload["street"], "houseNumber": recv_addr_payload["houseNumber"]}.items() if not v]
+    if missing_recv:
+        frappe.throw("Не задані поля адреси одержувача: " + ", ".join(missing_recv))
+
+    recv_addr_out = client.create_address(recv_addr_payload)
+    recv_address_id = str(recv_addr_out.get("id") or "")
+    if not recv_address_id:
+        frappe.throw("Укрпошта не повернула id адреси одержувача")
+
+    sender_name = (profile.get("sender_name") or "").strip()
+    sender_phone = _normalize_phone(profile.get("sender_phone") or "")
+    sender_email = profile.get("sender_email") or ""
+    sender_parts = [x for x in sender_name.split() if x]
+    sender_req = {
+        "type": "INDIVIDUAL",
+        "firstName": sender_parts[0] if sender_parts else "Sender",
+        "lastName": " ".join(sender_parts[1:]) if len(sender_parts) > 1 else "Company",
+        "phoneNumber": sender_phone,
+        "email": sender_email,
+        "addressId": sender_address_id,
+    }
+    sender_client_out = client.create_client(sender_req)
+    sender_uuid = str(sender_client_out.get("uuid") or sender_client_out.get("id") or "")
+
+    recv_name = (recipient.get("name") or "").strip()
+    recv_phone = _normalize_phone(recipient.get("phone") or recipient.get("phoneNumber") or "")
+    if not recv_name or not recv_phone:
+        frappe.throw("Вкажіть ПІБ і телефон одержувача")
+    recv_parts = [x for x in recv_name.split() if x]
+    recv_req = {
+        "type": "INDIVIDUAL",
+        "firstName": recv_parts[0] if recv_parts else "Customer",
+        "lastName": " ".join(recv_parts[1:]) if len(recv_parts) > 1 else "Client",
+        "phoneNumber": recv_phone,
+        "email": recipient.get("email") or "",
+        "addressId": recv_address_id,
+    }
+    recv_client_out = client.create_client(recv_req)
+    recv_uuid = str(recv_client_out.get("uuid") or recv_client_out.get("id") or "")
+
+    weight = int(round(float(parcel.get("weight") or 1)))
+    declared_value = float(parcel.get("declaredPrice") or 1)
+    shipment_req = {
+        "sender": {"uuid": sender_uuid},
+        "recipient": {"uuid": recv_uuid},
+        "deliveryType": parcel.get("deliveryType") or "W2W",
+        "weight": weight,
+        "length": int(round(float(parcel.get("length") or 10))),
+        "width": int(round(float(parcel.get("width") or 10))),
+        "height": int(round(float(parcel.get("height") or 5))),
+        "postPay": float(parcel.get("postPay") or 0),
+        "recommended": bool(parcel.get("recommended", True)),
+        "sms": bool(parcel.get("sms", True)),
+        "paidByRecipient": bool(parcel.get("paidByRecipient", False)),
+        "description": parcel.get("description") or "Ручне відправлення з ERP",
+        "onFailReceiveType": (parcel.get("onFailReceiveType") or "RETURN"),
+        "parcels": parcel.get("parcels") or [{
+            "name": parcel.get("parcel_name") or "Parcel",
+            "weight": weight,
+            "length": int(round(float(parcel.get("length") or 10))),
+            "width": int(round(float(parcel.get("width") or 10))),
+            "height": int(round(float(parcel.get("height") or 5))),
+            "declaredPrice": int(round(declared_value)),
+        }],
+    }
+    out = client.create_shipment(shipment_req)
+    return {
+        "ok": True,
+        "barcode": out.get("barcode") or out.get("shipmentBarcode") or out.get("ttn") or out.get("number") or "",
+        "shipment_id": out.get("uuid") or out.get("id") or out.get("shipmentId") or "",
+        "status": out.get("status") or out.get("state") or "created",
+        "raw": out,
+    }

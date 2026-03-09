@@ -19,7 +19,7 @@ frappe.listview_settings['UP Sender Profile'] = {
         primary_action_label:'Створити',
         primary_action: async (v)=>{
           const recipient={name:v.name,phone:v.phone,postcode:v.postcode,region:v.region,city:v.city,street:v.street,house:v.house};
-          const x=await frappe.call({method:'ukrainian_integrations.shipment.ukr_poshta.service.create_shipment_from_sales_invoice', args:{sales_invoice:v.sales_invoice, sender_profile:v.sender_profile, recipient, parcel:{}}});
+          const x=await frappe.call({method:'ukrainian_integrations.shipment.ukr_poshta.service.create_shipment_from_sales_invoice', args:{sender_profile:v.sender_profile, recipient, parcel:{}}});
           frappe.msgprint('Barcode: '+((x.message||{}).barcode||'-')); d.hide();
         }
       });
