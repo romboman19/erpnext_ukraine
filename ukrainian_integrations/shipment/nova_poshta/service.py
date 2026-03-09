@@ -244,12 +244,21 @@ def create_ttn_from_sales_invoice(
     si = frappe.get_doc("Sales Invoice", sales_invoice)
     profile = _resolve_profile(sender_profile)
 
-    sender_ref = profile.get("sender_ref")
-    sender_city_ref = profile.get("sender_city_ref")
-    sender_address_ref = profile.get("sender_address_ref")
-    contact_sender_ref = profile.get("contact_sender_ref")
-    sender_phone = _normalize_phone(profile.get("sender_phone") or "")
+    sender_ref = profile.get("sender_ref") or _cfg("novaposhta_sender_ref")
+    sender_city_ref = profile.get("sender_city_ref") or _cfg("novaposhta_sender_city_ref")
+    sender_address_ref = profile.get("sender_address_ref") or _cfg("novaposhta_sender_address_ref")
+    contact_sender_ref = profile.get("contact_sender_ref") or _cfg("novaposhta_contact_sender_ref")
+    sender_phone = _normalize_phone(profile.get("sender_phone") or _cfg("novaposhta_sender_phone") or "")
     profile_api_key = profile.get("api_key") or _cfg("novaposhta_api_key")
+
+    if not all([sender_ref, sender_city_ref, sender_address_ref, contact_sender_ref, sender_phone, profile_api_key]):
+        # final fallback to site defaults only
+        sender_ref = sender_ref or _cfg("novaposhta_sender_ref")
+        sender_city_ref = sender_city_ref or _cfg("novaposhta_sender_city_ref")
+        sender_address_ref = sender_address_ref or _cfg("novaposhta_sender_address_ref")
+        contact_sender_ref = contact_sender_ref or _cfg("novaposhta_contact_sender_ref")
+        sender_phone = sender_phone or _normalize_phone(_cfg("novaposhta_sender_phone") or "")
+        profile_api_key = profile_api_key or _cfg("novaposhta_api_key")
 
     if not all([sender_ref, sender_city_ref, sender_address_ref, contact_sender_ref, sender_phone, profile_api_key]):
         frappe.throw(_("Nova Poshta sender profile is incomplete"))
@@ -386,12 +395,21 @@ def create_ttn_standalone(
         frappe.throw(_("Вкажіть місто та відділення отримувача"))
 
     profile = _resolve_profile(sender_profile)
-    sender_ref = profile.get("sender_ref")
-    sender_city_ref = profile.get("sender_city_ref")
-    sender_address_ref = profile.get("sender_address_ref")
-    contact_sender_ref = profile.get("contact_sender_ref")
-    sender_phone = _normalize_phone(profile.get("sender_phone") or "")
+    sender_ref = profile.get("sender_ref") or _cfg("novaposhta_sender_ref")
+    sender_city_ref = profile.get("sender_city_ref") or _cfg("novaposhta_sender_city_ref")
+    sender_address_ref = profile.get("sender_address_ref") or _cfg("novaposhta_sender_address_ref")
+    contact_sender_ref = profile.get("contact_sender_ref") or _cfg("novaposhta_contact_sender_ref")
+    sender_phone = _normalize_phone(profile.get("sender_phone") or _cfg("novaposhta_sender_phone") or "")
     profile_api_key = profile.get("api_key") or _cfg("novaposhta_api_key")
+
+    if not all([sender_ref, sender_city_ref, sender_address_ref, contact_sender_ref, sender_phone, profile_api_key]):
+        # final fallback to site defaults only
+        sender_ref = sender_ref or _cfg("novaposhta_sender_ref")
+        sender_city_ref = sender_city_ref or _cfg("novaposhta_sender_city_ref")
+        sender_address_ref = sender_address_ref or _cfg("novaposhta_sender_address_ref")
+        contact_sender_ref = contact_sender_ref or _cfg("novaposhta_contact_sender_ref")
+        sender_phone = sender_phone or _normalize_phone(_cfg("novaposhta_sender_phone") or "")
+        profile_api_key = profile_api_key or _cfg("novaposhta_api_key")
 
     if not all([sender_ref, sender_city_ref, sender_address_ref, contact_sender_ref, sender_phone, profile_api_key]):
         frappe.throw(_("Nova Poshta sender profile is incomplete"))
