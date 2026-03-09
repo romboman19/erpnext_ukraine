@@ -3,10 +3,15 @@ frappe.ui.form.on('Customer', {
     if (frm.is_new()) return;
 
     frm.add_custom_button('📞 VitalPBX: Подзвонити', async () => {
+      let defaultExt = '';
+      try {
+        const ex = await frappe.call({ method: 'ukrainian_integrations.pbx_sms.vitalpbx.service.get_default_extension' });
+        defaultExt = (ex.message && ex.message.extension) || '';
+      } catch (_) {}
       const d = new frappe.ui.Dialog({
         title: 'Click-to-call',
         fields: [
-          { fieldname: 'extension', label: 'Extension', fieldtype: 'Data', reqd: 1 },
+          { fieldname: 'extension', label: 'Extension', fieldtype: 'Data', reqd: 1, default: defaultExt, hidden: !!defaultExt },
           { fieldname: 'phone', label: 'Phone', fieldtype: 'Data', reqd: 1, default: frm.doc.mobile_no || frm.doc.phone || '' }
         ],
         primary_action_label: 'Подзвонити',

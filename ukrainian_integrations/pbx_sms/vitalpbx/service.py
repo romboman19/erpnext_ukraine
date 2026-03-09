@@ -73,9 +73,13 @@ def click_to_call(extension: str, destination: str) -> dict:
 
 
 @frappe.whitelist()
-def click_to_call_customer(customer: str, extension: str) -> dict:
+def click_to_call_customer(customer: str, extension: str | None = None) -> dict:
     if not customer:
         frappe.throw(_('Customer is required'))
+    if not extension:
+        extension = (frappe.db.get_value('User', frappe.session.user, 'vitalpbx_extension') or _settings_value('default_extension') or '').strip()
+    if not extension:
+        frappe.throw(_('Не задано extension (у користувача або VitalPBX Settings)'))
     c = frappe.get_doc('Customer', customer)
     phone = c.get('mobile_no') or c.get('phone')
     if not phone:
@@ -126,3 +130,11 @@ def dialer_call(
     except Exception:
         log_event('vitalpbx', 'error', 'Dialer call failed', request_payload=req, error_trace=frappe.get_traceback())
         raise
+
+
+@frappe.whitelist()
+def get_default_extension() -> dict:
+    ext = frappe.db.get_value('User', frappe.session.user, 'vitalpbx_extension') or ''
+    if not ext:
+        ext = _settings_value('default_extension') or ''
+    return {'ok': True, 'extension': ext}

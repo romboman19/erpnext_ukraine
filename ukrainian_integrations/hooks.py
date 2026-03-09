@@ -29,3 +29,7 @@ scheduler_events = {
         ],
     }
 }
+
+after_migrate = [
+    "ukrainian_integrations.pbx_sms.vitalpbx.custom_fields.ensure_user_vitalpbx_extension_field",
+]
