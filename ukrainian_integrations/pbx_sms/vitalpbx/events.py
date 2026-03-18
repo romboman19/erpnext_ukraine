@@ -98,6 +98,7 @@ def _publish_popup(payload: dict, extension: str):
 
 @frappe.whitelist(allow_guest=True)
 def webhook_event():
+    _validate_webhook_request()
     payload = frappe.request.get_json(silent=True) or {}
     call_id = str(payload.get('call_id') or payload.get('linkedid') or payload.get('uniqueid') or '').strip()
     if not call_id:
