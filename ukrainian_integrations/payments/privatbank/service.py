@@ -38,7 +38,7 @@ def _pb_profiles() -> list[dict]:
                 "account": (r.get("account") or "").strip(),
                 "bank_account": (r.get("bank_account") or "").strip(),
                 "company": (r.get("company") or "").strip(),
-                "amount_in_minor_units": int(r.get("amount_in_minor_units") or 1),
+                "amount_in_minor_units": (int(r.get("amount_in_minor_units")) if (r.get("amount_in_minor_units") is not None and str(r.get("amount_in_minor_units")) != "") else 1),
                 "auto_import_enabled": int(r.get("auto_import_enabled") or 0),
                 "auto_import_days_back": int(r.get("auto_import_days_back") or 1),
             })
