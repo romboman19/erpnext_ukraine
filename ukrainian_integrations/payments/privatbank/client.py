@@ -16,61 +16,31 @@ class PrivatbankClient:
         return {
             "token": self.token,
             "User-Agent": "ERPNext-Ukrainian-Integrations/1.0",
-            "Content-Type": "application/json",
+            "Content-Type": "application/json;charset=utf-8",
             "Accept": "application/json",
         }
 
-    def statements(self, account: str, start_date: str, end_date: str, limit: int = 1000, offset: int = 0) -> dict:
-        payload = {
-            "account": account,
-            "startDate": start_date,
-            "endDate": end_date,
-            "pagination": {"limit": int(limit), "offset": int(offset)},
-        }
-        attempts = []
-
-        # 1) Autoclient API v3 POST
-        r = requests.post(
-            f"{self.base_url}/statements/transactions",
-            json=payload,
-            headers=self._headers(),
-            timeout=45,
-        )
-        attempts.append(("POST /statements/transactions", r.status_code, (r.text or "")[:800]))
-        if r.ok:
-            return r.json() if (r.text or "").strip() else {}
-
-        # 2) Legacy POST
-        r2 = requests.post(
-            f"{self.base_url}/statements",
-            json=payload,
-            headers=self._headers(),
-            timeout=45,
-        )
-        attempts.append(("POST /statements", r2.status_code, (r2.text or "")[:800]))
-        if r2.ok:
-            return r2.json() if (r2.text or "").strip() else {}
-
-        # 3) GET variant (some gateways enforce query params)
+    def statements(self, account: str, start_date: str, end_date: str, limit: int = 100, follow_id: str | None = None) -> dict:
+        # PrivatBank Autoclient v3 docs: GET /api/statements/transactions
+        # params: acc, startDate=DD-MM-YYYY, endDate=DD-MM-YYYY, followId, limit
         params = {
-            "account": account,
+            "acc": account,
             "startDate": start_date,
             "endDate": end_date,
             "limit": int(limit),
-            "offset": int(offset),
         }
-        r3 = requests.get(
-            f"{self.base_url}/statements/transactions",
-            params=params,
-            headers=self._headers(),
-            timeout=45,
-        )
-        attempts.append(("GET /statements/transactions", r3.status_code, (r3.text or "")[:800]))
-        if r3.ok:
-            return r3.json() if (r3.text or "").strip() else {}
+        if follow_id:
+            params["followId"] = follow_id
 
-        detail = " | ".join([f"{m} -> {c}: {t}" for (m,c,t) in attempts])
-        raise requests.HTTPError(f"PrivatBank statements failed: {detail}", response=r3)
+        attempts = []
+        for url in self._endpoint_candidates('/statements/transactions') + self._endpoint_candidates('/statements'):
+            r = requests.get(url, params=params, headers=self._headers(), timeout=45)
+            attempts.append((f"GET {url}", r.status_code, (r.text or "")[:800]))
+            if r.ok:
+                return r.json() if (r.text or "").strip() else {}
+
+        detail = " | ".join([f"{m} -> {c}: {t}" for (m, c, t) in attempts])
+        raise requests.HTTPError(f"PrivatBank statements failed: {detail}")
 
 
     def settings(self) -> dict:

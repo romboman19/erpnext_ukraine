@@ -85,6 +85,17 @@ def _default_range(days: int = 1) -> tuple[str, str]:
     return start.isoformat(), end.isoformat()
 
 
+def _to_pb_date(d: str) -> str:
+    # accepts YYYY-MM-DD and returns DD-MM-YYYY
+    if not d:
+        return d
+    if "-" in d and len(d) == 10:
+        y, m, day = d.split("-")
+        if len(y) == 4:
+            return f"{day}-{m}-{y}"
+    return d
+
+
 def _normalize_amount(raw_amount, in_minor_units: int = 1) -> float:
     """Normalize PrivatBank statement amount to major currency units.
 
@@ -101,7 +112,7 @@ def _normalize_amount(raw_amount, in_minor_units: int = 1) -> float:
 
 
 @frappe.whitelist()
-def pb_statements_fetch(account: str | None = None, start_date: str | None = None, end_date: str | None = None, limit: int = 1000, offset: int = 0, profile: str | None = None) -> dict:
+def pb_statements_fetch(account: str | None = None, start_date: str | None = None, end_date: str | None = None, limit: int = 100, follow_id: str | None = None, profile: str | None = None) -> dict:
     prof = _pick_profile(profile)
     acc = (account or prof.get('account') or _cfg('privatbank_account') or '').strip()
     if not acc:
@@ -115,17 +126,17 @@ def pb_statements_fetch(account: str | None = None, start_date: str | None = Non
         'startDate': start_date,
         'endDate': end_date,
         'limit': int(limit),
-        'offset': int(offset),
+        'follow_id': follow_id,
     }
 
     log_event('privatbank', 'queued', 'Fetch statements', request_payload=request_payload)
     try:
         out = _client(token=(prof.get("token") or None), base_url=(prof.get("api_base") or None)).statements(
             account=acc,
-            start_date=start_date,
-            end_date=end_date,
+            start_date=_to_pb_date(start_date),
+            end_date=_to_pb_date(end_date),
             limit=limit,
-            offset=offset,
+            follow_id=follow_id,
         )
         rows = out.get('list') or out.get('transactions') or []
         log_event('privatbank', 'success', f'Statements fetched: {len(rows)}', request_payload=request_payload, response_payload={'count': len(rows)})
