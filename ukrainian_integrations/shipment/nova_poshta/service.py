@@ -517,7 +517,7 @@ def create_ttn_standalone(
         api_key=profile_api_key,
     )
     recip_contact_candidates = recip_contacts.get("data") or []
-    recip_contact_row = _pick_np_contact(recip_contact_candidates, rec_phone, rec_name)
+    recip_contact_row = _pick_np_contact(recip_contact_candidates, rec_phone, (recipient_name or "").strip())
     if not recip_contact_row:
         frappe.throw(_("НП не повернула контакт отримувача"))
 
