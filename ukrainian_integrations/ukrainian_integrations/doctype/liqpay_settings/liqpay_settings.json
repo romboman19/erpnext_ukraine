@@ -8,27 +8,18 @@
    "fieldname": "enabled",
    "fieldtype": "Check",
    "label": "Enabled",
-   "default": "0"
+   "default": "1"
   },
   {
-   "fieldname": "public_key",
-   "fieldtype": "Data",
-   "label": "Public Key"
+   "fieldname": "sec_profiles",
+   "fieldtype": "Section Break",
+   "label": "Profiles"
   },
   {
-   "fieldname": "private_key",
-   "fieldtype": "Password",
-   "label": "Private Key"
-  },
-  {
-   "fieldname": "result_url",
-   "fieldtype": "Data",
-   "label": "Result URL"
-  },
-  {
-   "fieldname": "server_url",
-   "fieldtype": "Data",
-   "label": "Server URL"
+   "fieldname": "profiles",
+   "fieldtype": "Table",
+   "label": "LiqPay Profiles",
+   "options": "LiqPay Profile"
   }
  ],
  "permissions": [
@@ -36,6 +27,15 @@
    "role": "System Manager",
    "read": 1,
    "write": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
   }
  ],
  "engine": "InnoDB",
