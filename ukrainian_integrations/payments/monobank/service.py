@@ -21,12 +21,18 @@ def _mono_profiles() -> list[dict]:
         rows = d.get("profiles") or []
         out = []
         for r in rows:
+            token = ""
+            if hasattr(r, "get_password"):
+                try:
+                    token = (r.get_password("token") or "").strip()
+                except Exception:
+                    token = ""
             out.append({
                 "name": r.get("name"),
                 "label": (r.get("label") or "").strip(),
                 "enabled": int(r.get("enabled") or 0),
                 "is_default": int(r.get("is_default") or 0),
-                "token": (r.get_password("token") or "").strip() if hasattr(r, "get_password") else "",
+                "token": token,
                 "account": (r.get("account") or "").strip(),
                 "bank_account": (r.get("bank_account") or "").strip(),
                 "company": (r.get("company") or "").strip(),
