@@ -50,6 +50,15 @@
    "role": "System Manager",
    "read": 1,
    "write": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
   }
  ],
  "engine": "InnoDB",
