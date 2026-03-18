@@ -114,12 +114,20 @@ def liqpay_callback(data: str | None = None, signature: str | None = None):
         frappe.local.response["http_status_code"] = 400
         return {"ok": False, "error": "missing_data_or_signature"}
 
-    prof = _pick_profile(profile)
+    try:
+        decoded = json.loads(base64.b64decode(data).decode("utf-8"))
+    except Exception:
+        frappe.local.response["http_status_code"] = 400
+        return {"ok": False, "error": "invalid_data_payload"}
+
+    # choose profile by public_key from payload, fallback to default profile
+    prof = _pick_profile(public_key=(decoded.get("public_key") or None))
     client = _client(public_key=(prof.get("public_key") or None), private_key=(prof.get("private_key") or None))
+
     expected = client.make_signature(data)
     if expected != signature:
         frappe.local.response["http_status_code"] = 401
-        log_event("liqpay", "error", "Invalid callback signature")
+        log_event("liqpay", "error", "Invalid callback signature", request_payload=decoded)
         return {"ok": False, "error": "invalid_signature"}
 
     order_id = decoded.get("order_id") or ""
