@@ -14,6 +14,7 @@ doctype_js = {
     "Customer": "public/js/customer_vitalpbx_actions.js",
     "NP Sender Profile": "public/js/np_sender_profile_actions.js",
     "UP Sender Profile": "public/js/up_sender_profile_actions.js",
+    "TurboSMS Settings": "public/js/turbosms_settings_actions.js",
 }
 
 scheduler_events = {
