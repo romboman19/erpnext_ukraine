@@ -41,7 +41,7 @@ class PrivatbankClient:
                 out.append(u)
         return out
 
-    def statements(self, account: str, start_date: str, end_date: str, limit: int = 100, follow_id: str | None = None) -> dict:
+    def statements(self, account: str, start_date: str, end_date: str, limit: int = 100, follow_id: str | None = None, group_id: str | None = None) -> dict:
         # PrivatBank Autoclient v3 docs: GET /api/statements/transactions
         # params: acc, startDate=DD-MM-YYYY, endDate=DD-MM-YYYY, followId, limit
         params = {
@@ -52,6 +52,8 @@ class PrivatbankClient:
         }
         if follow_id:
             params["followId"] = follow_id
+        if group_id:
+            params["id"] = group_id
 
         attempts = []
         for url in self._endpoint_candidates('/statements/transactions') + self._endpoint_candidates('/statements'):
@@ -64,10 +66,11 @@ class PrivatbankClient:
         raise requests.HTTPError(f"PrivatBank statements failed: {detail}")
 
 
-    def settings(self) -> dict:
+    def settings(self, group_id: str | None = None) -> dict:
         attempts = []
         for url in self._endpoint_candidates('/statements/settings'):
-            r = requests.get(url, headers=self._headers(), timeout=45)
+            params = {"id": group_id} if group_id else None
+            r = requests.get(url, params=params, headers=self._headers(), timeout=45)
             attempts.append((url, r.status_code, (r.text or '')[:800]))
             if r.ok:
                 return r.json() if (r.text or "").strip() else {}

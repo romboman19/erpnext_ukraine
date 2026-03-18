@@ -38,6 +38,12 @@
    "default": "https://acp.privatbank.ua/api/proxy"
   },
   {
+   "fieldname": "group_client_id",
+   "fieldtype": "Data",
+   "label": "Group Client ID (id)",
+   "description": "Required for group mode API"
+  },
+  {
    "fieldname": "account",
    "fieldtype": "Data",
    "label": "Account",

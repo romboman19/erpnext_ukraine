@@ -34,6 +34,7 @@ def _pb_profiles() -> list[dict]:
                 "is_default": int(r.get("is_default") or 0),
                 "token": token,
                 "api_base": (r.get("api_base") or "").strip(),
+                "group_client_id": (r.get("group_client_id") or "").strip(),
                 "account": (r.get("account") or "").strip(),
                 "bank_account": (r.get("bank_account") or "").strip(),
                 "company": (r.get("company") or "").strip(),
@@ -137,6 +138,7 @@ def pb_statements_fetch(account: str | None = None, start_date: str | None = Non
             end_date=_to_pb_date(end_date),
             limit=limit,
             follow_id=follow_id,
+            group_id=(prof.get("group_client_id") or None),
         )
         rows = out.get('list') or out.get('transactions') or []
         log_event('privatbank', 'success', f'Statements fetched: {len(rows)}', request_payload=request_payload, response_payload={'count': len(rows)})
@@ -211,7 +213,7 @@ def pb_statements_import_to_bank_transactions(account: str | None = None, start_
 @frappe.whitelist()
 def pb_list_accounts(profile: str | None = None) -> dict:
     prof = _pick_profile(profile)
-    out = _client(token=(prof.get("token") or None), base_url=(prof.get("api_base") or None)).settings()
+    out = _client(token=(prof.get("token") or None), base_url=(prof.get("api_base") or None)).settings(group_id=(prof.get("group_client_id") or None))
     data = out.get("accounts") or out.get("list") or out.get("data") or []
     norm = []
     for a in data:
