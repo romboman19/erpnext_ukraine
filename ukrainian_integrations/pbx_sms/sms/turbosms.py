@@ -72,6 +72,26 @@ def _get_turbosms_settings() -> dict:
     }
 
 
+
+
+def _write_turbosms_log(*, status: str, phone: str, sender: str, message_text: str, response_json=None, error_text: str = ""):
+    try:
+        if not frappe.db.exists("DocType", "TurboSMS Log"):
+            return
+        doc = frappe.get_doc({
+            "doctype": "TurboSMS Log",
+            "status": status,
+            "phone": phone,
+            "sender": sender,
+            "message_text": message_text,
+            "response_json": frappe.as_json(response_json) if response_json is not None else "",
+            "error_text": error_text or "",
+        })
+        doc.insert(ignore_permissions=True)
+    except Exception:
+        frappe.logger("ukrainian_integrations").error({"where": "turbosms_log", "trace": frappe.get_traceback()})
+
+
 def _send_sms_internal(phone: str, text: str, sender: str | None = None) -> dict:
     cfg = _get_turbosms_settings()
     token = (cfg.get("token") or "").strip()
@@ -96,6 +116,7 @@ def _send_sms_internal(phone: str, text: str, sender: str | None = None) -> dict
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
     log_event("turbosms", "queued", f"Send SMS to {to}", request_payload={"phone": to, "sender": sender_name})
+    _write_turbosms_log(status="queued", phone=to, sender=sender_name, message_text=body)
 
     try:
         resp = requests.post(url, json=payload, headers=headers, timeout=25)
@@ -108,12 +129,15 @@ def _send_sms_internal(phone: str, text: str, sender: str | None = None) -> dict
                 request_payload=payload,
                 response_payload=data or {"text": (resp.text or "")[:1000]},
             )
+            _write_turbosms_log(status="error", phone=to, sender=sender_name, message_text=body, response_json=data or {"text": (resp.text or "")[:1000]}, error_text=f"HTTP {resp.status_code}")
             frappe.throw(_("TurboSMS помилка: HTTP {0}").format(resp.status_code))
 
         log_event("turbosms", "success", f"SMS sent to {to}", request_payload=payload, response_payload=data)
+        _write_turbosms_log(status="success", phone=to, sender=sender_name, message_text=body, response_json=data)
         return {"ok": True, "phone": to, "sender": sender_name, "response": data}
     except Exception:
         log_event("turbosms", "error", f"SMS send failed to {to}", request_payload=payload, error_trace=frappe.get_traceback())
+        _write_turbosms_log(status="error", phone=to, sender=sender_name, message_text=body, error_text=frappe.get_traceback())
         raise
 
 
