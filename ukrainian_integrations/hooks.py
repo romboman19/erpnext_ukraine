@@ -6,6 +6,8 @@ app_email = "it@hunter.rv.ua"
 app_license = "MIT"
 required_apps = ["erpnext"]
 
+app_include_js = "/assets/ukrainian_integrations/js/vitalpbx_popup_listener.js"
+
 doctype_js = {
     "Sales Invoice": [
         "public/js/sales_invoice_shipment_actions.js",
