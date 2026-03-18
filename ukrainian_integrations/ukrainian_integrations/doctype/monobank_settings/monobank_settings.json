@@ -8,50 +8,56 @@
    "fieldname": "enabled",
    "fieldtype": "Check",
    "label": "Enabled",
-   "default": "0"
+   "default": "1"
   },
   {
-   "fieldname": "sec_conn",
+   "fieldname": "sec_profiles",
    "fieldtype": "Section Break",
-   "label": "Connection"
+   "label": "Profiles"
+  },
+  {
+   "fieldname": "profiles",
+   "fieldtype": "Table",
+   "label": "Monobank Profiles",
+   "options": "Monobank Profile"
+  },
+  {
+   "fieldname": "sec_legacy",
+   "fieldtype": "Section Break",
+   "label": "Legacy (optional)"
   },
   {
    "fieldname": "token",
    "fieldtype": "Password",
-   "label": "Token"
+   "label": "Legacy Token"
   },
   {
    "fieldname": "account",
    "fieldtype": "Data",
-   "label": "Account ID"
+   "label": "Legacy Account ID"
   },
   {
    "fieldname": "bank_account",
    "fieldtype": "Link",
-   "label": "ERP Bank Account",
+   "label": "Legacy ERP Bank Account",
    "options": "Bank Account"
   },
   {
    "fieldname": "company",
    "fieldtype": "Link",
-   "label": "Company",
+   "label": "Legacy Company",
    "options": "Company"
-  },
-  {
-   "fieldname": "sec_auto",
-   "fieldtype": "Section Break",
-   "label": "Automation"
   },
   {
    "fieldname": "auto_import_enabled",
    "fieldtype": "Check",
-   "label": "Auto Import Enabled",
+   "label": "Legacy Auto Import Enabled",
    "default": "0"
   },
   {
    "fieldname": "auto_import_days_back",
    "fieldtype": "Int",
-   "label": "Auto Import Days Back",
+   "label": "Legacy Auto Import Days Back",
    "default": "1"
   }
  ],

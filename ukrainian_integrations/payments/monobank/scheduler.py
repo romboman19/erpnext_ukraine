@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import frappe
 
-from ukrainian_integrations.payments.monobank.service import mono_statements_import_to_bank_transactions
+from ukrainian_integrations.payments.monobank.service import mono_statements_import_to_bank_transactions, _mono_profiles
 from ukrainian_integrations.utils.logger import log_event
 
 
@@ -23,6 +23,27 @@ def _mono_settings() -> dict:
 
 
 def run_auto_import() -> dict:
+    # preferred: iterate profiles from child table
+    profs = _mono_profiles()
+    if profs:
+        total_created = 0
+        total_skipped = 0
+        runs = 0
+        for p in profs:
+            if int(p.get("enabled") or 0) != 1 or int(p.get("auto_import_enabled") or 0) != 1:
+                continue
+            out = mono_statements_import_to_bank_transactions(
+                account=p.get("account") or None,
+                days_back=int(p.get("auto_import_days_back") or 1),
+                company=p.get("company") or None,
+                profile=p.get("name") or p.get("label"),
+            )
+            total_created += int(out.get("created") or 0)
+            total_skipped += int(out.get("skipped") or 0)
+            runs += 1
+        if runs:
+            return {"ok": True, "profiles_runs": runs, "created": total_created, "skipped": total_skipped}
+
     st = _mono_settings()
     enabled = int(st.get("auto_import_enabled") or frappe.conf.get("monobank_auto_import_enabled", 0) or 0)
     if not enabled:

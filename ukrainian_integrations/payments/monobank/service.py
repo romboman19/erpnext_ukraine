@@ -13,6 +13,46 @@ def _cfg(key: str, default=None):
     return frappe.conf.get(key, default)
 
 
+def _mono_profiles() -> list[dict]:
+    if not frappe.db.exists("DocType", "Monobank Settings") or not frappe.db.exists("DocType", "Monobank Profile"):
+        return []
+    try:
+        d = frappe.get_single("Monobank Settings")
+        rows = d.get("profiles") or []
+        out = []
+        for r in rows:
+            out.append({
+                "name": r.get("name"),
+                "label": (r.get("label") or "").strip(),
+                "enabled": int(r.get("enabled") or 0),
+                "is_default": int(r.get("is_default") or 0),
+                "token": (r.get_password("token") or "").strip() if hasattr(r, "get_password") else "",
+                "account": (r.get("account") or "").strip(),
+                "bank_account": (r.get("bank_account") or "").strip(),
+                "company": (r.get("company") or "").strip(),
+                "auto_import_enabled": int(r.get("auto_import_enabled") or 0),
+                "auto_import_days_back": int(r.get("auto_import_days_back") or 1),
+            })
+        return out
+    except Exception:
+        return []
+
+
+def _pick_profile(profile: str | None = None) -> dict:
+    profs = _mono_profiles()
+    if not profs:
+        return {}
+    if profile:
+        p = next((x for x in profs if (x.get("name") == profile or x.get("label") == profile)), None)
+        if p:
+            return p
+    p = next((x for x in profs if x.get("is_default") == 1 and x.get("enabled") == 1), None)
+    if p:
+        return p
+    p = next((x for x in profs if x.get("enabled") == 1), None)
+    return p or {}
+
+
 def _mono_settings() -> dict:
     if not frappe.db.exists("DocType", "Monobank Settings"):
         return {}
@@ -31,9 +71,9 @@ def _mono_settings() -> dict:
         return {}
 
 
-def _client() -> MonobankClient:
+def _client(token: str | None = None) -> MonobankClient:
     st = _mono_settings()
-    token = st.get("token") or _cfg("monobank_token")
+    token = (token or st.get("token") or _cfg("monobank_token") or "").strip()
     if not token:
         frappe.throw(_("Не задано monobank_token у site_config.json"))
     return MonobankClient(token)
@@ -46,9 +86,10 @@ def _to_unix_range(days_back: int = 1) -> tuple[int, int]:
 
 
 @frappe.whitelist()
-def mono_statements_fetch(account: str | None = None, from_ts: int | None = None, to_ts: int | None = None, days_back: int = 1) -> dict:
+def mono_statements_fetch(account: str | None = None, from_ts: int | None = None, to_ts: int | None = None, days_back: int = 1, profile: str | None = None) -> dict:
+    prof = _pick_profile(profile)
     st = _mono_settings()
-    acc = (account or st.get("account") or _cfg("monobank_account") or "").strip()
+    acc = (account or prof.get("account") or st.get("account") or _cfg("monobank_account") or "").strip()
     if not acc:
         frappe.throw(_("Не задано рахунок: передай account або monobank_account у site_config"))
 
@@ -58,7 +99,7 @@ def mono_statements_fetch(account: str | None = None, from_ts: int | None = None
     req = {"account": acc, "from_ts": int(from_ts), "to_ts": int(to_ts)}
     log_event("monobank", "queued", "Fetch statements", request_payload=req)
     try:
-        rows = _client().statements(account=acc, from_ts=int(from_ts), to_ts=int(to_ts))
+        rows = _client(token=(prof.get("token") or None)).statements(account=acc, from_ts=int(from_ts), to_ts=int(to_ts))
         log_event("monobank", "success", f"Statements fetched: {len(rows)}", request_payload=req, response_payload={"count": len(rows)})
         return {"ok": True, "count": len(rows), "data": rows}
     except Exception:
@@ -67,13 +108,15 @@ def mono_statements_fetch(account: str | None = None, from_ts: int | None = None
 
 
 @frappe.whitelist()
-def mono_statements_import_to_bank_transactions(account: str | None = None, from_ts: int | None = None, to_ts: int | None = None, days_back: int = 1, company: str | None = None) -> dict:
-    fetched = mono_statements_fetch(account=account, from_ts=from_ts, to_ts=to_ts, days_back=days_back)
+def mono_statements_import_to_bank_transactions(account: str | None = None, from_ts: int | None = None, to_ts: int | None = None, days_back: int = 1, company: str | None = None, profile: str | None = None) -> dict:
+    prof = _pick_profile(profile)
+    fetched = mono_statements_fetch(account=account, from_ts=from_ts, to_ts=to_ts, days_back=days_back, profile=profile)
     rows = fetched.get("data") or []
 
     created = 0
     skipped = 0
-    comp = company or _cfg("default_company")
+    st = _mono_settings()
+    comp = company or prof.get("company") or st.get("company") or _cfg("default_company")
 
     for row in rows:
         tx_id = str(row.get("id") or row.get("statementItemId") or "").strip()
@@ -93,7 +136,6 @@ def mono_statements_import_to_bank_transactions(account: str | None = None, from
         description = row.get("description") or row.get("comment") or ""
 
         st = _mono_settings()
-        st = _mono_settings()
         doc = frappe.get_doc(
             {
                 "doctype": "Bank Transaction",
@@ -102,8 +144,8 @@ def mono_statements_import_to_bank_transactions(account: str | None = None, from
                 "withdrawal": abs(amount) if amount < 0 else 0,
                 "currency": "UAH",
                 "description": f"MBX:{tx_id} | {description}",
-                "bank_account": (st.get("bank_account") or ""),
-                "bank_account_no": (account or st.get("account") or _cfg("monobank_account") or ""),
+                "bank_account": (prof.get("bank_account") or st.get("bank_account") or ""),
+                "bank_account_no": (account or prof.get("account") or st.get("account") or _cfg("monobank_account") or ""),
                 "company": comp,
             }
         )
@@ -124,8 +166,9 @@ def mono_statements_import_to_bank_transactions(account: str | None = None, from
 
 
 @frappe.whitelist()
-def mono_list_accounts() -> dict:
-    info = _client().client_info()
+def mono_list_accounts(profile: str | None = None) -> dict:
+    prof = _pick_profile(profile)
+    info = _client(token=(prof.get("token") or None)).client_info()
     accounts = info.get("accounts") or []
     out = []
     for a in accounts:
@@ -141,16 +184,25 @@ def mono_list_accounts() -> dict:
 
 
 @frappe.whitelist()
-def mono_bind_account(account_id: str, bank_account: str | None = None) -> dict:
+def mono_bind_account(account_id: str, bank_account: str | None = None, profile: str | None = None) -> dict:
     if not account_id:
         frappe.throw(_("account_id is required"))
     if not frappe.db.exists("DocType", "Monobank Settings"):
         frappe.throw(_("Monobank Settings not found"))
 
     d = frappe.get_single("Monobank Settings")
-    d.account = (account_id or "").strip()
-    if bank_account:
-        d.bank_account = (bank_account or "").strip()
+    if profile and frappe.db.exists("DocType", "Monobank Profile"):
+        row = next((r for r in (d.get("profiles") or []) if r.get("name") == profile or r.get("label") == profile), None)
+        if not row:
+            frappe.throw(_("Monobank profile not found"))
+        row.account = (account_id or "").strip()
+        if bank_account is not None:
+            row.bank_account = (bank_account or "").strip()
+    else:
+        d.account = (account_id or "").strip()
+        if bank_account is not None:
+            d.bank_account = (bank_account or "").strip()
+
     d.save(ignore_permissions=True)
     frappe.db.commit()
-    return {"ok": True, "account": d.account, "bank_account": d.get("bank_account")}
+    return {"ok": True, "account": account_id, "bank_account": bank_account, "profile": profile}
