@@ -58,8 +58,6 @@ class PrivatbankClient:
         attempts = []
         for url in self._endpoint_candidates('/statements/transactions') + self._endpoint_candidates('/statements'):
             hdr = self._headers()
-            if group_id:
-                hdr["id"] = group_id
             r = requests.get(url, params=params, headers=hdr, timeout=45)
             txt = (r.text or "")[:800]
             attempts.append((f"GET {url}", r.status_code, txt))
@@ -85,8 +83,6 @@ class PrivatbankClient:
         for url in self._endpoint_candidates('/statements/settings'):
             params = {"id": group_id} if group_id else None
             hdr = self._headers()
-            if group_id:
-                hdr["id"] = group_id
             r = requests.get(url, params=params, headers=hdr, timeout=45)
             attempts.append((url, r.status_code, (r.text or '')[:800]))
             if r.ok:
