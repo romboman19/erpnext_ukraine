@@ -54,6 +54,40 @@ def _target_users(extension: str):
     return frappe.get_all('User', filters={'enabled': 1, 'vitalpbx_extension': ext}, fields=['name','full_name'])
 
 
+
+
+def _get_webhook_key() -> str:
+    # priority: site_config, then VitalPBX Settings.webhook_key (if field exists)
+    key = (frappe.conf.get('vitalpbx_webhook_key') or '').strip()
+    if key:
+        return key
+    if frappe.db.exists('DocType', 'VitalPBX Settings'):
+        try:
+            key = (frappe.db.get_single_value('VitalPBX Settings', 'webhook_key') or '').strip()
+            if key:
+                return key
+        except Exception:
+            pass
+    return ''
+
+
+def _validate_webhook_request() -> None:
+    expected = _get_webhook_key()
+    if not expected:
+        # backward-compatible: if key is not configured, allow request
+        return
+
+    supplied = (
+        (frappe.request.args.get('key') if frappe.request else None)
+        or frappe.get_request_header('X-Webhook-Key')
+        or frappe.get_request_header('X-VitalPBX-Key')
+        or ''
+    ).strip()
+
+    if supplied != expected:
+        frappe.throw('Unauthorized webhook request', frappe.PermissionError)
+
+
 def _publish_popup(payload: dict, extension: str):
     if _settings_enabled('popup_enabled', 1) != 1:
         return
