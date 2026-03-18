@@ -20,6 +20,7 @@ doctype_js = {
     "Monobank Settings": "public/js/monobank_settings_actions.js",
     "PrivatBank Settings": "public/js/privatbank_settings_actions.js",
     "LiqPay Settings": "public/js/liqpay_settings_actions.js",
+    "PB POS Terminal": "public/js/pb_pos_terminal_actions.js",
 }
 
 scheduler_events = {

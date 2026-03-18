@@ -32,3 +32,32 @@ class PrivatPOSGatewayClient:
         r = requests.get(f"{self.base_url}/health", headers=headers, timeout=self.timeout)
         r.raise_for_status()
         return r.json() if (r.text or "").strip() else {"ok": True}
+
+
+    def operation(self, operation: str, terminal_ip: str, amount: float, operation_id: str, *, port: int = 2000, currency: str = "UAH", extra: dict | None = None) -> dict:
+        payload = {
+            "operation": operation,
+            "terminal_ip": terminal_ip,
+            "terminal_port": int(port or 2000),
+            "amount": float(amount),
+            "currency": currency,
+            "operation_id": operation_id,
+        }
+        if extra:
+            payload.update(extra)
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        r = requests.post(f"{self.base_url}/v1/pos/operation", json=payload, headers=headers, timeout=self.timeout)
+        r.raise_for_status()
+        return r.json() if (r.text or "").strip() else {"ok": False, "error": "empty_response"}
+
+    def refund(self, terminal_ip: str, amount: float, operation_id: str, *, port: int = 2000, currency: str = "UAH", reference_operation_id: str | None = None) -> dict:
+        extra = {"reference_operation_id": reference_operation_id} if reference_operation_id else None
+        return self.operation(
+            operation="refund",
+            terminal_ip=terminal_ip,
+            port=port,
+            amount=amount,
+            operation_id=operation_id,
+            currency=currency,
+            extra=extra,
+        )
