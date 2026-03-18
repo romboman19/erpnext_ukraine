@@ -12,7 +12,7 @@ def ensure_user_vitalpbx_extension_field():
                 "label": "VitalPBX Extension",
                 "fieldtype": "Data",
                 "insert_after": "phone",
-                "hidden": 1,
+                "hidden": 0,
                 "read_only": 0,
                 "no_copy": 1,
             }
