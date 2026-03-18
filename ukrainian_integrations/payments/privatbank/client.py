@@ -65,10 +65,11 @@ class PrivatbankClient:
 
 
     def settings(self) -> dict:
-        r = requests.get(
-            f"{self.base_url}/statements/settings",
-            headers=self._headers(),
-            timeout=45,
-        )
-        r.raise_for_status()
-        return r.json() if (r.text or "").strip() else {}
+        attempts = []
+        for url in self._endpoint_candidates('/statements/settings'):
+            r = requests.get(url, headers=self._headers(), timeout=45)
+            attempts.append((url, r.status_code, (r.text or '')[:800]))
+            if r.ok:
+                return r.json() if (r.text or "").strip() else {}
+        detail = ' | '.join([f"{u} -> {c}: {t}" for u,c,t in attempts])
+        raise requests.HTTPError(f"PrivatBank settings failed: {detail}")
