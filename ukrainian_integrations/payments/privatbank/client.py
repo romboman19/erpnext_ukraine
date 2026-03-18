@@ -27,23 +27,50 @@ class PrivatbankClient:
             "endDate": end_date,
             "pagination": {"limit": int(limit), "offset": int(offset)},
         }
-        # Autoclient API v3 primary endpoint
+        attempts = []
+
+        # 1) Autoclient API v3 POST
         r = requests.post(
             f"{self.base_url}/statements/transactions",
             json=payload,
             headers=self._headers(),
             timeout=45,
         )
-        # fallback to legacy endpoint if server does not support /transactions
-        if r.status_code in (404, 405):
-            r = requests.post(
-                f"{self.base_url}/statements",
-                json=payload,
-                headers=self._headers(),
-                timeout=45,
-            )
-        r.raise_for_status()
-        return r.json() if (r.text or "").strip() else {}
+        attempts.append(("POST /statements/transactions", r.status_code, (r.text or "")[:800]))
+        if r.ok:
+            return r.json() if (r.text or "").strip() else {}
+
+        # 2) Legacy POST
+        r2 = requests.post(
+            f"{self.base_url}/statements",
+            json=payload,
+            headers=self._headers(),
+            timeout=45,
+        )
+        attempts.append(("POST /statements", r2.status_code, (r2.text or "")[:800]))
+        if r2.ok:
+            return r2.json() if (r2.text or "").strip() else {}
+
+        # 3) GET variant (some gateways enforce query params)
+        params = {
+            "account": account,
+            "startDate": start_date,
+            "endDate": end_date,
+            "limit": int(limit),
+            "offset": int(offset),
+        }
+        r3 = requests.get(
+            f"{self.base_url}/statements/transactions",
+            params=params,
+            headers=self._headers(),
+            timeout=45,
+        )
+        attempts.append(("GET /statements/transactions", r3.status_code, (r3.text or "")[:800]))
+        if r3.ok:
+            return r3.json() if (r3.text or "").strip() else {}
+
+        detail = " | ".join([f"{m} -> {c}: {t}" for (m,c,t) in attempts])
+        raise requests.HTTPError(f"PrivatBank statements failed: {detail}", response=r3)
 
 
     def settings(self) -> dict:
