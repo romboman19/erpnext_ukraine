@@ -213,13 +213,30 @@ def pb_statements_import_to_bank_transactions(account: str | None = None, start_
 @frappe.whitelist()
 def pb_list_accounts(profile: str | None = None) -> dict:
     prof = _pick_profile(profile)
-    out = _client(token=(prof.get("token") or None), base_url=(prof.get("api_base") or None)).settings(group_id=(prof.get("group_client_id") or None))
-    data = out.get("accounts") or out.get("list") or out.get("data") or []
+    if not prof:
+        frappe.throw(_("PrivatBank profile not found"))
+
+    # According to docs, /settings may not include account list. Discover accounts via /balance without acc.
+    today = date.today().strftime("%d-%m-%Y")
+    out = _client(token=(prof.get("token") or None), base_url=(prof.get("api_base") or None)).balances(
+        account=None,
+        start_date=today,
+        end_date=today,
+        limit=100,
+        group_id=(prof.get("group_client_id") or None),
+    )
+    data = out.get("balances") or out.get("data") or []
     norm = []
     for a in data:
-        acc = a.get("account") or a.get("acc") or a.get("iban") or ""
+        acc = a.get("acc") or a.get("account") or ""
         ccy = a.get("currency") or a.get("ccy") or ""
-        norm.append({"account": acc, "currency": ccy, "raw": a, "label": f"{acc} | {ccy}"})
+        if acc:
+            norm.append({"account": acc, "currency": ccy, "raw": a, "label": f"{acc} | {ccy}"})
+    # de-dup by account
+    uniq = {}
+    for x in norm:
+        uniq[x["account"]] = x
+    norm = list(uniq.values())
     return {"ok": True, "count": len(norm), "accounts": norm, "raw": out}
 
 

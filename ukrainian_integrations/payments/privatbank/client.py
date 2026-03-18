@@ -93,3 +93,40 @@ class PrivatbankClient:
                 return r.json() if (r.text or "").strip() else {}
         detail = ' | '.join([f"{u} -> {c}: {t}" for u,c,t in attempts])
         raise requests.HTTPError(f"PrivatBank settings failed: {detail}")
+
+
+    def balances(self, account: str | None, start_date: str, end_date: str | None = None, limit: int = 100, follow_id: str | None = None, group_id: str | None = None) -> dict:
+        params = {
+            "startDate": start_date,
+            "limit": int(limit),
+        }
+        if end_date:
+            params["endDate"] = end_date
+        if account:
+            params["acc"] = account
+        if follow_id:
+            params["followId"] = follow_id
+        if group_id:
+            params["id"] = group_id
+
+        attempts = []
+        for url in self._endpoint_candidates('/statements/balance'):
+            hdr = self._headers()
+            if group_id:
+                hdr['id'] = group_id
+            r = requests.get(url, params=params, headers=hdr, timeout=45)
+            attempts.append((f"GET {url}", r.status_code, (r.text or "")[:800]))
+            if r.ok:
+                return r.json() if (r.text or "").strip() else {}
+
+            if group_id and r.status_code == 400 and 'Id in mode for companies should not be present' in (r.text or ''):
+                hdr2 = self._headers()
+                params2 = dict(params)
+                params2.pop('id', None)
+                r2 = requests.get(url, params=params2, headers=hdr2, timeout=45)
+                attempts.append((f"GET {url} (no-id-retry)", r2.status_code, (r2.text or "")[:800]))
+                if r2.ok:
+                    return r2.json() if (r2.text or "").strip() else {}
+
+        detail = ' | '.join([f"{m} -> {c}: {t}" for (m,c,t) in attempts])
+        raise requests.HTTPError(f"PrivatBank balances failed: {detail}")
