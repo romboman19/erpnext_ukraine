@@ -61,9 +61,20 @@ class PrivatbankClient:
             if group_id:
                 hdr["id"] = group_id
             r = requests.get(url, params=params, headers=hdr, timeout=45)
-            attempts.append((f"GET {url}", r.status_code, (r.text or "")[:800]))
+            txt = (r.text or "")[:800]
+            attempts.append((f"GET {url}", r.status_code, txt))
             if r.ok:
                 return r.json() if (r.text or "").strip() else {}
+
+            # some company-mode endpoints reject id; retry once without id
+            if group_id and r.status_code == 400 and 'Id in mode for companies should not be present' in (r.text or ''):
+                hdr2 = self._headers()
+                params2 = dict(params)
+                params2.pop('id', None)
+                r2 = requests.get(url, params=params2, headers=hdr2, timeout=45)
+                attempts.append((f"GET {url} (no-id-retry)", r2.status_code, (r2.text or "")[:800]))
+                if r2.ok:
+                    return r2.json() if (r2.text or "").strip() else {}
 
         detail = " | ".join([f"{m} -> {c}: {t}" for (m, c, t) in attempts])
         raise requests.HTTPError(f"PrivatBank statements failed: {detail}")
