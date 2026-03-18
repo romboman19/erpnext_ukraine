@@ -21,6 +21,12 @@
    "label": "Account ID"
   },
   {
+   "fieldname": "bank_account",
+   "fieldtype": "Link",
+   "label": "ERP Bank Account",
+   "options": "Bank Account"
+  },
+  {
    "fieldname": "company",
    "fieldtype": "Link",
    "label": "Company",

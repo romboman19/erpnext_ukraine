@@ -25,3 +25,13 @@ class MonobankClient:
         r.raise_for_status()
         data = r.json() if (r.text or "").strip() else []
         return data if isinstance(data, list) else []
+
+
+    def client_info(self) -> dict:
+        r = requests.get(
+            f"{MONOBANK_API}/personal/client-info",
+            headers=self._headers(),
+            timeout=30,
+        )
+        r.raise_for_status()
+        return r.json() if (r.text or "").strip() else {}

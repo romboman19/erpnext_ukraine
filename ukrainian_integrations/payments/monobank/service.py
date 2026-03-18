@@ -22,6 +22,7 @@ def _mono_settings() -> dict:
             "enabled": int(d.get("enabled") or 0),
             "token": (d.get_password("token") or "").strip(),
             "account": (d.get("account") or "").strip(),
+            "bank_account": (d.get("bank_account") or "").strip(),
             "company": (d.get("company") or "").strip(),
             "auto_import_enabled": int(d.get("auto_import_enabled") or 0),
             "auto_import_days_back": int(d.get("auto_import_days_back") or 1),
@@ -91,6 +92,8 @@ def mono_statements_import_to_bank_transactions(account: str | None = None, from
 
         description = row.get("description") or row.get("comment") or ""
 
+        st = _mono_settings()
+        st = _mono_settings()
         doc = frappe.get_doc(
             {
                 "doctype": "Bank Transaction",
@@ -99,7 +102,8 @@ def mono_statements_import_to_bank_transactions(account: str | None = None, from
                 "withdrawal": abs(amount) if amount < 0 else 0,
                 "currency": "UAH",
                 "description": f"MBX:{tx_id} | {description}",
-                "bank_account_no": (account or _cfg("monobank_account") or ""),
+                "bank_account": (st.get("bank_account") or ""),
+                "bank_account_no": (account or st.get("account") or _cfg("monobank_account") or ""),
                 "company": comp,
             }
         )
@@ -117,3 +121,36 @@ def mono_statements_import_to_bank_transactions(account: str | None = None, from
         response_payload={"created": created, "skipped": skipped},
     )
     return {"ok": True, "created": created, "skipped": skipped}
+
+
+@frappe.whitelist()
+def mono_list_accounts() -> dict:
+    info = _client().client_info()
+    accounts = info.get("accounts") or []
+    out = []
+    for a in accounts:
+        out.append({
+            "id": a.get("id"),
+            "iban": a.get("iban"),
+            "currencyCode": a.get("currencyCode"),
+            "type": a.get("type"),
+            "maskedPan": a.get("maskedPan") or [],
+            "label": f"{a.get('id')} | {a.get('iban') or ''} | {a.get('currencyCode')} | {a.get('type')}",
+        })
+    return {"ok": True, "count": len(out), "accounts": out}
+
+
+@frappe.whitelist()
+def mono_bind_account(account_id: str, bank_account: str | None = None) -> dict:
+    if not account_id:
+        frappe.throw(_("account_id is required"))
+    if not frappe.db.exists("DocType", "Monobank Settings"):
+        frappe.throw(_("Monobank Settings not found"))
+
+    d = frappe.get_single("Monobank Settings")
+    d.account = (account_id or "").strip()
+    if bank_account:
+        d.bank_account = (bank_account or "").strip()
+    d.save(ignore_permissions=True)
+    frappe.db.commit()
+    return {"ok": True, "account": d.account, "bank_account": d.get("bank_account")}
