@@ -60,20 +60,13 @@ def _mono_settings() -> dict:
         d = frappe.get_single("Monobank Settings")
         return {
             "enabled": int(d.get("enabled") or 0),
-            "token": (d.get_password("token") or "").strip(),
-            "account": (d.get("account") or "").strip(),
-            "bank_account": (d.get("bank_account") or "").strip(),
-            "company": (d.get("company") or "").strip(),
-            "auto_import_enabled": int(d.get("auto_import_enabled") or 0),
-            "auto_import_days_back": int(d.get("auto_import_days_back") or 1),
         }
     except Exception:
         return {}
 
 
 def _client(token: str | None = None) -> MonobankClient:
-    st = _mono_settings()
-    token = (token or st.get("token") or _cfg("monobank_token") or "").strip()
+    token = (token or _cfg("monobank_token") or "").strip()
     if not token:
         frappe.throw(_("Не задано monobank_token у site_config.json"))
     return MonobankClient(token)
@@ -88,8 +81,7 @@ def _to_unix_range(days_back: int = 1) -> tuple[int, int]:
 @frappe.whitelist()
 def mono_statements_fetch(account: str | None = None, from_ts: int | None = None, to_ts: int | None = None, days_back: int = 1, profile: str | None = None) -> dict:
     prof = _pick_profile(profile)
-    st = _mono_settings()
-    acc = (account or prof.get("account") or st.get("account") or _cfg("monobank_account") or "").strip()
+    acc = (account or prof.get("account") or _cfg("monobank_account") or "").strip()
     if not acc:
         frappe.throw(_("Не задано рахунок: передай account або monobank_account у site_config"))
 
@@ -115,8 +107,7 @@ def mono_statements_import_to_bank_transactions(account: str | None = None, from
 
     created = 0
     skipped = 0
-    st = _mono_settings()
-    comp = company or prof.get("company") or st.get("company") or _cfg("default_company")
+    comp = company or prof.get("company") or _cfg("default_company")
 
     for row in rows:
         tx_id = str(row.get("id") or row.get("statementItemId") or "").strip()
@@ -135,7 +126,6 @@ def mono_statements_import_to_bank_transactions(account: str | None = None, from
 
         description = row.get("description") or row.get("comment") or ""
 
-        st = _mono_settings()
         doc = frappe.get_doc(
             {
                 "doctype": "Bank Transaction",
@@ -144,8 +134,8 @@ def mono_statements_import_to_bank_transactions(account: str | None = None, from
                 "withdrawal": abs(amount) if amount < 0 else 0,
                 "currency": "UAH",
                 "description": f"MBX:{tx_id} | {description}",
-                "bank_account": (prof.get("bank_account") or st.get("bank_account") or ""),
-                "bank_account_no": (account or prof.get("account") or st.get("account") or _cfg("monobank_account") or ""),
+                "bank_account": (prof.get("bank_account") or ""),
+                "bank_account_no": (account or prof.get("account") or _cfg("monobank_account") or ""),
                 "company": comp,
             }
         )
@@ -199,9 +189,7 @@ def mono_bind_account(account_id: str, bank_account: str | None = None, profile:
         if bank_account is not None:
             row.bank_account = (bank_account or "").strip()
     else:
-        d.account = (account_id or "").strip()
-        if bank_account is not None:
-            d.bank_account = (bank_account or "").strip()
+        frappe.throw(_("Profile is required"))
 
     d.save(ignore_permissions=True)
     frappe.db.commit()
