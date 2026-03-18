@@ -57,7 +57,10 @@ class PrivatbankClient:
 
         attempts = []
         for url in self._endpoint_candidates('/statements/transactions') + self._endpoint_candidates('/statements'):
-            r = requests.get(url, params=params, headers=self._headers(), timeout=45)
+            hdr = self._headers()
+            if group_id:
+                hdr["id"] = group_id
+            r = requests.get(url, params=params, headers=hdr, timeout=45)
             attempts.append((f"GET {url}", r.status_code, (r.text or "")[:800]))
             if r.ok:
                 return r.json() if (r.text or "").strip() else {}
@@ -70,7 +73,10 @@ class PrivatbankClient:
         attempts = []
         for url in self._endpoint_candidates('/statements/settings'):
             params = {"id": group_id} if group_id else None
-            r = requests.get(url, params=params, headers=self._headers(), timeout=45)
+            hdr = self._headers()
+            if group_id:
+                hdr["id"] = group_id
+            r = requests.get(url, params=params, headers=hdr, timeout=45)
             attempts.append((url, r.status_code, (r.text or '')[:800]))
             if r.ok:
                 return r.json() if (r.text or "").strip() else {}
