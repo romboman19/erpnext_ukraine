@@ -1,0 +1,63 @@
+{
+ "doctype": "DocType",
+ "name": "PrivatBank Settings",
+ "module": "Ukrainian Integrations",
+ "issingle": 1,
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "0"
+  },
+  {
+   "fieldname": "token",
+   "fieldtype": "Password",
+   "label": "Token"
+  },
+  {
+   "fieldname": "api_base",
+   "fieldtype": "Data",
+   "label": "API Base URL",
+   "default": "https://acp.privatbank.ua/api/proxy"
+  },
+  {
+   "fieldname": "account",
+   "fieldtype": "Data",
+   "label": "Account"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "amount_in_minor_units",
+   "fieldtype": "Check",
+   "label": "Amount in Minor Units (kopecks)",
+   "default": "1"
+  },
+  {
+   "fieldname": "auto_import_enabled",
+   "fieldtype": "Check",
+   "label": "Auto Import Enabled",
+   "default": "0"
+  },
+  {
+   "fieldname": "auto_import_days_back",
+   "fieldtype": "Int",
+   "label": "Auto Import Days Back",
+   "default": "1"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1
+  }
+ ],
+ "engine": "InnoDB",
+ "autoname": "prompt"
+}

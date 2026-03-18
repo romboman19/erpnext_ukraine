@@ -13,9 +13,29 @@ def _cfg(key: str, default=None):
     return frappe.conf.get(key, default)
 
 
+def _pb_settings() -> dict:
+    if not frappe.db.exists("DocType", "PrivatBank Settings"):
+        return {}
+    try:
+        d = frappe.get_single("PrivatBank Settings")
+        return {
+            "enabled": int(d.get("enabled") or 0),
+            "token": (d.get_password("token") or "").strip(),
+            "api_base": (d.get("api_base") or "").strip(),
+            "account": (d.get("account") or "").strip(),
+            "company": (d.get("company") or "").strip(),
+            "amount_in_minor_units": int(d.get("amount_in_minor_units") or 1),
+            "auto_import_enabled": int(d.get("auto_import_enabled") or 0),
+            "auto_import_days_back": int(d.get("auto_import_days_back") or 1),
+        }
+    except Exception:
+        return {}
+
+
 def _client() -> PrivatbankClient:
-    token = _cfg('privatbank_token')
-    base_url = _cfg('privatbank_api_base', 'https://acp.privatbank.ua/api/proxy')
+    st = _pb_settings()
+    token = st.get('token') or _cfg('privatbank_token')
+    base_url = st.get('api_base') or _cfg('privatbank_api_base', 'https://acp.privatbank.ua/api/proxy')
     if not token:
         frappe.throw(_('Не задано privatbank_token у site_config.json'))
     return PrivatbankClient(token=token, base_url=base_url)
@@ -38,13 +58,15 @@ def _normalize_amount(raw_amount) -> float:
         value = float(raw_amount or 0)
     except Exception:
         return 0.0
-    in_minor = int(_cfg("privatbank_amount_in_minor_units", 1) or 1) == 1
+    st = _pb_settings()
+    in_minor = int(st.get("amount_in_minor_units") if st.get("amount_in_minor_units") is not None else (_cfg("privatbank_amount_in_minor_units", 1) or 1)) == 1
     return value / 100.0 if in_minor else value
 
 
 @frappe.whitelist()
 def pb_statements_fetch(account: str | None = None, start_date: str | None = None, end_date: str | None = None, limit: int = 1000, offset: int = 0) -> dict:
-    acc = (account or _cfg('privatbank_account') or '').strip()
+    st = _pb_settings()
+    acc = (account or st.get('account') or _cfg('privatbank_account') or '').strip()
     if not acc:
         frappe.throw(_('Не задано рахунок: передай account або privatbank_account у site_config'))
 
@@ -84,7 +106,8 @@ def pb_statements_import_to_bank_transactions(account: str | None = None, start_
 
     created = 0
     skipped = 0
-    comp = company or _cfg('default_company')
+    st = _pb_settings()
+    comp = company or st.get('company') or _cfg('default_company')
 
     for row in rows:
         tx_id = str(row.get('id') or row.get('transactionId') or row.get('ref') or '').strip()
@@ -100,11 +123,7 @@ def pb_statements_import_to_bank_transactions(account: str | None = None, start_
             skipped += 1
             continue
 
-        amount = row.get('amount') or row.get('sum') or 0
-        try:
-            amount = float(amount) / 100 if abs(float(amount)) > 1000 else float(amount)
-        except Exception:
-            amount = 0
+        amount = _normalize_amount(row.get('amount') or row.get('sum') or 0)
 
         posting_date = row.get('date') or row.get('operationDate') or frappe.utils.nowdate()
         if isinstance(posting_date, str) and 'T' in posting_date:

@@ -13,9 +13,26 @@ def _cfg(key: str, default=None):
     return frappe.conf.get(key, default)
 
 
+def _liqpay_settings() -> dict:
+    if not frappe.db.exists("DocType", "LiqPay Settings"):
+        return {}
+    try:
+        d = frappe.get_single("LiqPay Settings")
+        return {
+            "enabled": int(d.get("enabled") or 0),
+            "public_key": (d.get("public_key") or "").strip(),
+            "private_key": (d.get_password("private_key") or "").strip(),
+            "result_url": (d.get("result_url") or "").strip(),
+            "server_url": (d.get("server_url") or "").strip(),
+        }
+    except Exception:
+        return {}
+
+
 def _client() -> LiqPayClient:
-    pub = _cfg("liqpay_public_key")
-    prv = _cfg("liqpay_private_key")
+    st = _liqpay_settings()
+    pub = st.get("public_key") or _cfg("liqpay_public_key")
+    prv = st.get("private_key") or _cfg("liqpay_private_key")
     if not pub or not prv:
         frappe.throw(_("Не задано liqpay_public_key / liqpay_private_key у site_config.json"))
     return LiqPayClient(pub, prv)
@@ -40,8 +57,8 @@ def liqpay_initiate(sales_invoice: str, amount: float | None = None, result_url:
         "currency": "UAH",
         "description": f"Оплата рахунку {si.name}",
         "order_id": order_id,
-        "result_url": result_url or _cfg("liqpay_result_url"),
-        "server_url": server_url or _cfg("liqpay_server_url"),
+        "result_url": result_url or _liqpay_settings().get("result_url") or _cfg("liqpay_result_url"),
+        "server_url": server_url or _liqpay_settings().get("server_url") or _cfg("liqpay_server_url"),
     }
     form = client.cnb_form_payload(payload)
     log_event("liqpay", "queued", f"Initiate {si.name}", reference_doctype="Sales Invoice", reference_name=si.name, request_payload=payload)

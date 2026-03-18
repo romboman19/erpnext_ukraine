@@ -13,8 +13,26 @@ def _cfg(key: str, default=None):
     return frappe.conf.get(key, default)
 
 
+def _mono_settings() -> dict:
+    if not frappe.db.exists("DocType", "Monobank Settings"):
+        return {}
+    try:
+        d = frappe.get_single("Monobank Settings")
+        return {
+            "enabled": int(d.get("enabled") or 0),
+            "token": (d.get_password("token") or "").strip(),
+            "account": (d.get("account") or "").strip(),
+            "company": (d.get("company") or "").strip(),
+            "auto_import_enabled": int(d.get("auto_import_enabled") or 0),
+            "auto_import_days_back": int(d.get("auto_import_days_back") or 1),
+        }
+    except Exception:
+        return {}
+
+
 def _client() -> MonobankClient:
-    token = _cfg("monobank_token")
+    st = _mono_settings()
+    token = st.get("token") or _cfg("monobank_token")
     if not token:
         frappe.throw(_("Не задано monobank_token у site_config.json"))
     return MonobankClient(token)
@@ -28,7 +46,8 @@ def _to_unix_range(days_back: int = 1) -> tuple[int, int]:
 
 @frappe.whitelist()
 def mono_statements_fetch(account: str | None = None, from_ts: int | None = None, to_ts: int | None = None, days_back: int = 1) -> dict:
-    acc = (account or _cfg("monobank_account") or "").strip()
+    st = _mono_settings()
+    acc = (account or st.get("account") or _cfg("monobank_account") or "").strip()
     if not acc:
         frappe.throw(_("Не задано рахунок: передай account або monobank_account у site_config"))
 

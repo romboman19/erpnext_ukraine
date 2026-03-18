@@ -1,0 +1,51 @@
+{
+ "doctype": "DocType",
+ "name": "Monobank Settings",
+ "module": "Ukrainian Integrations",
+ "issingle": 1,
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "0"
+  },
+  {
+   "fieldname": "token",
+   "fieldtype": "Password",
+   "label": "Token"
+  },
+  {
+   "fieldname": "account",
+   "fieldtype": "Data",
+   "label": "Account ID"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "auto_import_enabled",
+   "fieldtype": "Check",
+   "label": "Auto Import Enabled",
+   "default": "0"
+  },
+  {
+   "fieldname": "auto_import_days_back",
+   "fieldtype": "Int",
+   "label": "Auto Import Days Back",
+   "default": "1"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1
+  }
+ ],
+ "engine": "InnoDB",
+ "autoname": "prompt"
+}

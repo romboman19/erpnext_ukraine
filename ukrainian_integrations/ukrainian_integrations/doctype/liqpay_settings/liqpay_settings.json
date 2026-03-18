@@ -1,0 +1,43 @@
+{
+ "doctype": "DocType",
+ "name": "LiqPay Settings",
+ "module": "Ukrainian Integrations",
+ "issingle": 1,
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "0"
+  },
+  {
+   "fieldname": "public_key",
+   "fieldtype": "Data",
+   "label": "Public Key"
+  },
+  {
+   "fieldname": "private_key",
+   "fieldtype": "Password",
+   "label": "Private Key"
+  },
+  {
+   "fieldname": "result_url",
+   "fieldtype": "Data",
+   "label": "Result URL"
+  },
+  {
+   "fieldname": "server_url",
+   "fieldtype": "Data",
+   "label": "Server URL"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1
+  }
+ ],
+ "engine": "InnoDB",
+ "autoname": "prompt"
+}
