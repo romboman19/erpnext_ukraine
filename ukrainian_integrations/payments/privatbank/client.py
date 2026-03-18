@@ -33,3 +33,13 @@ class PrivatbankClient:
         )
         r.raise_for_status()
         return r.json() if (r.text or "").strip() else {}
+
+
+    def settings(self) -> dict:
+        r = requests.get(
+            f"{self.base_url}/statements/settings",
+            headers=self._headers(),
+            timeout=45,
+        )
+        r.raise_for_status()
+        return r.json() if (r.text or "").strip() else {}

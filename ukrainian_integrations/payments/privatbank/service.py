@@ -13,29 +13,67 @@ def _cfg(key: str, default=None):
     return frappe.conf.get(key, default)
 
 
+def _pb_profiles() -> list[dict]:
+    if not frappe.db.exists("DocType", "PrivatBank Settings") or not frappe.db.exists("DocType", "PrivatBank Profile"):
+        return []
+    try:
+        d = frappe.get_single("PrivatBank Settings")
+        rows = d.get("profiles") or []
+        out = []
+        for r in rows:
+            token = ""
+            if hasattr(r, "get_password"):
+                try:
+                    token = (r.get_password("token") or "").strip()
+                except Exception:
+                    token = ""
+            out.append({
+                "name": r.get("name"),
+                "label": (r.get("label") or "").strip(),
+                "enabled": int(r.get("enabled") or 0),
+                "is_default": int(r.get("is_default") or 0),
+                "token": token,
+                "api_base": (r.get("api_base") or "").strip(),
+                "account": (r.get("account") or "").strip(),
+                "bank_account": (r.get("bank_account") or "").strip(),
+                "company": (r.get("company") or "").strip(),
+                "amount_in_minor_units": int(r.get("amount_in_minor_units") or 1),
+                "auto_import_enabled": int(r.get("auto_import_enabled") or 0),
+                "auto_import_days_back": int(r.get("auto_import_days_back") or 1),
+            })
+        return out
+    except Exception:
+        return []
+
+
+def _pick_profile(profile: str | None = None) -> dict:
+    profs = _pb_profiles()
+    if not profs:
+        return {}
+    if profile:
+        p = next((x for x in profs if x.get("name") == profile or x.get("label") == profile), None)
+        if p:
+            return p
+    p = next((x for x in profs if x.get("is_default") == 1 and x.get("enabled") == 1), None)
+    if p:
+        return p
+    p = next((x for x in profs if x.get("enabled") == 1), None)
+    return p or {}
+
+
 def _pb_settings() -> dict:
     if not frappe.db.exists("DocType", "PrivatBank Settings"):
         return {}
     try:
         d = frappe.get_single("PrivatBank Settings")
-        return {
-            "enabled": int(d.get("enabled") or 0),
-            "token": (d.get_password("token") or "").strip(),
-            "api_base": (d.get("api_base") or "").strip(),
-            "account": (d.get("account") or "").strip(),
-            "company": (d.get("company") or "").strip(),
-            "amount_in_minor_units": int(d.get("amount_in_minor_units") or 1),
-            "auto_import_enabled": int(d.get("auto_import_enabled") or 0),
-            "auto_import_days_back": int(d.get("auto_import_days_back") or 1),
-        }
+        return {"enabled": int(d.get("enabled") or 0)}
     except Exception:
         return {}
 
 
-def _client() -> PrivatbankClient:
-    st = _pb_settings()
-    token = st.get('token') or _cfg('privatbank_token')
-    base_url = st.get('api_base') or _cfg('privatbank_api_base', 'https://acp.privatbank.ua/api/proxy')
+def _client(token: str | None = None, base_url: str | None = None) -> PrivatbankClient:
+    token = (token or _cfg('privatbank_token') or "").strip()
+    base_url = (base_url or _cfg('privatbank_api_base', 'https://acp.privatbank.ua/api/proxy') or "").strip()
     if not token:
         frappe.throw(_('Не задано privatbank_token у site_config.json'))
     return PrivatbankClient(token=token, base_url=base_url)
@@ -47,7 +85,7 @@ def _default_range(days: int = 1) -> tuple[str, str]:
     return start.isoformat(), end.isoformat()
 
 
-def _normalize_amount(raw_amount) -> float:
+def _normalize_amount(raw_amount, in_minor_units: int = 1) -> float:
     """Normalize PrivatBank statement amount to major currency units.
 
     Controlled by `privatbank_amount_in_minor_units` (site_config, default=1).
@@ -58,15 +96,14 @@ def _normalize_amount(raw_amount) -> float:
         value = float(raw_amount or 0)
     except Exception:
         return 0.0
-    st = _pb_settings()
-    in_minor = int(st.get("amount_in_minor_units") if st.get("amount_in_minor_units") is not None else (_cfg("privatbank_amount_in_minor_units", 1) or 1)) == 1
+    in_minor = int(in_minor_units if in_minor_units is not None else (_cfg("privatbank_amount_in_minor_units", 1) or 1)) == 1
     return value / 100.0 if in_minor else value
 
 
 @frappe.whitelist()
-def pb_statements_fetch(account: str | None = None, start_date: str | None = None, end_date: str | None = None, limit: int = 1000, offset: int = 0) -> dict:
-    st = _pb_settings()
-    acc = (account or st.get('account') or _cfg('privatbank_account') or '').strip()
+def pb_statements_fetch(account: str | None = None, start_date: str | None = None, end_date: str | None = None, limit: int = 1000, offset: int = 0, profile: str | None = None) -> dict:
+    prof = _pick_profile(profile)
+    acc = (account or prof.get('account') or _cfg('privatbank_account') or '').strip()
     if not acc:
         frappe.throw(_('Не задано рахунок: передай account або privatbank_account у site_config'))
 
@@ -83,7 +120,7 @@ def pb_statements_fetch(account: str | None = None, start_date: str | None = Non
 
     log_event('privatbank', 'queued', 'Fetch statements', request_payload=request_payload)
     try:
-        out = _client().statements(
+        out = _client(token=(prof.get("token") or None), base_url=(prof.get("api_base") or None)).statements(
             account=acc,
             start_date=start_date,
             end_date=end_date,
@@ -99,15 +136,15 @@ def pb_statements_fetch(account: str | None = None, start_date: str | None = Non
 
 
 @frappe.whitelist()
-def pb_statements_import_to_bank_transactions(account: str | None = None, start_date: str | None = None, end_date: str | None = None, company: str | None = None) -> dict:
-    fetched = pb_statements_fetch(account=account, start_date=start_date, end_date=end_date)
+def pb_statements_import_to_bank_transactions(account: str | None = None, start_date: str | None = None, end_date: str | None = None, company: str | None = None, profile: str | None = None) -> dict:
+    prof = _pick_profile(profile)
+    fetched = pb_statements_fetch(account=account, start_date=start_date, end_date=end_date, profile=profile)
     raw = fetched.get('data') or {}
     rows = raw.get('list') or raw.get('transactions') or []
 
     created = 0
     skipped = 0
-    st = _pb_settings()
-    comp = company or st.get('company') or _cfg('default_company')
+    comp = company or prof.get('company') or _cfg('default_company')
 
     for row in rows:
         tx_id = str(row.get('id') or row.get('transactionId') or row.get('ref') or '').strip()
@@ -123,7 +160,7 @@ def pb_statements_import_to_bank_transactions(account: str | None = None, start_
             skipped += 1
             continue
 
-        amount = _normalize_amount(row.get('amount') or row.get('sum') or 0)
+        amount = _normalize_amount(row.get('amount') or row.get('sum') or 0, in_minor_units=prof.get('amount_in_minor_units', 1))
 
         posting_date = row.get('date') or row.get('operationDate') or frappe.utils.nowdate()
         if isinstance(posting_date, str) and 'T' in posting_date:
@@ -139,7 +176,8 @@ def pb_statements_import_to_bank_transactions(account: str | None = None, start_
                 'withdrawal': abs(amount) if amount < 0 else 0,
                 'currency': row.get('ccy') or 'UAH',
                 'description': f'PBX:{tx_id} | {description}',
-                'bank_account_no': (account or _cfg('privatbank_account') or ''),
+                'bank_account': (prof.get('bank_account') or ''),
+                'bank_account_no': (account or prof.get('account') or _cfg('privatbank_account') or ''),
                 'company': comp,
             }
         )
@@ -157,3 +195,34 @@ def pb_statements_import_to_bank_transactions(account: str | None = None, start_
         response_payload={'created': created, 'skipped': skipped},
     )
     return {'ok': True, 'created': created, 'skipped': skipped}
+
+
+@frappe.whitelist()
+def pb_list_accounts(profile: str | None = None) -> dict:
+    prof = _pick_profile(profile)
+    out = _client(token=(prof.get("token") or None), base_url=(prof.get("api_base") or None)).settings()
+    data = out.get("accounts") or out.get("list") or out.get("data") or []
+    norm = []
+    for a in data:
+        acc = a.get("account") or a.get("acc") or a.get("iban") or ""
+        ccy = a.get("currency") or a.get("ccy") or ""
+        norm.append({"account": acc, "currency": ccy, "raw": a, "label": f"{acc} | {ccy}"})
+    return {"ok": True, "count": len(norm), "accounts": norm, "raw": out}
+
+
+@frappe.whitelist()
+def pb_bind_account(account: str, bank_account: str | None = None, profile: str | None = None) -> dict:
+    if not account:
+        frappe.throw(_("account is required"))
+    d = frappe.get_single("PrivatBank Settings")
+    if not profile:
+        frappe.throw(_("profile is required"))
+    row = next((r for r in (d.get("profiles") or []) if r.get("name") == profile or r.get("label") == profile), None)
+    if not row:
+        frappe.throw(_("PrivatBank profile not found"))
+    row.account = (account or "").strip()
+    if bank_account is not None:
+        row.bank_account = (bank_account or "").strip()
+    d.save(ignore_permissions=True)
+    frappe.db.commit()
+    return {"ok": True, "profile": profile, "account": row.account, "bank_account": row.get("bank_account")}

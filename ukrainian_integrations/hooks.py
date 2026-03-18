@@ -18,6 +18,7 @@ doctype_js = {
     "UP Sender Profile": "public/js/up_sender_profile_actions.js",
     "TurboSMS Settings": "public/js/turbosms_settings_actions.js",
     "Monobank Settings": "public/js/monobank_settings_actions.js",
+    "PrivatBank Settings": "public/js/privatbank_settings_actions.js",
 }
 
 scheduler_events = {
