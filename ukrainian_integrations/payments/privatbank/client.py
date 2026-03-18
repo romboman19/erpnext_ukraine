@@ -20,6 +20,27 @@ class PrivatbankClient:
             "Accept": "application/json",
         }
 
+    def _endpoint_candidates(self, path: str) -> list[str]:
+        base = self.base_url.rstrip("/")
+        p = path if path.startswith("/") else f"/{path}"
+        cands = [f"{base}{p}"]
+
+        # if base is host root, try /api and /api/proxy variants
+        if not base.endswith('/api') and not base.endswith('/api/proxy'):
+            cands.append(f"{base}/api{p}")
+            cands.append(f"{base}/api/proxy{p}")
+
+        # if base is /api/proxy, also try /api variant
+        if base.endswith('/api/proxy'):
+            root = base[:-len('/api/proxy')]
+            cands.append(f"{root}/api{p}")
+
+        out = []
+        for u in cands:
+            if u not in out:
+                out.append(u)
+        return out
+
     def statements(self, account: str, start_date: str, end_date: str, limit: int = 100, follow_id: str | None = None) -> dict:
         # PrivatBank Autoclient v3 docs: GET /api/statements/transactions
         # params: acc, startDate=DD-MM-YYYY, endDate=DD-MM-YYYY, followId, limit
