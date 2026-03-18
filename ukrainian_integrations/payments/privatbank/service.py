@@ -160,7 +160,7 @@ def pb_statements_import_to_bank_transactions(account: str | None = None, start_
     comp = company or prof.get('company') or _cfg('default_company')
 
     for row in rows:
-        tx_id = str(row.get('id') or row.get('transactionId') or row.get('ref') or '').strip()
+        tx_id = str(row.get('id') or row.get('ID') or row.get('transactionId') or row.get('TECHNICAL_TRANSACTION_ID') or row.get('ref') or row.get('REF') or '').strip()
         if not tx_id:
             skipped += 1
             continue
@@ -173,13 +173,18 @@ def pb_statements_import_to_bank_transactions(account: str | None = None, start_
             skipped += 1
             continue
 
-        amount = _normalize_amount(row.get('amount') or row.get('sum') or 0, in_minor_units=prof.get('amount_in_minor_units', 1))
+        amount = _normalize_amount(row.get('amount') or row.get('sum') or row.get('SUM') or row.get('SUM_E') or 0, in_minor_units=prof.get('amount_in_minor_units', 1))
 
-        posting_date = row.get('date') or row.get('operationDate') or frappe.utils.nowdate()
+        posting_date = row.get('date') or row.get('operationDate') or row.get('DAT_OD') or row.get('DATE_TIME_DAT_OD_TIM_P') or frappe.utils.nowdate()
         if isinstance(posting_date, str) and 'T' in posting_date:
             posting_date = posting_date.split('T', 1)[0]
+        if isinstance(posting_date, str) and ' ' in posting_date and '.' in posting_date:
+            posting_date = posting_date.split(' ',1)[0]
+        if isinstance(posting_date, str) and '.' in posting_date and len(posting_date) >= 10:
+            d,m,y = posting_date[:10].split('.')
+            posting_date = f"{y}-{m}-{d}"
 
-        description = row.get('description') or row.get('purpose') or ''
+        description = row.get('description') or row.get('purpose') or row.get('OSND') or ''
 
         doc = frappe.get_doc(
             {
@@ -187,7 +192,7 @@ def pb_statements_import_to_bank_transactions(account: str | None = None, start_
                 'date': posting_date,
                 'deposit': amount if amount > 0 else 0,
                 'withdrawal': abs(amount) if amount < 0 else 0,
-                'currency': row.get('ccy') or 'UAH',
+                'currency': row.get('ccy') or row.get('CCY') or 'UAH',
                 'description': f'PBX:{tx_id} | {description}',
                 'bank_account': (prof.get('bank_account') or ''),
                 'bank_account_no': (account or prof.get('account') or _cfg('privatbank_account') or ''),
