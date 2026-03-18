@@ -11,6 +11,11 @@
    "default": "0"
   },
   {
+   "fieldname": "sec_conn",
+   "fieldtype": "Section Break",
+   "label": "Connection"
+  },
+  {
    "fieldname": "token",
    "fieldtype": "Password",
    "label": "Token"
@@ -31,6 +36,11 @@
    "fieldtype": "Link",
    "label": "Company",
    "options": "Company"
+  },
+  {
+   "fieldname": "sec_auto",
+   "fieldtype": "Section Break",
+   "label": "Automation"
   },
   {
    "fieldname": "auto_import_enabled",
