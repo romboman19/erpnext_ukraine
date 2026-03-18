@@ -175,6 +175,12 @@ def pb_statements_import_to_bank_transactions(account: str | None = None, start_
 
         amount = _normalize_amount(row.get('amount') or row.get('sum') or row.get('SUM') or row.get('SUM_E') or 0, in_minor_units=prof.get('amount_in_minor_units', 1))
 
+        trantype = str(row.get('TRANTYPE') or row.get('trantype') or '').upper()
+        if trantype == 'D' and amount > 0:
+            amount = -amount
+        elif trantype == 'C' and amount < 0:
+            amount = abs(amount)
+
         posting_date = row.get('date') or row.get('operationDate') or row.get('DAT_OD') or row.get('DATE_TIME_DAT_OD_TIM_P') or frappe.utils.nowdate()
         if isinstance(posting_date, str) and 'T' in posting_date:
             posting_date = posting_date.split('T', 1)[0]
