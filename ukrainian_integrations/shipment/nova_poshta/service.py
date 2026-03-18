@@ -370,6 +370,7 @@ def create_ttn_from_sales_invoice(
         api_key=profile_api_key,
     )
     recip_contact_candidates = recip_contacts.get("data") or []
+    rec_name = (recipient_name or "").strip()
     recip_contact_row = _pick_np_contact(recip_contact_candidates, rec_phone, rec_name)
     if not recip_contact_row:
         frappe.throw(_("НП не повернула контакт отримувача"))
