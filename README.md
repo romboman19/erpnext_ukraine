@@ -73,6 +73,20 @@
 
 ---
 
+### 5) Privat POS (касові термінали)
+
+- інтеграція через `PB POS Settings` + `PB POS Terminal`
+- тестові дії прямо у формі термінала:
+  - `🟢 Тест зв'язку`
+  - `💳 Тест оплати`
+  - `↩️ Тест повернення`
+- backend методи в `ukrainian_integrations/payments/privat_pos/service.py`
+- gateway client в `ukrainian_integrations/payments/privat_pos/gateway_client.py`
+- client-side кнопки в `ukrainian_integrations/public/js/pb_pos_terminal_actions.js`
+
+Детальний технічний опис: `docs/privat_pos_flow.md`
+
+
 ## DocType налаштувань (створені)
 
 - `VitalPBX Settings` (включно з `webhook_key`)
