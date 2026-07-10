@@ -1,0 +1,209 @@
+{
+ "actions": [],
+ "autoname": "field:company",
+ "creation": "2026-07-10 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "fop_full_name",
+  "tax_id",
+  "column_break_ident",
+  "status",
+  "single_tax_registration_date",
+  "section_tax",
+  "single_tax_group",
+  "tax_rate_mode",
+  "column_break_tax",
+  "vat_payer",
+  "vat_number",
+  "section_bank",
+  "iban",
+  "column_break_bank",
+  "bank_name",
+  "section_activity",
+  "kved_main",
+  "kved_main_title",
+  "kveds",
+  "section_address",
+  "registration_address"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Компанія (ФОП)",
+   "options": "Company",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "fop_full_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "ПІБ підприємця",
+   "reqd": 1
+  },
+  {
+   "fieldname": "tax_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "РНОКПП (ІПН)",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "column_break_ident",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Статус",
+   "options": "Active\nSuspended\nClosed"
+  },
+  {
+   "fieldname": "single_tax_registration_date",
+   "fieldtype": "Date",
+   "label": "Дата реєстрації платником ЄП"
+  },
+  {
+   "fieldname": "section_tax",
+   "fieldtype": "Section Break",
+   "label": "Оподаткування"
+  },
+  {
+   "fieldname": "single_tax_group",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Група єдиного податку",
+   "options": "1\n2\n3",
+   "reqd": 1
+  },
+  {
+   "fieldname": "tax_rate_mode",
+   "fieldtype": "Select",
+   "label": "Режим ставки",
+   "options": "Фіксована ставка\n5% без ПДВ\n3% з ПДВ",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_tax",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "vat_payer",
+   "fieldtype": "Check",
+   "label": "Платник ПДВ",
+   "read_only": 1
+  },
+  {
+   "depends_on": "vat_payer",
+   "fieldname": "vat_number",
+   "fieldtype": "Data",
+   "label": "ІПН платника ПДВ",
+   "mandatory_depends_on": "vat_payer"
+  },
+  {
+   "fieldname": "section_bank",
+   "fieldtype": "Section Break",
+   "label": "Банківські реквізити"
+  },
+  {
+   "fieldname": "iban",
+   "fieldtype": "Data",
+   "label": "IBAN"
+  },
+  {
+   "fieldname": "column_break_bank",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "bank_name",
+   "fieldtype": "Data",
+   "label": "Назва банку"
+  },
+  {
+   "fieldname": "section_activity",
+   "fieldtype": "Section Break",
+   "label": "Види діяльності"
+  },
+  {
+   "fieldname": "kved_main",
+   "fieldtype": "Link",
+   "label": "Основний КВЕД",
+   "options": "UA KVED"
+  },
+  {
+   "fetch_from": "kved_main.title",
+   "fieldname": "kved_main_title",
+   "fieldtype": "Data",
+   "label": "Назва основного КВЕД",
+   "read_only": 1
+  },
+  {
+   "fieldname": "kveds",
+   "fieldtype": "Table",
+   "label": "Додаткові КВЕДи",
+   "options": "UA KVED Item"
+  },
+  {
+   "fieldname": "section_address",
+   "fieldtype": "Section Break",
+   "label": "Адреса"
+  },
+  {
+   "fieldname": "registration_address",
+   "fieldtype": "Small Text",
+   "label": "Адреса реєстрації (податкова адреса)"
+  }
+ ],
+ "links": [
+  {
+   "link_doctype": "UA Tax Parameters",
+   "link_fieldname": "single_tax_group"
+  }
+ ],
+ "modified": "2026-07-10 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "UA FOP",
+ "name": "FOP Profile",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -1,0 +1,128 @@
+{
+ "actions": [],
+ "autoname": "format:{year} — група {single_tax_group}",
+ "creation": "2026-07-10 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "year",
+  "single_tax_group",
+  "column_break_main",
+  "minimum_wage",
+  "income_limit",
+  "section_rates",
+  "single_tax_monthly",
+  "single_tax_percent_no_vat",
+  "single_tax_percent_vat",
+  "column_break_rates",
+  "military_levy_monthly",
+  "military_levy_percent",
+  "esv_monthly"
+ ],
+ "fields": [
+  {
+   "fieldname": "year",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Рік",
+   "reqd": 1
+  },
+  {
+   "fieldname": "single_tax_group",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Група єдиного податку",
+   "options": "1\n2\n3",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "minimum_wage",
+   "fieldtype": "Currency",
+   "label": "Мінімальна зарплата, грн"
+  },
+  {
+   "fieldname": "income_limit",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Ліміт доходу за рік, грн",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_rates",
+   "fieldtype": "Section Break",
+   "label": "Ставки"
+  },
+  {
+   "fieldname": "single_tax_monthly",
+   "fieldtype": "Currency",
+   "label": "Єдиний податок, грн/міс"
+  },
+  {
+   "fieldname": "single_tax_percent_no_vat",
+   "fieldtype": "Percent",
+   "label": "Єдиний податок, % (без ПДВ)"
+  },
+  {
+   "fieldname": "single_tax_percent_vat",
+   "fieldtype": "Percent",
+   "label": "Єдиний податок, % (з ПДВ)"
+  },
+  {
+   "fieldname": "column_break_rates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "military_levy_monthly",
+   "fieldtype": "Currency",
+   "label": "Військовий збір, грн/міс"
+  },
+  {
+   "fieldname": "military_levy_percent",
+   "fieldtype": "Percent",
+   "label": "Військовий збір, % доходу"
+  },
+  {
+   "fieldname": "esv_monthly",
+   "fieldtype": "Currency",
+   "label": "ЄСВ (мінімальний), грн/міс"
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-10 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "UA FOP",
+ "name": "UA Tax Parameters",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

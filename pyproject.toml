@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "erpnext_ua"
+version = "0.1.0"
+description = "ERPNext Ukraine localization: FOP profiles, tax parameters, print formats, translations"
+requires-python = ">=3.11"
+readme = "README.md"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["erpnext_ua*"]
+exclude = ["public*", "docs*", "tests*"]
+
+[tool.black]
+line-length = 120
