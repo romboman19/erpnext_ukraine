@@ -1,0 +1,176 @@
+{
+ "actions": [],
+ "autoname": "field:register_name",
+ "creation": "2026-07-10 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "register_name",
+  "fop_profile",
+  "company",
+  "column_break_main",
+  "status",
+  "fiscal_number",
+  "section_unit",
+  "unit_name",
+  "unit_address",
+  "column_break_unit",
+  "pos_profile",
+  "section_signing",
+  "default_kep_key",
+  "column_break_signing",
+  "next_local_number",
+  "current_shift"
+ ],
+ "fields": [
+  {
+   "fieldname": "register_name",
+   "fieldtype": "Data",
+   "label": "Назва каси",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "fop_profile",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Профіль ФОП",
+   "options": "FOP Profile",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "fop_profile.company",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Компанія",
+   "options": "Company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Статус",
+   "options": "Active\nDisabled"
+  },
+  {
+   "description": "Фіскальний номер ПРРО, присвоєний ДПС (форма 1-ПРРО)",
+   "fieldname": "fiscal_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Фіскальний номер ПРРО",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "section_unit",
+   "fieldtype": "Section Break",
+   "label": "Господарська одиниця"
+  },
+  {
+   "fieldname": "unit_name",
+   "fieldtype": "Data",
+   "label": "Назва госп. одиниці",
+   "reqd": 1
+  },
+  {
+   "fieldname": "unit_address",
+   "fieldtype": "Small Text",
+   "label": "Адреса госп. одиниці",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_unit",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pos_profile",
+   "fieldtype": "Link",
+   "label": "POS Profile",
+   "options": "POS Profile"
+  },
+  {
+   "fieldname": "section_signing",
+   "fieldtype": "Section Break",
+   "label": "Підпис і нумерація"
+  },
+  {
+   "description": "Ключ, яким підписуються чеки цієї каси за замовчуванням",
+   "fieldname": "default_kep_key",
+   "fieldtype": "Link",
+   "label": "Ключ КЕП за замовчуванням",
+   "options": "UA KEP Key"
+  },
+  {
+   "fieldname": "column_break_signing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Наступний локальний номер документа (безперервна нумерація в межах ПРРО)",
+   "fieldname": "next_local_number",
+   "fieldtype": "Int",
+   "label": "Наступний локальний номер",
+   "read_only": 1
+  },
+  {
+   "fieldname": "current_shift",
+   "fieldtype": "Link",
+   "label": "Поточна зміна",
+   "options": "PRRO Shift",
+   "read_only": 1
+  }
+ ],
+ "links": [
+  {
+   "link_doctype": "PRRO Shift",
+   "link_fieldname": "cash_register"
+  },
+  {
+   "link_doctype": "PRRO Receipt",
+   "link_fieldname": "cash_register"
+  }
+ ],
+ "modified": "2026-07-10 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "UA Fiscal",
+ "name": "PRRO Cash Register",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Accounts User"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

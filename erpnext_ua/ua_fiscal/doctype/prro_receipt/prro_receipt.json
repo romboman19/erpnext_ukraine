@@ -1,0 +1,233 @@
+{
+ "actions": [],
+ "creation": "2026-07-10 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "cash_register",
+  "shift",
+  "receipt_type",
+  "column_break_main",
+  "status",
+  "sales_invoice",
+  "section_numbers",
+  "local_number",
+  "fiscal_number",
+  "column_break_numbers",
+  "fiscalized_at",
+  "is_offline",
+  "section_amounts",
+  "total_amount",
+  "column_break_amounts",
+  "related_receipt",
+  "section_payload",
+  "receipt_xml",
+  "signature_status",
+  "section_response",
+  "dps_response",
+  "error_message",
+  "retry_count",
+  "section_qr",
+  "qr_data"
+ ],
+ "fields": [
+  {
+   "fieldname": "cash_register",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Каса (ПРРО)",
+   "options": "PRRO Cash Register",
+   "reqd": 1
+  },
+  {
+   "fieldname": "shift",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Зміна",
+   "options": "PRRO Shift",
+   "reqd": 1
+  },
+  {
+   "default": "Продаж",
+   "fieldname": "receipt_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Тип",
+   "options": "Продаж\nПовернення\nСлужбове внесення\nСлужбова видача"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Статус",
+   "options": "Draft\nSigned\nSubmitted\nFiscalized\nOffline\nError\nCancelled"
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "label": "Sales Invoice",
+   "options": "Sales Invoice"
+  },
+  {
+   "fieldname": "section_numbers",
+   "fieldtype": "Section Break",
+   "label": "Нумерація"
+  },
+  {
+   "fieldname": "local_number",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Локальний номер",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fiscal_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Фіскальний номер",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_numbers",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fiscalized_at",
+   "fieldtype": "Datetime",
+   "label": "Фіскалізовано",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Чек створений в офлайн-режимі й очікує передачі в ДПС",
+   "fieldname": "is_offline",
+   "fieldtype": "Check",
+   "label": "Офлайн",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_amounts",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "total_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Сума, грн"
+  },
+  {
+   "description": "Для повернення — посилання на чек продажу",
+   "fieldname": "column_break_amounts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "related_receipt",
+   "fieldtype": "Link",
+   "label": "Повʼязаний чек",
+   "options": "PRRO Receipt"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_payload",
+   "fieldtype": "Section Break",
+   "label": "Документ"
+  },
+  {
+   "fieldname": "receipt_xml",
+   "fieldtype": "Code",
+   "label": "XML чека",
+   "options": "XML",
+   "read_only": 1
+  },
+  {
+   "fieldname": "signature_status",
+   "fieldtype": "Data",
+   "label": "Статус підпису",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_response",
+   "fieldtype": "Section Break",
+   "label": "Відповідь ДПС"
+  },
+  {
+   "fieldname": "dps_response",
+   "fieldtype": "Code",
+   "label": "Відповідь фіскального сервера",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Small Text",
+   "label": "Помилка",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "retry_count",
+   "fieldtype": "Int",
+   "label": "Спроб відправки",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_qr",
+   "fieldtype": "Section Break",
+   "label": "QR"
+  },
+  {
+   "description": "Дані для QR-коду перевірки чека покупцем",
+   "fieldname": "qr_data",
+   "fieldtype": "Small Text",
+   "label": "QR-дані",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-10 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "UA Fiscal",
+ "name": "PRRO Receipt",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Accounts User"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

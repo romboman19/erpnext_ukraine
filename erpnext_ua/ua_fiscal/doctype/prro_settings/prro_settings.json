@@ -1,0 +1,115 @@
+{
+ "actions": [],
+ "creation": "2026-07-10 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "mode",
+  "column_break_mode",
+  "enabled",
+  "section_dps",
+  "fiscal_server_url",
+  "fiscal_server_test_url",
+  "column_break_dps",
+  "request_timeout",
+  "offline_queue_enabled",
+  "section_sign",
+  "signservice_url",
+  "column_break_sign",
+  "signservice_api_key"
+ ],
+ "fields": [
+  {
+   "default": "Тестовий",
+   "description": "У тестовому режимі всі запити йдуть на тестовий фіскальний сервер ДПС",
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "label": "Режим",
+   "options": "Тестовий\nБойовий"
+  },
+  {
+   "fieldname": "column_break_mode",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Фіскалізацію увімкнено"
+  },
+  {
+   "fieldname": "section_dps",
+   "fieldtype": "Section Break",
+   "label": "Фіскальний сервер ДПС"
+  },
+  {
+   "default": "http://fs.tax.gov.ua:8609/fs",
+   "fieldname": "fiscal_server_url",
+   "fieldtype": "Data",
+   "label": "URL (бойовий)"
+  },
+  {
+   "default": "http://80.91.165.208:8609/fs",
+   "fieldname": "fiscal_server_test_url",
+   "fieldtype": "Data",
+   "label": "URL (тестовий)"
+  },
+  {
+   "fieldname": "column_break_dps",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "15",
+   "fieldname": "request_timeout",
+   "fieldtype": "Int",
+   "label": "Таймаут запиту, сек"
+  },
+  {
+   "default": "1",
+   "fieldname": "offline_queue_enabled",
+   "fieldtype": "Check",
+   "label": "Офлайн-черга при недоступності ДПС"
+  },
+  {
+   "fieldname": "section_sign",
+   "fieldtype": "Section Break",
+   "label": "Сервіс підпису (VilnoCheck-SignService)"
+  },
+  {
+   "description": "Внутрішня адреса, наприклад http://signservice:3000",
+   "fieldname": "signservice_url",
+   "fieldtype": "Data",
+   "label": "URL сервісу"
+  },
+  {
+   "fieldname": "column_break_sign",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "signservice_api_key",
+   "fieldtype": "Password",
+   "label": "API ключ (x-api-key)"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-10 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "UA Fiscal",
+ "name": "PRRO Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

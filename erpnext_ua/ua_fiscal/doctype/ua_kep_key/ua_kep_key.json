@@ -1,0 +1,139 @@
+{
+ "actions": [],
+ "autoname": "format:{user} — {subject_name}",
+ "creation": "2026-07-10 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "subject_name",
+  "subject_tax_id",
+  "column_break_main",
+  "status",
+  "valid_until",
+  "purpose",
+  "section_key",
+  "key_file",
+  "column_break_key",
+  "key_password",
+  "key_alias",
+  "section_notes",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Користувач (касир)",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "subject_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "ПІБ підписанта (з сертифіката)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "subject_tax_id",
+   "fieldtype": "Data",
+   "label": "РНОКПП підписанта"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Статус",
+   "options": "Active\nExpired\nRevoked\nDisabled"
+  },
+  {
+   "fieldname": "valid_until",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Сертифікат дійсний до"
+  },
+  {
+   "default": "ПРРО (касир)",
+   "fieldname": "purpose",
+   "fieldtype": "Select",
+   "label": "Призначення",
+   "options": "ПРРО (касир)\nЗвітність\nІнше"
+  },
+  {
+   "fieldname": "section_key",
+   "fieldtype": "Section Break",
+   "label": "Файловий ключ"
+  },
+  {
+   "description": "JKS / p12 / pfx / Key-6.dat. Зберігається як приватний файл.",
+   "fieldname": "key_file",
+   "fieldtype": "Attach",
+   "label": "Файл ключа",
+   "permlevel": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_key",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "key_password",
+   "fieldtype": "Password",
+   "label": "Пароль ключа",
+   "permlevel": 1,
+   "reqd": 1
+  },
+  {
+   "description": "Alias ключа всередині контейнера (для JKS з кількома ключами)",
+   "fieldname": "key_alias",
+   "fieldtype": "Data",
+   "label": "Alias у контейнері",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "section_notes",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Примітки"
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-10 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "UA Fiscal",
+ "name": "UA KEP Key",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

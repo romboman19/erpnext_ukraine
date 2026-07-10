@@ -1,0 +1,192 @@
+{
+ "actions": [],
+ "creation": "2026-07-10 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "cash_register",
+  "status",
+  "column_break_main",
+  "cashier",
+  "kep_key",
+  "section_open",
+  "opened_at",
+  "opening_fiscal_number",
+  "column_break_open",
+  "closed_at",
+  "closing_fiscal_number",
+  "section_totals",
+  "receipts_count",
+  "column_break_totals",
+  "sales_total",
+  "refunds_total",
+  "section_z",
+  "z_report_fiscal_number",
+  "z_report_xml"
+ ],
+ "fields": [
+  {
+   "fieldname": "cash_register",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Каса (ПРРО)",
+   "options": "PRRO Cash Register",
+   "reqd": 1
+  },
+  {
+   "default": "Opening",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Статус",
+   "options": "Opening\nOpen\nClosing\nClosed\nError"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cashier",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Касир",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "kep_key",
+   "fieldtype": "Link",
+   "label": "Ключ КЕП зміни",
+   "options": "UA KEP Key"
+  },
+  {
+   "fieldname": "section_open",
+   "fieldtype": "Section Break",
+   "label": "Відкриття / закриття"
+  },
+  {
+   "fieldname": "opened_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Відкрито",
+   "read_only": 1
+  },
+  {
+   "fieldname": "opening_fiscal_number",
+   "fieldtype": "Data",
+   "label": "Фіскальний № відкриття",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_open",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "closed_at",
+   "fieldtype": "Datetime",
+   "label": "Закрито",
+   "read_only": 1
+  },
+  {
+   "fieldname": "closing_fiscal_number",
+   "fieldtype": "Data",
+   "label": "Фіскальний № закриття",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_totals",
+   "fieldtype": "Section Break",
+   "label": "Підсумки зміни"
+  },
+  {
+   "default": "0",
+   "fieldname": "receipts_count",
+   "fieldtype": "Int",
+   "label": "Кількість чеків",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_totals",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "sales_total",
+   "fieldtype": "Currency",
+   "label": "Продажі, грн",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "refunds_total",
+   "fieldtype": "Currency",
+   "label": "Повернення, грн",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_z",
+   "fieldtype": "Section Break",
+   "label": "Z-звіт"
+  },
+  {
+   "fieldname": "z_report_fiscal_number",
+   "fieldtype": "Data",
+   "label": "Фіскальний № Z-звіту",
+   "read_only": 1
+  },
+  {
+   "fieldname": "z_report_xml",
+   "fieldtype": "Code",
+   "label": "XML Z-звіту",
+   "options": "XML",
+   "read_only": 1
+  }
+ ],
+ "links": [
+  {
+   "link_doctype": "PRRO Receipt",
+   "link_fieldname": "shift"
+  }
+ ],
+ "modified": "2026-07-10 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "UA Fiscal",
+ "name": "PRRO Shift",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Accounts User",
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
