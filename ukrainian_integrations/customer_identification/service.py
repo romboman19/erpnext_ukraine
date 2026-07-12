@@ -65,7 +65,22 @@ def _customer_payload(customer: str | None) -> dict | None:
 		return None
 	meta = frappe.get_meta("Customer")
 	fields = ["name", "customer_name"]
-	fields.extend(field for field in ("mobile_no", "phone") if meta.has_field(field))
+	fields.extend(
+		field
+		for field in (
+			"mobile_no",
+			"phone",
+			"email_id",
+			"ua_last_name",
+			"ua_first_name",
+			"ua_middle_name",
+			"ua_gender",
+			"ua_date_of_birth",
+			"ua_city",
+			"ua_pos_comment",
+		)
+		if meta.has_field(field)
+	)
 	row = frappe.db.get_value("Customer", customer, fields, as_dict=True)
 	if not row:
 		return None
@@ -228,7 +243,18 @@ def cancel(request_id: str) -> dict:
 
 
 @frappe.whitelist()
-def quick_create(request_id: str, customer_name: str) -> dict:
+def quick_create(
+	request_id: str,
+	customer_name: str | None = None,
+	last_name: str | None = None,
+	first_name: str | None = None,
+	middle_name: str | None = None,
+	gender: str | None = None,
+	date_of_birth: str | None = None,
+	comment: str | None = None,
+	city: str | None = None,
+	email: str | None = None,
+) -> dict:
 	request = _expire_if_needed(_get_request(request_id))
 	if request.status != "Verified":
 		frappe.throw(_("Спочатку підтвердьте номер покупця"), frappe.PermissionError)
@@ -236,18 +262,61 @@ def quick_create(request_id: str, customer_name: str) -> dict:
 	existing = _find_customer(phone)
 	if existing:
 		return _customer_payload(existing)
-	if not (customer_name or "").strip():
-		frappe.throw(_("Вкажіть ім’я покупця"))
-	doc = frappe.get_doc(
-		{
-			"doctype": "Customer",
-			"customer_name": customer_name.strip(),
-			"customer_type": "Individual",
-			"customer_group": frappe.db.get_single_value("Selling Settings", "customer_group") or "Individual",
-			"territory": frappe.db.get_single_value("Selling Settings", "territory") or "Ukraine",
-			"mobile_no": phone,
-		}
-	).insert(ignore_permissions=True)
+	last_name = (last_name or "").strip()
+	first_name = (first_name or "").strip()
+	middle_name = (middle_name or "").strip()
+	legacy_name = (customer_name or "").strip()
+	if not first_name and not last_name and legacy_name:
+		parts = legacy_name.split(maxsplit=1)
+		last_name = parts[0]
+		first_name = parts[1] if len(parts) > 1 else parts[0]
+	if not first_name or not last_name:
+		frappe.throw(_("Вкажіть прізвище та ім’я покупця"))
+	full_name = " ".join(part for part in (last_name, first_name, middle_name) if part)
+	customer_meta = frappe.get_meta("Customer")
+	payload = {
+		"doctype": "Customer",
+		"customer_name": full_name,
+		"customer_type": "Individual",
+		"customer_group": frappe.db.get_single_value("Selling Settings", "customer_group") or "Individual",
+		"territory": frappe.db.get_single_value("Selling Settings", "territory") or "Ukraine",
+	}
+	for fieldname, value in {
+		"mobile_no": phone,
+		"email_id": (email or "").strip() or None,
+		"ua_last_name": last_name,
+		"ua_first_name": first_name,
+		"ua_middle_name": middle_name or None,
+		"ua_gender": gender or None,
+		"ua_date_of_birth": date_of_birth or None,
+		"ua_city": (city or "").strip() or None,
+		"ua_pos_comment": (comment or "").strip() or None,
+	}.items():
+		if value is not None and customer_meta.has_field(fieldname):
+			payload[fieldname] = value
+	doc = frappe.get_doc(payload).insert(ignore_permissions=True)
+
+	contact_meta = frappe.get_meta("Contact")
+	contact_payload = {
+		"doctype": "Contact",
+		"first_name": first_name,
+		"last_name": last_name,
+		"links": [{"link_doctype": "Customer", "link_name": doc.name}],
+		"phone_nos": [{"phone": phone, "is_primary_phone": 1, "is_primary_mobile_no": 1}],
+	}
+	for fieldname, value in {
+		"middle_name": middle_name or None,
+		"gender": gender or None,
+		"date_of_birth": date_of_birth or None,
+	}.items():
+		if value is not None and contact_meta.has_field(fieldname):
+			contact_payload[fieldname] = value
+	if (email or "").strip():
+		contact_payload["email_ids"] = [{"email_id": email.strip(), "is_primary": 1}]
+	contact = frappe.get_doc(contact_payload).insert(ignore_permissions=True)
+	if customer_meta.has_field("customer_primary_contact"):
+		doc.customer_primary_contact = contact.name
+		doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	return _customer_payload(doc.name)
 

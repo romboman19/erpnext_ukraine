@@ -83,10 +83,11 @@ def webhook():
 			_telegram("sendMessage", {"chat_id": chat_id, "text": "Номер контакту не відповідає запиту."})
 			return {"ok": True}
 		_mark_verified(doc, external_reference=f"Telegram chat:{chat_id}", telegram_user_id=from_user)
+		if doc.customer and frappe.get_meta("Customer").has_field("ua_telegram_chat_id"):
+			frappe.db.set_value("Customer", doc.customer, "ua_telegram_chat_id", chat_id)
 		frappe.db.commit()
 		_telegram(
 			"sendMessage",
 			{"chat_id": chat_id, "text": "Покупця підтверджено. Можна повернутися до каси.", "reply_markup": {"remove_keyboard": True}},
 		)
 	return {"ok": True}
-

@@ -23,6 +23,9 @@ doctype_js = {
 }
 
 scheduler_events = {
+	"daily": [
+		"ukrainian_integrations.customer_identification.birthday.send_scheduled_greetings",
+	],
     "cron": {
         "*/30 * * * *": [
             "ukrainian_integrations.shipment.nova_poshta.scheduler.sync_ttn_statuses",
