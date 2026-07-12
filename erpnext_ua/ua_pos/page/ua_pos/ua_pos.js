@@ -50,8 +50,19 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   }
 
   $root.on("click", ".login", async () => {
-    const result = await api("login_by_barcode", { cash_desk: $root.find(".desk").val(), barcode: $root.find(".barcode").val(), device_token: navigator.userAgent });
-    state.token = result.session_token; sessionStorage.setItem("ua_pos_token", state.token); await refreshSession();
+    const $barcode = $root.find(".barcode");
+    try {
+      const result = await api("login_by_barcode", {
+        cash_desk: ($root.find(".desk").val() || "").trim(),
+        barcode: ($barcode.val() || "").trim(),
+        device_token: navigator.userAgent,
+      });
+      state.token = result.session_token;
+      sessionStorage.setItem("ua_pos_token", state.token);
+      await refreshSession();
+    } finally {
+      $barcode.val("").focus();
+    }
   });
   $root.on("click", ".logout", async () => { await api("logout", { pos_session_token: state.token }); sessionStorage.removeItem("ua_pos_token"); location.reload(); });
   $root.on("click", ".open-shift", () => frappe.prompt({fieldname:"amount",fieldtype:"Currency",label:__("Opening cash"),reqd:1}, async v => { await api("open_shift", {pos_session_token:state.token,denominations:JSON.stringify([{currency:"UAH",denomination:v.amount,qty:1}]),idem_key:idem()}); await refreshSession(); }));

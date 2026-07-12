@@ -5,6 +5,7 @@ import secrets
 import uuid
 
 import frappe
+from frappe import _
 
 from erpnext_ua.ua_pos.services.common import (
 	SESSION_TTL,
@@ -35,13 +36,25 @@ def _access(employee: str, cash_desk: str):
 
 @frappe.whitelist(allow_guest=False)
 def login_by_barcode(cash_desk: str, barcode: str, device_token: str | None = None) -> dict:
+	cash_desk = (cash_desk or "").strip()
+	barcode = (barcode or "").strip()
+	if not cash_desk or not barcode:
+		frappe.throw(_("Cash desk and employee barcode are required"))
 	if frappe.db.get_value("POS Cash Desk", cash_desk, "status") != "Active":
 		frappe.throw("Cash desk is inactive")
 	employee = frappe.db.get_value("Employee", {"ua_pos_barcode_hash": digest(barcode)}, "name")
-	access = _access(employee, cash_desk) if employee else None
+	if not employee:
+		audit("failed_access", {"cash_desk": cash_desk}, details={"device": device_token}, reason="unknown_barcode")
+		frappe.throw(_("Employee barcode is not recognized"), frappe.PermissionError)
+	access = _access(employee, cash_desk)
 	if not access or (access.valid_to and frappe.utils.getdate(access.valid_to) < frappe.utils.getdate()):
-		audit("failed_access", {"cash_desk": cash_desk}, details={"device": device_token})
-		frappe.throw("Employee has no access to this cash desk", frappe.PermissionError)
+		audit(
+			"failed_access",
+			{"cash_desk": cash_desk, "employee": employee},
+			details={"device": device_token},
+			reason="no_cash_desk_access",
+		)
+		frappe.throw(_("Employee {0} has no access to cash desk {1}").format(employee, cash_desk), frappe.PermissionError)
 	token = secrets.token_urlsafe(32)
 	session = {
 		"employee": employee,
