@@ -42,6 +42,13 @@ def _expire_if_needed(doc):
 	return doc
 
 
+def _get_request(request_id: str):
+	doc = frappe.get_doc("Customer Identification Request", request_id)
+	if doc.initiated_by != frappe.session.user and "System Manager" not in frappe.get_roles():
+		frappe.throw(_("Немає доступу до цього запиту ідентифікації"), frappe.PermissionError)
+	return doc
+
+
 def _find_customer(phone: str) -> str | None:
 	digits = phone.replace("+", "")
 	meta = frappe.get_meta("Customer")
@@ -186,7 +193,7 @@ def _mark_verified(doc, *, external_reference: str | None = None, telegram_user_
 
 @frappe.whitelist()
 def confirm(request_id: str, code: str | None = None) -> dict:
-	doc = _expire_if_needed(frappe.get_doc("Customer Identification Request", request_id))
+	doc = _expire_if_needed(_get_request(request_id))
 	if doc.status in FINAL_STATUSES:
 		return _public_result(doc)
 	if doc.channel != "SMS":
@@ -207,13 +214,13 @@ def confirm(request_id: str, code: str | None = None) -> dict:
 
 @frappe.whitelist()
 def get_status(request_id: str) -> dict:
-	doc = _expire_if_needed(frappe.get_doc("Customer Identification Request", request_id))
+	doc = _expire_if_needed(_get_request(request_id))
 	return _public_result(doc)
 
 
 @frappe.whitelist()
 def cancel(request_id: str) -> dict:
-	doc = frappe.get_doc("Customer Identification Request", request_id)
+	doc = _get_request(request_id)
 	if doc.status == "Pending":
 		doc.status = "Cancelled"
 		doc.save(ignore_permissions=True)
@@ -221,8 +228,11 @@ def cancel(request_id: str) -> dict:
 
 
 @frappe.whitelist()
-def quick_create(phone: str, customer_name: str) -> dict:
-	phone = normalize_phone(phone)
+def quick_create(request_id: str, customer_name: str) -> dict:
+	request = _expire_if_needed(_get_request(request_id))
+	if request.status != "Verified":
+		frappe.throw(_("Спочатку підтвердьте номер покупця"), frappe.PermissionError)
+	phone = request.phone
 	existing = _find_customer(phone)
 	if existing:
 		return _customer_payload(existing)
