@@ -214,4 +214,6 @@ POST customer.quick_create     {name, phone, loyalty_optin}        → {customer
 GET  customer.loyalty_state    {customer_id}                       → {points, allowed_redeem, program}
 ```
 
-Реалізація каналів — `ukrainian_integrations` (TurboSMS/VitalPBX/Telegram-бот), фаза 5+.
+Реалізація каналів — `erpnext_ukraine_integrations/customer_identification`:
+TurboSMS OTP, Telegram contact deep-link і контрольний вхідний дзвінок через VitalPBX.
+POS використовує один контракт і не залежить від деталей конкретного каналу.

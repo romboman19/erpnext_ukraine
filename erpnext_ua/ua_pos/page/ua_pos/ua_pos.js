@@ -29,6 +29,8 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   const idem = () => crypto.randomUUID();
   const api = (method, args = {}) =>
     frappe.call({ method: `erpnext_ua.ua_pos.api.${method}`, args }).then((response) => response.message);
+  const identificationApi = (method, args = {}) =>
+    frappe.call({ method: `ukrainian_integrations.customer_identification.service.${method}`, args }).then((response) => response.message);
 
   const styles = `<style id="ua-pos-v2-styles">
     .layout-main-section-wrapper{margin-bottom:0!important}.layout-main-section{padding:0!important}.page-head{display:none!important}
@@ -79,6 +81,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
             <button class="ua-pos-action primary js-new-order">＋ Новий чек</button>
             <button class="ua-pos-action js-stock">⌕ Пошук по складу <span class="ua-pos-shortcut">F3</span></button>
             <button class="ua-pos-action js-customer">♙ Клієнт <span class="ua-pos-shortcut">F4</span></button>
+            <button class="ua-pos-action primary js-identify">◎ Ідентифікувати <span class="ua-pos-shortcut">F5</span></button>
             <button class="ua-pos-action js-hold">◫ Відкласти <span class="ua-pos-shortcut">F7</span></button>
             <button class="ua-pos-action js-return">↩ Повернення <span class="ua-pos-shortcut">F8</span></button>
             <button class="ua-pos-action js-cash-menu">₴ Операції з касою</button>
@@ -94,7 +97,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
               <div class="ua-pos-sale-info-item"><label>Клієнт</label><strong class="js-customer-name">Роздрібний покупець</strong></div>
               <div class="ua-pos-sale-info-item"><label>ФОП</label><strong class="js-fop">Визначається правилами</strong></div>
               <div class="ua-pos-sale-info-item"><label>Статус чека</label><strong class="js-order-status">Новий чек</strong></div>
-              <button class="ua-pos-customer-button js-customer">Змінити клієнта</button>
+              <button class="ua-pos-customer-button js-identify">Ідентифікувати покупця</button>
             </div>
             <div class="ua-pos-table-wrap">
               <table class="ua-pos-table"><thead><tr><th>Товар / артикул</th><th>Штрихкод</th><th class="num">Кількість</th><th>Од.</th><th class="num">Ціна</th><th class="num">Знижка</th><th class="num">Сума</th><th>Партія / серійний №</th><th>Перевірка</th></tr></thead><tbody class="js-cart-body"></tbody></table>
@@ -179,7 +182,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     const payable = Boolean(order && items.length && order.status === "Building" && state.session?.shift);
     $root.find(".js-pay-cash").prop("disabled", !payable);
     $root.find(".js-pay-card").prop("disabled", !payable || !state.session?.desk?.terminal);
-    $root.find(".js-hold,.js-cancel,.js-customer").prop("disabled", !editable);
+    $root.find(".js-hold,.js-cancel,.js-customer,.js-identify").prop("disabled", !editable);
     $root.find(".js-hold").html(order?.status === "Held" ? "▶ Повернути чек <span class=\"ua-pos-shortcut\">F7</span>" : "◫ Відкласти <span class=\"ua-pos-shortcut\">F7</span>");
     if (order?.fiscal_mode) {
       state.saleMode = order.fiscal_mode;
@@ -298,6 +301,119 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     dialog.show();
   }
 
+  async function useIdentifiedCustomer(result) {
+    if (result.status !== "Verified") return false;
+    let customer = result.customer;
+    if (!customer) {
+      const customerName = await new Promise((resolve) => {
+        frappe.prompt(
+          { fieldname: "customer_name", fieldtype: "Data", label: "Ім’я покупця", reqd: 1 },
+          (values) => resolve(values.customer_name),
+          "Нового покупця підтверджено",
+          "Створити картку",
+        );
+      });
+      customer = await identificationApi("quick_create", {
+        phone: result.phone,
+        customer_name: customerName,
+      });
+    }
+    renderOrder(
+      await api("set_order_customer", {
+        pos_session_token: state.token,
+        order: state.order.name,
+        customer: customer.name,
+      }),
+    );
+    frappe.show_alert({ message: `Покупця ${customer.customer_name || customer.name} ідентифіковано`, indicator: "green" });
+    return true;
+  }
+
+  function verificationDialog(request) {
+    const isSms = request.channel === "SMS";
+    const channelLabel = { SMS: "SMS", Telegram: "Telegram", Call: "контрольний дзвінок" }[request.channel];
+    const link = request.deep_link
+      ? `<p><a class="btn btn-primary" href="${esc(request.deep_link)}" target="_blank" rel="noopener">Відкрити Telegram-бота</a></p>`
+      : "";
+    const debug = request.debug_code
+      ? `<div class="ua-pos-modal-note">Тестовий режим · код: <b style="font-size:18px">${esc(request.debug_code)}</b></div>`
+      : "";
+    const dialog = new frappe.ui.Dialog({
+      title: `Ідентифікація · ${channelLabel}`,
+      fields: [
+        {
+          fieldname: "info",
+          fieldtype: "HTML",
+          options: `<div class="ua-pos-modal-note"><b>${esc(request.phone)}</b><br>${esc(request.instructions)}</div>${link}${debug}<div class="js-id-status" style="margin:10px 0;color:#667085">Очікуємо підтвердження…</div>`,
+        },
+        ...(isSms
+          ? [{ fieldname: "code", fieldtype: "Data", label: "Код із SMS", reqd: 1 }]
+          : []),
+      ],
+      primary_action_label: isSms ? "Підтвердити код" : "Перевірити статус",
+      primary_action: async (values) => {
+        dialog.get_primary_btn().prop("disabled", true);
+        try {
+          const result = isSms
+            ? await identificationApi("confirm", { request_id: request.request_id, code: values.code })
+            : await identificationApi("get_status", { request_id: request.request_id });
+          if (result.status === "Verified") {
+            dialog.$wrapper.find(".js-id-status").html('<span style="color:#079455">● Покупця підтверджено</span>');
+            if (await useIdentifiedCustomer(result)) dialog.hide();
+          } else if (["Expired", "Failed", "Cancelled"].includes(result.status)) {
+            dialog.$wrapper.find(".js-id-status").html(`<span style="color:#d92d20">● Запит завершено: ${esc(result.status)}</span>`);
+          } else {
+            dialog.$wrapper.find(".js-id-status").text("Підтвердження ще не отримано. Спробуйте перевірити ще раз.");
+          }
+        } finally {
+          dialog.get_primary_btn().prop("disabled", false);
+        }
+      },
+    });
+    dialog.show();
+    if (isSms) dialog.fields_dict.code.$input.focus();
+  }
+
+  async function identifyCustomer() {
+    if (!state.session?.shift) return showNotice("Спочатку відкрийте управлінську зміну.", "error");
+    if (!state.order || !canEditOrder()) await newOrder();
+    let config;
+    try {
+      config = await identificationApi("get_config");
+    } catch (error) {
+      return showNotice("Модуль ідентифікації покупця ще не встановлено або не налаштовано.", "error");
+    }
+    if (!config.enabled || !config.channels?.length) {
+      return showNotice("Увімкніть хоча б один канал у Customer Identification Settings.", "error");
+    }
+    const dialog = new frappe.ui.Dialog({
+      title: "Ідентифікація покупця",
+      fields: [
+        { fieldname: "phone", fieldtype: "Data", label: "Номер телефону", reqd: 1, placeholder: "+380XXXXXXXXX" },
+        { fieldname: "channel", fieldtype: "Select", label: "Канал підтвердження", options: config.channels.join("\n"), reqd: 1, default: config.channels[0] },
+        { fieldname: "note", fieldtype: "HTML", options: '<div class="ua-pos-modal-note">Покупець підтверджує, що має доступ до вказаного номера. Код і технічні дані не зберігаються у відкритому вигляді.</div>' },
+      ],
+      primary_action_label: "Надіслати запит",
+      primary_action: async (values) => {
+        dialog.get_primary_btn().prop("disabled", true);
+        try {
+          const request = await identificationApi("begin", {
+            channel: values.channel,
+            phone: values.phone,
+            reference_doctype: "POS Order",
+            reference_name: state.order.name,
+          });
+          dialog.hide();
+          verificationDialog(request);
+        } finally {
+          dialog.get_primary_btn().prop("disabled", false);
+        }
+      },
+    });
+    dialog.show();
+    dialog.fields_dict.phone.$input.focus();
+  }
+
   function planned(feature) { frappe.show_alert({ message: `${feature}: функція спроєктована і буде підключена наступним інкрементом`, indicator: "orange" }); }
 
   $root.on("click", ".ua-pos-login-button", login);
@@ -308,6 +424,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   $root.on("click", ".ua-pos-mode button", async function () { const mode = this.dataset.mode; if (mode === "Fiscal" && !state.session?.desk?.prro_cash_register) return showNotice("Фіскальний режим недоступний: для каси не налаштовано ПРРО.", "error"); state.saleMode = mode; if (canEditOrder()) renderOrder(await api("set_order_mode", { pos_session_token: state.token, order: state.order.name, fiscal_mode: mode })); else renderSession(); });
   $root.on("click", ".ua-pos-qty button", async function () { const rowName = $(this).closest("tr").data("row"); const row = state.order.items.find((item) => item.name === rowName); renderOrder(await api("set_item_qty", { pos_session_token: state.token, order: state.order.name, row_name: rowName, qty: flt(row.qty) + flt(this.dataset.delta) })); });
   $root.on("click", ".js-customer", () => { if (!canEditOrder()) return; frappe.prompt({ fieldname: "customer", fieldtype: "Link", options: "Customer", label: "Клієнт", reqd: 1, default: state.order.customer }, async (values) => renderOrder(await api("set_order_customer", { pos_session_token: state.token, order: state.order.name, customer: values.customer })), "Вибір клієнта", "Застосувати"); });
+  $root.on("click", ".js-identify", identifyCustomer);
   $root.on("click", ".js-hold", async () => { if (state.order) renderOrder(await api("hold_order", { pos_session_token: state.token, order: state.order.name })); });
   $root.on("click", ".js-cancel", async () => { if (!state.order || !canEditOrder()) return; frappe.confirm("Скасувати поточний неоплачений чек?", async () => { await api("cancel_order", { pos_session_token: state.token, order: state.order.name }); renderOrder(null); }); });
   $root.on("click", ".js-pay-cash", () => paymentDialog("Cash"));
@@ -320,7 +437,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
 
   $(document).off("keydown.ua_pos").on("keydown.ua_pos", (event) => {
     if ($(event.target).is("input,textarea,select") && event.key !== "F2") return;
-    const actions = { F2: () => $root.find(".ua-pos-scan").focus(), F3: () => $root.find(".js-stock").click(), F4: () => $root.find(".js-customer").first().click(), F7: () => $root.find(".js-hold").click(), F8: () => $root.find(".js-return").click(), F9: () => $root.find(".js-pay-cash").first().click() };
+    const actions = { F2: () => $root.find(".ua-pos-scan").focus(), F3: () => $root.find(".js-stock").click(), F4: () => $root.find(".js-customer").first().click(), F5: () => $root.find(".js-identify").first().click(), F7: () => $root.find(".js-hold").click(), F8: () => $root.find(".js-return").click(), F9: () => $root.find(".js-pay-cash").first().click() };
     if (actions[event.key]) { event.preventDefault(); actions[event.key](); }
     if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "s") { event.preventDefault(); openShift(); }
     if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "c") { event.preventDefault(); closeShift(); }
