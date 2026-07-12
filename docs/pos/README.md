@@ -17,6 +17,7 @@
 | [08-plan-risks-questions.md](08-plan-risks-questions.md) | План по етапах, ризики, blocking questions, міграція/оновлення |
 | [09-testing.md](09-testing.md) | Стратегія тестування + 36 acceptance-сценаріїв |
 | [10-stage0-spike-report.md](10-stage0-spike-report.md) | **Етап 0 виконано**: тестовий стек + ПРРО e2e, критичні знахідки (TSP, REST/gRPC, деплой) |
+| [11-cashier-guide.md](11-cashier-guide.md) | Коротка інструкція касира для готового core POS |
 
 Діаграми — у форматі Mermaid (рендеряться на GitHub / у VS Code з розширенням Mermaid).
 
@@ -56,9 +57,15 @@
 
 ## Поточний стан
 
-- Етап 0 виконано; CAdES-T/TSP реалізовано в signer.
-- Реалізовано backend-каркас етапів 1–4: каси й допуски, зміни, перерахунок,
-  cash ledger, POS Order, payment attempts, terminal transactions, checkout до Sales Invoice
-  та передача у ПРРО.
-- До production gate лишаються повний POS UI, повернення, друк/звіти, мульти-ФОП routing,
-  offline recovery та прогін 36 acceptance-сценаріїв на staging/пілоті.
+- Core POS працює наскрізно: вхід касира, відкриття/закриття зміни з покупюрним
+  перерахунком, складський пошук, кошик, знижка, відкладені чеки, готівкова оплата,
+  решта, Sales Invoice, повне/часткове повернення, касові операції, друк товарного
+  чека та звіти зміни.
+- TerminalAdapter підтримує sale/refund/status і відновлення `Payment Unknown` без
+  повторного списання; живий прогін потребує налаштованого PB POS Terminal.
+- FiscalAdapter відкриває/закриває зміну ПРРО та фіскалізує продаж/повернення;
+  живий прогін потребує тестового/робочого ПРРО і КЕП.
+- Ідентифікація клієнта підключена окремим контрактом із
+  `erpnext_ukraine_integrations` (SMS, Telegram, контрольний дзвінок).
+- До production gate лишаються апаратні прогони термінала/ПРРО/мережевого принтера,
+  мульти-ФОП routing, offline recovery та повний набір acceptance-сценаріїв на пілоті.

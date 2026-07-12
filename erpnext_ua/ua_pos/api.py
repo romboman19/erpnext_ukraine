@@ -411,6 +411,9 @@ def close_shift_begin(pos_session_token: str) -> dict:
 @frappe.whitelist()
 def close_shift_confirm(pos_session_token: str, denominations, idem_key: str, comment: str = "") -> dict:
 	session = get_session(pos_session_token)
+	existing = frappe.db.get_value("POS Operational Shift", {"close_idem_key": idem_key}, "name")
+	if existing:
+		return frappe.get_doc("POS Operational Shift", existing).as_dict()
 	rows = parse_rows(denominations)
 	shift_name = active_shift(session["cash_desk"], for_update=True)
 	if not shift_name:
@@ -428,6 +431,7 @@ def close_shift_confirm(pos_session_token: str, denominations, idem_key: str, co
 	doc.counted_cash = counted
 	doc.discrepancy = discrepancy
 	doc.closing_comment = comment
+	doc.close_idem_key = idem_key
 	doc.closed_by = frappe.session.user
 	doc.closed_at = frappe.utils.now_datetime()
 	doc.save(ignore_permissions=True)
@@ -954,6 +958,41 @@ def _validate_return_payments(order, payment_rows: list[dict]):
 			frappe.throw(_("Сума повернення способом {0} перевищує доступний ліміт {1}").format(kind, limits.get(kind, 0)))
 
 
+def _complete_paid_order(doc, desk, session) -> dict:
+	if doc.sales_invoice:
+		return doc.as_dict()
+	doc.status = "Posting"
+	doc.save(ignore_permissions=True)
+	try:
+		si = _post_sales_invoice(doc, desk)
+		doc.sales_invoice = si.name
+		doc.status = "Posted"
+		doc.save(ignore_permissions=True)
+		_cash_movements(doc, session)
+		try:
+			receipt = _fiscalize(doc, desk, si)
+		except Exception as exc:
+			doc.status = "Fiscal Pending"
+			doc.recovery_note = str(exc)[:500]
+		else:
+			doc.prro_receipt = receipt
+			doc.status = "Completed"
+		doc.save(ignore_permissions=True)
+	except Exception as exc:
+		doc.status = "Manual Review"
+		doc.recovery_note = str(exc)[:500]
+		doc.save(ignore_permissions=True)
+		raise
+	audit(
+		"return_completed" if doc.order_type == "Return" else "sale_completed",
+		session,
+		(doc.doctype, doc.name),
+		{"sales_invoice": doc.sales_invoice},
+	)
+	frappe.db.commit()
+	return doc.as_dict()
+
+
 @frappe.whitelist()
 def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) -> dict:
 	session = get_session(pos_session_token)
@@ -997,7 +1036,7 @@ def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) 
 		status = "Confirmed"
 		if row["kind"] == "Card":
 			if not desk.terminal:
-				frappe.throw("No bank terminal configured for this cash desk")
+				frappe.throw(_("Для цієї каси не налаштовано банківський термінал"))
 			attempt.status = "Sent"
 			attempt.save(ignore_permissions=True)
 			operation_id = f"{doc.name}-{number}-{digest(idem_key)[:12]}"
@@ -1041,37 +1080,7 @@ def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) 
 	if doc.status != "Paid":
 		frappe.db.commit()
 		return doc.as_dict()
-
-	doc.status = "Posting"
-	doc.save(ignore_permissions=True)
-	try:
-		si = _post_sales_invoice(doc, desk)
-		doc.sales_invoice = si.name
-		doc.status = "Posted"
-		doc.save(ignore_permissions=True)
-		_cash_movements(doc, session)
-		try:
-			receipt = _fiscalize(doc, desk, si)
-		except Exception as exc:
-			doc.status = "Fiscal Pending"
-			doc.recovery_note = str(exc)[:500]
-		else:
-			doc.prro_receipt = receipt
-			doc.status = "Completed"
-		doc.save(ignore_permissions=True)
-	except Exception as exc:
-		doc.status = "Manual Review"
-		doc.recovery_note = str(exc)[:500]
-		doc.save(ignore_permissions=True)
-		raise
-	audit(
-		"return_completed" if doc.order_type == "Return" else "sale_completed",
-		session,
-		(doc.doctype, doc.name),
-		{"sales_invoice": doc.sales_invoice},
-	)
-	frappe.db.commit()
-	return doc.as_dict()
+	return _complete_paid_order(doc, desk, session)
 
 
 @frappe.whitelist()
@@ -1080,16 +1089,32 @@ def card_status(pos_session_token: str, attempt: str) -> dict:
 	doc = frappe.get_doc("POS Payment Attempt", attempt)
 	order = frappe.get_doc("POS Order", doc.pos_order)
 	if order.cash_desk != session["cash_desk"]:
-		frappe.throw("Payment belongs to another cash desk", frappe.PermissionError)
+		frappe.throw(_("Оплата належить іншій касі"), frappe.PermissionError)
 	if doc.status not in {"Unknown", "Timeout", "Sent"}:
-		return doc.as_dict()
+		return {"attempt": doc.as_dict(), "order": order.as_dict()}
 	txn = frappe.get_doc("Terminal Transaction", doc.terminal_transaction) if doc.terminal_transaction else None
 	operation_id = txn.operation_id if txn else doc.idem_key
 	terminal = frappe.db.get_value("POS Cash Desk", order.cash_desk, "terminal")
 	result = get_adapter().status(resolve_terminal(terminal), operation_id)
 	doc.status = "Confirmed" if result.status == "confirmed" else ("Declined" if result.status == "declined" else "Unknown")
 	doc.save(ignore_permissions=True)
-	return doc.as_dict()
+	for payment in order.payments_plan:
+		if payment.payment_attempt == doc.name:
+			payment.status = "Confirmed" if doc.status == "Confirmed" else ("Failed" if doc.status == "Declined" else payment.status)
+			break
+	if all(row.status == "Confirmed" for row in order.payments_plan):
+		order.status = "Paid"
+	elif doc.status == "Declined":
+		order.status = "Awaiting Payment"
+	else:
+		order.status = "Payment Unknown"
+	order.save(ignore_permissions=True)
+	if order.status == "Paid":
+		order_payload = _complete_paid_order(order, frappe.get_doc("POS Cash Desk", order.cash_desk), session)
+	else:
+		frappe.db.commit()
+		order_payload = order.as_dict()
+	return {"attempt": doc.as_dict(), "order": order_payload}
 
 
 @frappe.whitelist()

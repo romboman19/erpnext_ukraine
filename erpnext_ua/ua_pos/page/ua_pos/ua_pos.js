@@ -188,7 +188,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     $root.find(".js-qty").text(money(items.reduce((sum, item) => sum + flt(item.qty), 0)));
     $root.find(".js-cart-body").html(items.map((item) => `
       <tr data-row="${esc(item.name)}"><td><div class="ua-pos-item-name">${esc(item.item_name || item.item_code)}</div><div class="ua-pos-item-code">${esc(item.item_code)}</div></td><td>${esc(item.barcode || "—")}</td><td class="num"><div class="ua-pos-qty"><button data-delta="-1" ${editable && order?.order_type !== "Return" ? "" : "disabled"}>−</button><span>${esc(item.qty)}</span><button data-delta="1" ${editable && order?.order_type !== "Return" ? "" : "disabled"}>＋</button></div></td><td>${esc(item.uom || "—")}</td><td class="num">${money(item.rate)}</td><td class="num">${money(item.discount_amount)}</td><td class="num"><b>${money(item.amount)}</b></td><td><button class="btn btn-xs btn-default js-track-item" ${editable && order?.order_type !== "Return" ? "" : "disabled"}>${esc(item.batch_no || item.serial_no || "Вказати")}</button></td><td><span style="color:#079455">● Готово</span></td></tr>`).join(""));
-    const payable = Boolean(order && items.length && order.status === "Building" && state.session?.shift);
+    const payable = Boolean(order && items.length && ["Building", "Awaiting Payment"].includes(order.status) && state.session?.shift);
     $root.find(".js-pay-cash").prop("disabled", !payable);
     $root.find(".js-pay-card").prop("disabled", !payable || !state.session?.desk?.terminal);
     $root.find(".js-pay-mixed").prop("disabled", !payable || order?.fiscal_mode !== "Fiscal");
@@ -297,12 +297,31 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
         dialog.get_primary_btn().prop("disabled", true);
         try {
           const completed = await api("checkout_start", { pos_session_token: state.token, order: state.order.name, payments: JSON.stringify([{ mode_of_payment: values.mode, kind, amount: total, tendered_amount: kind === "Cash" ? flt(values.received) : total, currency: "UAH" }]), idem_key: idem() });
-          renderOrder(completed); dialog.hide(); frappe.show_alert({ message: `${completed.name}: ${statusLabels[completed.status] || completed.status}`, indicator: completed.status === "Completed" ? "green" : "orange" });
+          renderOrder(completed); dialog.hide();
+          if (completed.status === "Payment Unknown") resolveUnknownPayment(completed);
+          frappe.show_alert({ message: `${completed.name}: ${statusLabels[completed.status] || completed.status}`, indicator: completed.status === "Completed" ? "green" : "orange" });
         } finally { dialog.get_primary_btn().prop("disabled", false); }
       },
     });
     dialog.show();
     if (kind === "Cash") dialog.fields_dict.received.$input.on("input", () => dialog.$wrapper.find(".ua-pos-denom-total span").text(money(Math.max(0, flt(dialog.get_value("received")) - total))));
+  }
+
+  function resolveUnknownPayment(order) {
+    const attempt = (order.payments_plan || []).find((row) => row.kind === "Card" && row.payment_attempt)?.payment_attempt;
+    if (!attempt) return;
+    const dialog = new frappe.ui.Dialog({
+      title: "Невідомий стан оплати",
+      fields: [{ fieldname: "info", fieldtype: "HTML", options: '<div class="ua-pos-modal-note">Не повторюйте оплату. Система перевірить стан попередньої операції за її ідентифікатором.</div><div class="js-terminal-state text-muted">Очікуємо перевірку…</div>' }],
+      primary_action_label: "Перевірити стан термінала",
+      primary_action: async () => {
+        const result = await api("card_status", { pos_session_token: state.token, attempt });
+        renderOrder(result.order);
+        dialog.$wrapper.find(".js-terminal-state").text(`Стан: ${statusLabels[result.order.status] || result.order.status}`);
+        if (result.order.status !== "Payment Unknown") dialog.hide();
+      },
+    });
+    dialog.show();
   }
 
   function cashOperationDialog(movementType, title) {
@@ -433,7 +452,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
         if (cash) payments.push({ mode_of_payment: values.cash_mode, kind: "Cash", amount: cash, tendered_amount: cash, currency: "UAH" });
         if (card) payments.push({ mode_of_payment: values.card_mode, kind: "Card", amount: card, currency: "UAH" });
         const completed = await api("checkout_start", { pos_session_token: state.token, order: state.order.name, payments: JSON.stringify(payments), idem_key: idem() });
-        renderOrder(completed); dialog.hide();
+        renderOrder(completed); dialog.hide(); if (completed.status === "Payment Unknown") resolveUnknownPayment(completed);
       },
     });
     dialog.show();
@@ -484,7 +503,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
         dialog.$wrapper.find("[data-kind]").each(function () { const amount = flt(this.value); if (amount > 0) payments.push({ kind: this.dataset.kind, mode_of_payment: this.dataset.mode, amount, currency: "UAH" }); });
         if (Math.abs(payments.reduce((sum, row) => sum + row.amount, 0) - flt(returnOrder.grand_total)) > 0.01) return frappe.msgprint("Розподіл виплати має дорівнювати сумі повернення.");
         const completed = await api("checkout_start", { pos_session_token: state.token, order: returnOrder.name, payments: JSON.stringify(payments), idem_key: idem() });
-        renderOrder(completed); dialog.hide(); frappe.show_alert({ message: "Повернення проведено", indicator: "green" });
+        renderOrder(completed); dialog.hide(); if (completed.status === "Payment Unknown") resolveUnknownPayment(completed); else frappe.show_alert({ message: "Повернення проведено", indicator: "green" });
       },
     });
     dialog.show();

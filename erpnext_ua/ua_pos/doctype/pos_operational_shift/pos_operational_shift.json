@@ -1,6 +1,6 @@
 {
  "doctype":"DocType","name":"POS Operational Shift","module":"UA POS","autoname":"POS-SHIFT-.YYYY.-.#####",
- "field_order":["cash_desk","status","responsible_employee","opened_by","opened_at","opening_counts","expected_cash","closing_counts","counted_cash","discrepancy","closed_by","closed_at","closing_comment","idem_key"],
+ "field_order":["cash_desk","status","responsible_employee","opened_by","opened_at","opening_counts","expected_cash","closing_counts","counted_cash","discrepancy","closed_by","closed_at","closing_comment","idem_key","close_idem_key"],
  "fields":[
   {"fieldname":"cash_desk","fieldtype":"Link","label":"Cash Desk","options":"POS Cash Desk","reqd":1},
   {"fieldname":"status","fieldtype":"Select","label":"Status","options":"Open\nClosing\nClosed\nForce Closed","default":"Open","reqd":1},
@@ -15,7 +15,8 @@
   {"fieldname":"closed_by","fieldtype":"Link","label":"Closed By","options":"User","read_only":1},
   {"fieldname":"closed_at","fieldtype":"Datetime","label":"Closed At","read_only":1},
   {"fieldname":"closing_comment","fieldtype":"Small Text","label":"Closing Comment"},
-  {"fieldname":"idem_key","fieldtype":"Data","label":"Idempotency Key","unique":1,"read_only":1}
+  {"fieldname":"idem_key","fieldtype":"Data","label":"Idempotency Key","unique":1,"read_only":1},
+  {"fieldname":"close_idem_key","fieldtype":"Data","label":"Close Idempotency Key","unique":1,"read_only":1}
  ],
  "permissions":[{"role":"POS Cashier","read":1},{"role":"POS Manager","read":1},{"role":"POS Administrator","read":1},{"role":"System Manager","read":1}]
 }
