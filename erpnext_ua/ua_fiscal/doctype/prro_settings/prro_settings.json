@@ -9,7 +9,6 @@
   "enabled",
   "section_dps",
   "fiscal_server_url",
-  "fiscal_server_test_url",
   "column_break_dps",
   "request_timeout",
   "offline_queue_enabled",
@@ -21,7 +20,7 @@
  "fields": [
   {
    "default": "Тестовий",
-   "description": "У тестовому режимі всі запити йдуть на тестовий фіскальний сервер ДПС",
+   "description": "Тестовий режим додає <TESTING>true</TESTING> у документи — чеки нефіскальні. Сервер ЄВПЕЗ той самий для тесту й бою.",
    "fieldname": "mode",
    "fieldtype": "Select",
    "label": "Режим",
@@ -44,16 +43,10 @@
   },
   {
    "default": "https://fs.tax.gov.ua:8643/fs",
+   "description": "REST-ендпоінт ЄВПЕЗ (той самий для тесту й бою). НЕ cabinet.tax.gov.ua:9443 — то gRPC/ЕК, несумісний.",
    "fieldname": "fiscal_server_url",
    "fieldtype": "Data",
-   "label": "URL (бойовий)"
-  },
-  {
-   "default": "https://cabinet.tax.gov.ua:9443/fs",
-   "description": "Тестовий АРІ фіскального сервера для розробників (чеки нефіскальні)",
-   "fieldname": "fiscal_server_test_url",
-   "fieldtype": "Data",
-   "label": "URL (тестовий)"
+   "label": "URL фіскального сервера"
   },
   {
    "fieldname": "column_break_dps",
@@ -74,7 +67,7 @@
   {
    "fieldname": "section_sign",
    "fieldtype": "Section Break",
-   "label": "Сервіс підпису (VilnoCheck-SignService)"
+   "label": "Сервіс підпису (prro-signer)"
   },
   {
    "description": "Внутрішня адреса, наприклад http://signservice:3000",
