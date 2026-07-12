@@ -1,3 +1,9 @@
+try {
+  localStorage.removeItem("_page:ua-pos");
+} catch (error) {
+  console.warn("UA POS page cache could not be cleared", error);
+}
+
 frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   const page = frappe.ui.make_app_page({ parent: wrapper, title: "Каса", single_column: true });
   const state = {
