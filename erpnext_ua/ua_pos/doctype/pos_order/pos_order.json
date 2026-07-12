@@ -1,11 +1,13 @@
 {
  "doctype":"DocType","name":"POS Order","module":"UA POS","autoname":"POS-ORD-.YYYY.-.#####","title_field":"name",
- "field_order":["cash_desk","operational_shift","employee","customer","fiscal_mode","status","items","payments_plan","net_total","discount_total","grand_total","paid_total","change_amount","lookup_token","idem_key","sales_invoice","prro_receipt","routing_log","recovery_note"],
+ "field_order":["cash_desk","operational_shift","employee","customer","order_type","return_against","fiscal_mode","status","items","payments_plan","net_total","discount_total","grand_total","paid_total","change_amount","lookup_token","idem_key","sales_invoice","prro_receipt","routing_log","recovery_note"],
  "fields":[
   {"fieldname":"cash_desk","fieldtype":"Link","label":"Cash Desk","options":"POS Cash Desk","reqd":1},
   {"fieldname":"operational_shift","fieldtype":"Link","label":"Operational Shift","options":"POS Operational Shift","reqd":1},
   {"fieldname":"employee","fieldtype":"Link","label":"Employee","options":"Employee","reqd":1},
   {"fieldname":"customer","fieldtype":"Link","label":"Customer","options":"Customer","reqd":1},
+  {"fieldname":"order_type","fieldtype":"Select","label":"Order Type","options":"Sale\nReturn","default":"Sale","reqd":1,"read_only":1},
+  {"fieldname":"return_against","fieldtype":"Link","label":"Return Against","options":"POS Order","read_only":1},
   {"fieldname":"fiscal_mode","fieldtype":"Select","label":"Fiscal Mode","options":"Fiscal\nNon Fiscal","default":"Fiscal","reqd":1},
   {"fieldname":"status","fieldtype":"Select","label":"Status","options":"Building\nHeld\nValidating\nAwaiting Payment\nPayment In Progress\nPayment Unknown\nPaid\nPosting\nPosted\nFiscalizing\nFiscal Pending\nPrinting\nCompleted\nCompleted Print Error\nManual Review\nCompensating\nCancelled","default":"Building","reqd":1},
   {"fieldname":"items","fieldtype":"Table","label":"Items","options":"POS Order Item"},

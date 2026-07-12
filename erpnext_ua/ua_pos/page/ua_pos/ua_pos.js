@@ -26,7 +26,13 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   };
   const esc = (value) => frappe.utils.escape_html(String(value ?? ""));
   const money = (value) => format_number(flt(value || 0), null, 2);
-  const idem = () => crypto.randomUUID();
+  const idem = () => {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    const random = globalThis.crypto?.getRandomValues
+      ? Array.from(globalThis.crypto.getRandomValues(new Uint32Array(4)), (value) => value.toString(16)).join("")
+      : `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+    return `${Date.now().toString(36)}-${random}`;
+  };
   const api = (method, args = {}) =>
     frappe.call({ method: `erpnext_ua.ua_pos.api.${method}`, args }).then((response) => response.message);
   const identificationApi = (method, args = {}) =>
@@ -82,7 +88,9 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
             <button class="ua-pos-action js-stock">⌕ Пошук по складу <span class="ua-pos-shortcut">F3</span></button>
             <button class="ua-pos-action js-customer">♙ Клієнт <span class="ua-pos-shortcut">F4</span></button>
             <button class="ua-pos-action primary js-identify">◎ Ідентифікувати <span class="ua-pos-shortcut">F5</span></button>
+            <button class="ua-pos-action js-discount">% Знижка <span class="ua-pos-shortcut">F6</span></button>
             <button class="ua-pos-action js-hold">◫ Відкласти <span class="ua-pos-shortcut">F7</span></button>
+            <button class="ua-pos-action js-orders">▱ Відкладені чеки</button>
             <button class="ua-pos-action js-return">↩ Повернення <span class="ua-pos-shortcut">F8</span></button>
             <button class="ua-pos-action js-cash-menu">₴ Операції з касою</button>
             <button class="ua-pos-action js-fiscal-menu">▣ Фіскальне меню</button>
@@ -114,7 +122,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
               <div class="ua-pos-total-row"><span>Отримано</span><strong><span class="js-paid">0,00</span> грн</strong></div>
               <div class="ua-pos-total-row"><span>Решта</span><strong><span class="js-change">0,00</span> грн</strong></div>
             </div>
-            <div class="ua-pos-due"><div class="ua-pos-due-label">Сума до оплати</div><div class="ua-pos-due-value"><span class="js-total">0,00</span> <small>грн</small></div><button class="ua-pos-pay-main js-pay-cash" disabled>Оплатити · F9</button><div class="ua-pos-pay-split"><button class="js-pay-cash" disabled>Готівка</button><button class="card js-pay-card" disabled>Банківська картка</button></div></div>
+            <div class="ua-pos-due"><div class="ua-pos-due-label">Сума до оплати</div><div class="ua-pos-due-value"><span class="js-total">0,00</span> <small>грн</small></div><button class="ua-pos-pay-main js-pay-cash" disabled>Оплатити · F9</button><div class="ua-pos-pay-split"><button class="js-pay-cash" disabled>Готівка</button><button class="card js-pay-card" disabled>Банківська картка</button><button class="js-pay-mixed" disabled>Змішана оплата</button><button class="js-print" disabled>Друк чека</button></div></div>
             <div class="ua-pos-footer-status"><span>● ERP online</span><span class="js-footer-shift">○ зміна закрита</span><span class="js-footer-mode">○ без фіскалізації</span></div>
           </aside>
         </main>
@@ -166,10 +174,11 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     const items = order?.items || [];
     const editable = canEditOrder();
     $root.find(".js-empty").toggle(items.length === 0);
-    $root.find(".js-order-name").text(order ? order.name : "Чек ще не створено");
+    $root.find(".js-order-name").text(order ? `${order.order_type === "Return" ? "Повернення" : "Чек"} ${order.name}` : "Чек ще не створено");
     $root.find(".js-order-status").text(order ? statusLabels[order.status] || order.status : "Новий чек");
     $root.find(".js-order-badge").text(order ? (statusLabels[order.status] || order.status).toUpperCase() : "ГОТОВО ДО РОБОТИ");
     $root.find(".js-customer-name").text(order?.customer || "Роздрібний покупець");
+    $root.find(".js-fop").text(order?.items?.find((item) => item.fop_profile)?.fop_profile || (order?.fiscal_mode === "Fiscal" ? "Визначиться під час фіскалізації" : "Не застосовується"));
     $root.find(".js-net").text(money(order?.net_total));
     $root.find(".js-discount").text(money(order?.discount_total));
     $root.find(".js-paid").text(money(order?.paid_total));
@@ -178,11 +187,14 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     $root.find(".js-lines").text(items.length);
     $root.find(".js-qty").text(money(items.reduce((sum, item) => sum + flt(item.qty), 0)));
     $root.find(".js-cart-body").html(items.map((item) => `
-      <tr data-row="${esc(item.name)}"><td><div class="ua-pos-item-name">${esc(item.item_name || item.item_code)}</div><div class="ua-pos-item-code">${esc(item.item_code)}</div></td><td>${esc(item.barcode || "—")}</td><td class="num"><div class="ua-pos-qty"><button data-delta="-1" ${editable ? "" : "disabled"}>−</button><span>${esc(item.qty)}</span><button data-delta="1" ${editable ? "" : "disabled"}>＋</button></div></td><td>${esc(item.uom || "—")}</td><td class="num">${money(item.rate)}</td><td class="num">${money(item.discount_amount)}</td><td class="num"><b>${money(item.amount)}</b></td><td>${esc(item.batch_no || item.serial_no || "—")}</td><td><span style="color:#079455">● Готово</span></td></tr>`).join(""));
+      <tr data-row="${esc(item.name)}"><td><div class="ua-pos-item-name">${esc(item.item_name || item.item_code)}</div><div class="ua-pos-item-code">${esc(item.item_code)}</div></td><td>${esc(item.barcode || "—")}</td><td class="num"><div class="ua-pos-qty"><button data-delta="-1" ${editable && order?.order_type !== "Return" ? "" : "disabled"}>−</button><span>${esc(item.qty)}</span><button data-delta="1" ${editable && order?.order_type !== "Return" ? "" : "disabled"}>＋</button></div></td><td>${esc(item.uom || "—")}</td><td class="num">${money(item.rate)}</td><td class="num">${money(item.discount_amount)}</td><td class="num"><b>${money(item.amount)}</b></td><td><button class="btn btn-xs btn-default js-track-item" ${editable && order?.order_type !== "Return" ? "" : "disabled"}>${esc(item.batch_no || item.serial_no || "Вказати")}</button></td><td><span style="color:#079455">● Готово</span></td></tr>`).join(""));
     const payable = Boolean(order && items.length && order.status === "Building" && state.session?.shift);
     $root.find(".js-pay-cash").prop("disabled", !payable);
     $root.find(".js-pay-card").prop("disabled", !payable || !state.session?.desk?.terminal);
-    $root.find(".js-hold,.js-cancel,.js-customer,.js-identify").prop("disabled", !editable);
+    $root.find(".js-pay-mixed").prop("disabled", !payable || order?.fiscal_mode !== "Fiscal");
+    $root.find(".js-print").prop("disabled", !order || !["Completed", "Completed Print Error", "Fiscal Pending", "Posted"].includes(order.status));
+    $root.find(".js-hold").prop("disabled", !order || !["Building", "Held"].includes(order.status));
+    $root.find(".js-cancel,.js-customer,.js-identify,.js-discount").prop("disabled", !editable || order?.order_type === "Return");
     $root.find(".js-hold").html(order?.status === "Held" ? "▶ Повернути чек <span class=\"ua-pos-shortcut\">F7</span>" : "◫ Відкласти <span class=\"ua-pos-shortcut\">F7</span>");
     if (order?.fiscal_mode) {
       state.saleMode = order.fiscal_mode;
@@ -256,6 +268,9 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
 
   async function newOrder() {
     if (!state.session?.shift) return showNotice("Спочатку відкрийте управлінську зміну.", "error");
+    if (state.order?.status === "Building" && state.order.items?.length) {
+      renderOrder(await api("hold_order", { pos_session_token: state.token, order: state.order.name }));
+    }
     renderOrder(await api("create_order", { pos_session_token: state.token, idem_key: idem(), fiscal_mode: state.saleMode }));
   }
 
@@ -281,7 +296,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
         if (kind === "Cash" && flt(values.received) < total) return frappe.msgprint("Отримана сума менша за суму до сплати.");
         dialog.get_primary_btn().prop("disabled", true);
         try {
-          const completed = await api("checkout_start", { pos_session_token: state.token, order: state.order.name, payments: JSON.stringify([{ mode_of_payment: values.mode, kind, amount: total, currency: "UAH" }]), idem_key: idem() });
+          const completed = await api("checkout_start", { pos_session_token: state.token, order: state.order.name, payments: JSON.stringify([{ mode_of_payment: values.mode, kind, amount: total, tendered_amount: kind === "Cash" ? flt(values.received) : total, currency: "UAH" }]), idem_key: idem() });
           renderOrder(completed); dialog.hide(); frappe.show_alert({ message: `${completed.name}: ${statusLabels[completed.status] || completed.status}`, indicator: completed.status === "Completed" ? "green" : "orange" });
         } finally { dialog.get_primary_btn().prop("disabled", false); }
       },
@@ -290,15 +305,221 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     if (kind === "Cash") dialog.fields_dict.received.$input.on("input", () => dialog.$wrapper.find(".ua-pos-denom-total span").text(money(Math.max(0, flt(dialog.get_value("received")) - total))));
   }
 
-  function cashMenu() {
-    const dialog = new frappe.ui.Dialog({ title: "Операції з управлінською касою", fields: [{ fieldname: "actions", fieldtype: "HTML", options: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn btn-primary js-open">Відкрити зміну</button><button class="btn btn-danger js-close">Закрити зміну</button><button class="btn btn-default js-planned">Інкасація</button><button class="btn btn-default js-planned">Витрата з каси</button><button class="btn btn-default js-planned">Внесення готівки</button><button class="btn btn-default js-planned">Касовий звіт</button></div>` }] });
-    dialog.show(); dialog.$wrapper.on("click", ".js-open", () => { dialog.hide(); openShift(); }); dialog.$wrapper.on("click", ".js-close", () => { dialog.hide(); closeShift(); }); dialog.$wrapper.on("click", ".js-planned", () => frappe.show_alert({ message: "Операція буде підключена на наступному етапі", indicator: "orange" }));
+  function cashOperationDialog(movementType, title) {
+    const dialog = new frappe.ui.Dialog({
+      title,
+      fields: [
+        { fieldname: "amount", fieldtype: "Currency", label: "Сума, грн", reqd: 1 },
+        { fieldname: "notes", fieldtype: "Small Text", label: "Підстава / коментар", reqd: movementType !== "Cash In" },
+      ],
+      primary_action_label: "Провести операцію",
+      primary_action: async (values) => {
+        const result = await api("cash_operation", { pos_session_token: state.token, movement_type: movementType, amount: values.amount, notes: values.notes || "", idem_key: idem() });
+        dialog.hide();
+        frappe.show_alert({ message: `${title}: ${money(values.amount)} грн · залишок ${money(result.cash_balance)} грн`, indicator: "green" });
+      },
+    });
+    dialog.show();
+    dialog.fields_dict.amount.$input.focus();
   }
 
-  function fiscalMenu() {
-    const configured = Boolean(state.session?.desk?.prro_cash_register);
-    const dialog = new frappe.ui.Dialog({ title: "Фіскальний реєстратор", fields: [{ fieldname: "status", fieldtype: "HTML", options: `<div class="ua-pos-modal-note">ПРРО: <b>${esc(state.session?.desk?.prro_cash_register || "не налаштовано")}</b></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn btn-default" ${configured ? "" : "disabled"}>Відкрити фіскальну зміну</button><button class="btn btn-default" ${configured ? "" : "disabled"}>X-звіт</button><button class="btn btn-default" ${configured ? "" : "disabled"}>Z-звіт</button><button class="btn btn-default" ${configured ? "" : "disabled"}>Службове внесення</button><button class="btn btn-default" ${configured ? "" : "disabled"}>Службова видача</button><button class="btn btn-default" ${configured ? "" : "disabled"}>Сторнування</button></div>${configured ? "" : "<p class='text-muted' style='margin-top:12px'>Прив’яжіть PRRO Cash Register у налаштуваннях каси.</p>"}` }] });
+  function cashMenu() {
+    const opened = Boolean(state.session?.shift);
+    const dialog = new frappe.ui.Dialog({ title: "Операції з управлінською касою", fields: [{ fieldname: "actions", fieldtype: "HTML", options: `<div class="ua-pos-modal-note">Управлінська зміна: <b>${opened ? esc(state.session.shift) : "закрита"}</b></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn btn-primary js-open" ${opened ? "disabled" : ""}>Відкрити зміну</button><button class="btn btn-danger js-close" ${opened ? "" : "disabled"}>Закрити зміну</button><button class="btn btn-default js-incassation" ${opened ? "" : "disabled"}>Інкасація</button><button class="btn btn-default js-expense" ${opened ? "" : "disabled"}>Витрата з каси</button><button class="btn btn-default js-cash-in" ${opened ? "" : "disabled"}>Внесення готівки</button><button class="btn btn-default js-cash-report" ${opened ? "" : "disabled"}>Касовий звіт</button></div>` }] });
     dialog.show();
+    dialog.$wrapper.on("click", ".js-open", () => { dialog.hide(); openShift(); });
+    dialog.$wrapper.on("click", ".js-close", () => { dialog.hide(); closeShift(); });
+    dialog.$wrapper.on("click", ".js-incassation", () => { dialog.hide(); cashOperationDialog("Incassation Out", "Інкасація"); });
+    dialog.$wrapper.on("click", ".js-expense", () => { dialog.hide(); cashOperationDialog("Expense", "Витрата з каси"); });
+    dialog.$wrapper.on("click", ".js-cash-in", () => { dialog.hide(); cashOperationDialog("Cash In", "Внесення готівки"); });
+    dialog.$wrapper.on("click", ".js-cash-report", () => { dialog.hide(); showReports(); });
+  }
+
+  async function fiscalMenu() {
+    const status = await api("fiscal_status", { pos_session_token: state.token });
+    const configured = Boolean(status.configured);
+    const open = Boolean(status.current_shift);
+    const dialog = new frappe.ui.Dialog({ title: "Фіскальний реєстратор", fields: [{ fieldname: "status", fieldtype: "HTML", options: `<div class="ua-pos-modal-note">ПРРО: <b>${esc(status.register || "не налаштовано")}</b><br>Фіскальна зміна: <b>${open ? esc(status.current_shift.name) : "закрита"}</b></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn btn-primary js-fiscal-open" ${configured && !open ? "" : "disabled"}>Відкрити фіскальну зміну</button><button class="btn btn-default js-x-report" ${configured && open ? "" : "disabled"}>X-звіт / стан</button><button class="btn btn-danger js-fiscal-close" ${configured && open ? "" : "disabled"}>Z-звіт і закриття</button><button class="btn btn-default js-fiscal-cash-in" ${openedAttribute()}>Службове внесення</button><button class="btn btn-default js-fiscal-cash-out" ${openedAttribute()}>Службова видача</button></div>${configured ? "" : "<p class='text-muted' style='margin-top:12px'>Прив’яжіть PRRO Cash Register у налаштуваннях каси.</p>"}` }] });
+    function openedAttribute() { return configured && open ? "" : "disabled"; }
+    dialog.show();
+    dialog.$wrapper.on("click", ".js-fiscal-open", async () => { await api("fiscal_open_shift", { pos_session_token: state.token }); dialog.hide(); await refreshSession(); frappe.show_alert({ message: "Фіскальну зміну відкрито", indicator: "green" }); });
+    dialog.$wrapper.on("click", ".js-x-report", () => frappe.msgprint({ title: "Стан ПРРО", message: `<pre>${esc(JSON.stringify(status.current_shift, null, 2))}</pre>` }));
+    dialog.$wrapper.on("click", ".js-fiscal-close", () => frappe.confirm("Сформувати Z-звіт і закрити фіскальну зміну?", async () => { await api("fiscal_close_shift", { pos_session_token: state.token }); dialog.hide(); await refreshSession(); frappe.show_alert({ message: "Z-звіт сформовано, фіскальну зміну закрито", indicator: "green" }); }));
+    dialog.$wrapper.on("click", ".js-fiscal-cash-in", () => { dialog.hide(); cashOperationDialog("Cash In", "Службове внесення"); });
+    dialog.$wrapper.on("click", ".js-fiscal-cash-out", () => { dialog.hide(); cashOperationDialog("Incassation Out", "Службова видача"); });
+  }
+
+  function stockSearch() {
+    const dialog = new frappe.ui.Dialog({
+      title: "Пошук товару на складі",
+      size: "large",
+      fields: [
+        { fieldname: "query", fieldtype: "Data", label: "Артикул, назва або штрихкод", reqd: 1 },
+        { fieldname: "results", fieldtype: "HTML", options: '<div class="text-muted">Введіть запит і натисніть «Знайти».</div>' },
+      ],
+      primary_action_label: "Знайти",
+      primary_action: async (values) => {
+        const rows = await api("stock_search", { pos_session_token: state.token, query: values.query });
+        const html = rows.length
+          ? `<table class="ua-pos-denoms"><thead><tr><th>Товар</th><th>Штрихкод</th><th>Залишок</th><th>Ціна</th><th></th></tr></thead><tbody>${rows.map((row) => `<tr><td style="text-align:left"><b>${esc(row.item_name)}</b><br><small>${esc(row.item_code)}</small></td><td>${esc(row.barcode || "—")}</td><td>${money(row.actual_qty)} ${esc(row.uom)}</td><td>${money(row.rate)} грн</td><td><button class="btn btn-xs btn-primary js-add-stock" data-item="${esc(row.item_code)}">Додати</button></td></tr>`).join("")}</tbody></table>`
+          : '<div class="ua-pos-modal-note">Товарів не знайдено.</div>';
+        dialog.fields_dict.results.$wrapper.html(html);
+      },
+    });
+    dialog.show();
+    dialog.fields_dict.query.$input.focus();
+    dialog.$wrapper.on("click", ".js-add-stock", async function () { await scan(this.dataset.item); dialog.hide(); });
+  }
+
+  async function showHeldOrders() {
+    const rows = await api("unfinished_orders", { pos_session_token: state.token });
+    const dialog = new frappe.ui.Dialog({ title: "Поточні та відкладені чеки", fields: [{ fieldname: "orders", fieldtype: "HTML", options: rows.length ? `<div style="display:grid;gap:8px">${rows.map((row) => `<button class="btn btn-default js-open-order" data-order="${esc(row.name)}" style="display:flex;justify-content:space-between"><span><b>${esc(row.name)}</b> · ${esc(row.customer)}</span><span>${esc(statusLabels[row.status] || row.status)} · ${money(row.grand_total)} грн</span></button>`).join("")}</div>` : '<div class="ua-pos-modal-note">Відкладених чеків немає.</div>' }] });
+    dialog.show();
+    dialog.$wrapper.on("click", ".js-open-order", async function () {
+      const order = await api("get_order", { pos_session_token: state.token, order: this.dataset.order });
+      renderOrder(order.status === "Held" ? await api("hold_order", { pos_session_token: state.token, order: order.name }) : order);
+      dialog.hide();
+    });
+  }
+
+  function discountDialog() {
+    if (!canEditOrder() || !state.order.items?.length) return;
+    const dialog = new frappe.ui.Dialog({
+      title: "Знижка на чек",
+      fields: [
+        { fieldname: "discount_percent", fieldtype: "Percent", label: "Знижка, %" },
+        { fieldname: "discount_amount", fieldtype: "Currency", label: "Або фіксована сума, грн" },
+        { fieldname: "note", fieldtype: "HTML", options: '<div class="ua-pos-modal-note">Якщо заповнено відсоток, фіксована сума не використовується. Для скасування знижки вкажіть 0.</div>' },
+      ],
+      primary_action_label: "Застосувати",
+      primary_action: async (values) => { renderOrder(await api("set_order_discount", { pos_session_token: state.token, order: state.order.name, discount_percent: values.discount_percent || 0, discount_amount: values.discount_amount || 0 })); dialog.hide(); },
+    });
+    dialog.show();
+  }
+
+  function itemTrackingDialog(rowName) {
+    const row = state.order?.items?.find((item) => item.name === rowName);
+    if (!row || !canEditOrder()) return;
+    const dialog = new frappe.ui.Dialog({
+      title: `Партія / серійний номер · ${row.item_code}`,
+      fields: [
+        { fieldname: "batch_no", fieldtype: "Link", options: "Batch", label: "Партія", default: row.batch_no },
+        { fieldname: "serial_no", fieldtype: "Small Text", label: "Серійні номери", default: row.serial_no, description: "По одному номеру в рядку." },
+      ],
+      primary_action_label: "Зберегти",
+      primary_action: async (values) => { renderOrder(await api("set_item_tracking", { pos_session_token: state.token, order: state.order.name, row_name: row.name, batch_no: values.batch_no, serial_no: values.serial_no })); dialog.hide(); },
+    });
+    dialog.show();
+  }
+
+  function mixedPaymentDialog() {
+    if (!state.order?.items?.length || state.order.fiscal_mode !== "Fiscal") return;
+    const total = flt(state.order.grand_total);
+    const dialog = new frappe.ui.Dialog({
+      title: "Змішана оплата",
+      fields: [
+        { fieldname: "due", fieldtype: "HTML", options: `<div class="ua-pos-modal-note">До сплати: <b>${money(total)} грн</b></div>` },
+        { fieldname: "cash_amount", fieldtype: "Currency", label: "Готівка", default: total },
+        { fieldname: "cash_mode", fieldtype: "Link", options: "Mode of Payment", label: "Спосіб готівкової оплати", default: "Cash", mandatory_depends_on: "eval:doc.cash_amount>0" },
+        { fieldname: "card_amount", fieldtype: "Currency", label: "Картка", default: 0 },
+        { fieldname: "card_mode", fieldtype: "Link", options: "Mode of Payment", label: "Спосіб карткової оплати", default: "Credit Card", mandatory_depends_on: "eval:doc.card_amount>0" },
+      ],
+      primary_action_label: "Провести оплату",
+      primary_action: async (values) => {
+        const cash = flt(values.cash_amount), card = flt(values.card_amount);
+        if (Math.abs(cash + card - total) > 0.01) return frappe.msgprint("Сума частин має дорівнювати сумі чека.");
+        if (card && !state.session?.desk?.terminal) return frappe.msgprint("Для карткової частини не налаштовано термінал.");
+        const payments = [];
+        if (cash) payments.push({ mode_of_payment: values.cash_mode, kind: "Cash", amount: cash, tendered_amount: cash, currency: "UAH" });
+        if (card) payments.push({ mode_of_payment: values.card_mode, kind: "Card", amount: card, currency: "UAH" });
+        const completed = await api("checkout_start", { pos_session_token: state.token, order: state.order.name, payments: JSON.stringify(payments), idem_key: idem() });
+        renderOrder(completed); dialog.hide();
+      },
+    });
+    dialog.show();
+  }
+
+  function reportHtml(report) {
+    const movementRows = (report.movements || []).map((row) => `<tr><td style="text-align:left">${esc(row.movement_type)}</td><td>${esc(row.direction === "In" ? "Надходження" : "Видача")}</td><td>${money(row.amount)} ${esc(row.currency)}</td><td style="text-align:left">${esc(row.notes || "—")}</td></tr>`).join("");
+    const itemRows = (report.item_totals || []).map((row) => `<tr><td style="text-align:left">${esc(row.item_name)}<br><small>${esc(row.item_code)}</small></td><td>${money(row.qty)}</td><td>${money(row.amount)} грн</td></tr>`).join("");
+    return `<div class="ua-pos-modal-note"><b>Зміна ${esc(report.shift.name)}</b><br>Продажі: ${money(report.sales_total)} грн · Повернення: ${money(report.returns_total)} грн · Чистий продаж: ${money(report.net_sales)} грн · Готівка в касі: ${money(report.cash_balance)} грн</div><h5>Рух готівки</h5><table class="ua-pos-denoms"><thead><tr><th>Операція</th><th>Напрям</th><th>Сума</th><th>Коментар</th></tr></thead><tbody>${movementRows || '<tr><td colspan="4">Операцій немає</td></tr>'}</tbody></table><h5 style="margin-top:18px">Товарний звіт</h5><table class="ua-pos-denoms"><thead><tr><th>Товар</th><th>Кількість</th><th>Сума</th></tr></thead><tbody>${itemRows || '<tr><td colspan="3">Продажів немає</td></tr>'}</tbody></table>`;
+  }
+
+  async function showReports() {
+    if (!state.session?.shift) return showNotice("Зміна не відкрита.", "error");
+    const report = await api("shift_report", { pos_session_token: state.token });
+    const html = reportHtml(report);
+    const dialog = new frappe.ui.Dialog({ title: "Касовий і товарний звіт зміни", size: "extra-large", fields: [{ fieldname: "report", fieldtype: "HTML", options: html }], primary_action_label: "Друкувати", primary_action: () => printHtml(`Звіт зміни ${report.shift.name}`, html) });
+    dialog.show();
+  }
+
+  function printHtml(title, body, targetWindow = null) {
+    const win = targetWindow || window.open("", "_blank", "width=900,height=700");
+    if (!win) return frappe.msgprint("Браузер заблокував вікно друку.");
+    win.document.write(`<!doctype html><html lang="uk"><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:6px;text-align:right}th:first-child,td:first-child{text-align:left}.center{text-align:center}.total{font-size:24px;font-weight:700}.muted{color:#666;font-size:12px}@media print{button{display:none}}</style></head><body><h2>${esc(title)}</h2>${body}<p><button onclick="window.print()">Друкувати</button></p></body></html>`);
+    win.document.close();
+    win.focus();
+  }
+
+  async function printReceipt() {
+    if (!state.order) return;
+    const win = window.open("", "_blank", "width=520,height=760");
+    const data = await api("receipt_data", { pos_session_token: state.token, order: state.order.name });
+    const order = data.order;
+    const items = (order.items || []).map((row) => `<tr><td>${esc(row.item_name || row.item_code)} × ${esc(row.qty)}</td><td>${money(row.amount)} грн</td></tr>`).join("");
+    const payments = (order.payments_plan || []).filter((row) => row.status === "Confirmed").map((row) => `<tr><td>${esc(row.mode_of_payment)}</td><td>${money(row.amount)} грн</td></tr>`).join("");
+    const body = `<div class="center"><b>${esc(data.company.company_name || "")}</b><br>${esc(data.cash_desk)}<br><span class="muted">Касир: ${esc(data.employee_name)}</span></div><p><b>${order.order_type === "Return" ? "ПОВЕРНЕННЯ" : "ТОВАРНИЙ ЧЕК"} ${esc(order.name)}</b></p><table>${items}</table><p class="total">Разом: ${money(order.grand_total)} грн</p><table>${payments}</table>${order.change_amount ? `<p>Решта: ${money(order.change_amount)} грн</p>` : ""}<p class="center muted">Код чека для повернення:<br><b>${esc(order.lookup_token)}</b><br>${esc(data.printed_at)}</p>`;
+    printHtml(`${order.order_type === "Return" ? "Повернення" : "Чек"} ${order.name}`, body, win);
+  }
+
+  function returnPaymentDialog(returnOrder, limits) {
+    const available = (limits || []).filter((row) => flt(row.available) > 0);
+    const rows = available.map((row) => `<tr><td style="text-align:left">${esc(row.kind)} · ${esc(row.mode_of_payment)}</td><td>${money(row.available)} грн</td><td><input type="number" min="0" max="${esc(row.available)}" step="0.01" value="0" data-kind="${esc(row.kind)}" data-mode="${esc(row.mode_of_payment)}"></td></tr>`).join("");
+    const dialog = new frappe.ui.Dialog({
+      title: `Виплата повернення · ${returnOrder.name}`,
+      fields: [{ fieldname: "plan", fieldtype: "HTML", options: `<div class="ua-pos-modal-note">До повернення покупцю: <b>${money(returnOrder.grand_total)} грн</b></div><table class="ua-pos-denoms"><thead><tr><th>Спосіб</th><th>Доступно</th><th>Повернути</th></tr></thead><tbody>${rows}</tbody></table>` }],
+      primary_action_label: "Провести повернення",
+      primary_action: async () => {
+        const payments = [];
+        dialog.$wrapper.find("[data-kind]").each(function () { const amount = flt(this.value); if (amount > 0) payments.push({ kind: this.dataset.kind, mode_of_payment: this.dataset.mode, amount, currency: "UAH" }); });
+        if (Math.abs(payments.reduce((sum, row) => sum + row.amount, 0) - flt(returnOrder.grand_total)) > 0.01) return frappe.msgprint("Розподіл виплати має дорівнювати сумі повернення.");
+        const completed = await api("checkout_start", { pos_session_token: state.token, order: returnOrder.name, payments: JSON.stringify(payments), idem_key: idem() });
+        renderOrder(completed); dialog.hide(); frappe.show_alert({ message: "Повернення проведено", indicator: "green" });
+      },
+    });
+    dialog.show();
+    let remaining = flt(returnOrder.grand_total);
+    dialog.$wrapper.find("[data-kind]").each(function () { const max = flt(this.max); const amount = Math.min(max, remaining); this.value = amount; remaining -= amount; });
+  }
+
+  function returnItemsDialog(details) {
+    const available = (details.items || []).filter((row) => flt(row.available_qty) > 0);
+    if (!available.length) return frappe.msgprint("Усі товари з цього чека вже повернено.");
+    const rows = available.map((row) => `<tr><td style="text-align:left">${esc(row.item_name)}<br><small>${esc(row.item_code)}</small></td><td>${esc(row.available_qty)} ${esc(row.uom)}</td><td><input type="number" min="0" max="${esc(row.available_qty)}" step="1" value="0" data-return-row="${esc(row.row_name)}"></td><td>${money(row.rate)} грн</td></tr>`).join("");
+    const dialog = new frappe.ui.Dialog({
+      title: `Повернення за чеком ${details.order.name}`,
+      size: "large",
+      fields: [{ fieldname: "items", fieldtype: "HTML", options: `<table class="ua-pos-denoms"><thead><tr><th>Товар</th><th>Можна повернути</th><th>Кількість</th><th>Ціна</th></tr></thead><tbody>${rows}</tbody></table>` }],
+      primary_action_label: "Створити повернення",
+      primary_action: async () => {
+        const selected = [];
+        dialog.$wrapper.find("[data-return-row]").each(function () { const qty = flt(this.value); if (qty > 0) selected.push({ row_name: this.dataset.returnRow, qty }); });
+        const returnOrder = await api("create_return_order", { pos_session_token: state.token, token: details.order.lookup_token, items: JSON.stringify(selected), idem_key: idem() });
+        dialog.hide(); returnPaymentDialog(returnOrder, details.refund_limits);
+      },
+    });
+    dialog.show();
+  }
+
+  function startReturn() {
+    const dialog = new frappe.ui.Dialog({
+      title: "Повернення товару",
+      fields: [{ fieldname: "token", fieldtype: "Data", label: "Код первинного чека", reqd: 1, description: "Відскануйте або введіть код, надрукований унизу чека." }],
+      primary_action_label: "Знайти чек",
+      primary_action: async (values) => { const details = await api("return_details", { pos_session_token: state.token, token: values.token }); dialog.hide(); returnItemsDialog(details); },
+    });
+    dialog.show();
+    dialog.fields_dict.token.$input.focus();
   }
 
   async function useIdentifiedCustomer(result) {
@@ -414,8 +635,6 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     dialog.fields_dict.phone.$input.focus();
   }
 
-  function planned(feature) { frappe.show_alert({ message: `${feature}: функція спроєктована і буде підключена наступним інкрементом`, indicator: "orange" }); }
-
   $root.on("click", ".ua-pos-login-button", login);
   $root.on("keydown", ".ua-pos-login-barcode", (event) => { if (event.key === "Enter") login(); });
   $root.on("click", ".js-logout", async () => { await api("logout", { pos_session_token: state.token }); sessionStorage.removeItem("ua_pos_token"); location.reload(); });
@@ -423,21 +642,26 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   $root.on("click", ".js-new-order", newOrder);
   $root.on("click", ".ua-pos-mode button", async function () { const mode = this.dataset.mode; if (mode === "Fiscal" && !state.session?.desk?.prro_cash_register) return showNotice("Фіскальний режим недоступний: для каси не налаштовано ПРРО.", "error"); state.saleMode = mode; if (canEditOrder()) renderOrder(await api("set_order_mode", { pos_session_token: state.token, order: state.order.name, fiscal_mode: mode })); else renderSession(); });
   $root.on("click", ".ua-pos-qty button", async function () { const rowName = $(this).closest("tr").data("row"); const row = state.order.items.find((item) => item.name === rowName); renderOrder(await api("set_item_qty", { pos_session_token: state.token, order: state.order.name, row_name: rowName, qty: flt(row.qty) + flt(this.dataset.delta) })); });
+  $root.on("click", ".js-track-item", function () { itemTrackingDialog($(this).closest("tr").data("row")); });
   $root.on("click", ".js-customer", () => { if (!canEditOrder()) return; frappe.prompt({ fieldname: "customer", fieldtype: "Link", options: "Customer", label: "Клієнт", reqd: 1, default: state.order.customer }, async (values) => renderOrder(await api("set_order_customer", { pos_session_token: state.token, order: state.order.name, customer: values.customer })), "Вибір клієнта", "Застосувати"); });
   $root.on("click", ".js-identify", identifyCustomer);
+  $root.on("click", ".js-discount", discountDialog);
   $root.on("click", ".js-hold", async () => { if (state.order) renderOrder(await api("hold_order", { pos_session_token: state.token, order: state.order.name })); });
+  $root.on("click", ".js-orders", showHeldOrders);
   $root.on("click", ".js-cancel", async () => { if (!state.order || !canEditOrder()) return; frappe.confirm("Скасувати поточний неоплачений чек?", async () => { await api("cancel_order", { pos_session_token: state.token, order: state.order.name }); renderOrder(null); }); });
   $root.on("click", ".js-pay-cash", () => paymentDialog("Cash"));
   $root.on("click", ".js-pay-card", () => paymentDialog("Card"));
+  $root.on("click", ".js-pay-mixed", mixedPaymentDialog);
+  $root.on("click", ".js-print", printReceipt);
   $root.on("click", ".js-cash-menu", cashMenu);
   $root.on("click", ".js-fiscal-menu", fiscalMenu);
-  $root.on("click", ".js-stock", () => planned("Пошук по складу"));
-  $root.on("click", ".js-reports", () => planned("Касові та товарні звіти"));
-  $root.on("click", ".js-return", () => frappe.prompt({ fieldname: "token", fieldtype: "Data", label: "Штрихкод первинного чека", reqd: 1 }, async (values) => { const order = await api("lookup_return", { pos_session_token: state.token, token: values.token }); frappe.msgprint({ title: "Первинний продаж знайдено", message: `${esc(order.name)} · ${money(order.grand_total)} грн · ${esc(order.customer)}`, indicator: "green" }); }, "Повернення", "Знайти продаж"));
+  $root.on("click", ".js-stock", stockSearch);
+  $root.on("click", ".js-reports", showReports);
+  $root.on("click", ".js-return", startReturn);
 
   $(document).off("keydown.ua_pos").on("keydown.ua_pos", (event) => {
     if ($(event.target).is("input,textarea,select") && event.key !== "F2") return;
-    const actions = { F2: () => $root.find(".ua-pos-scan").focus(), F3: () => $root.find(".js-stock").click(), F4: () => $root.find(".js-customer").first().click(), F5: () => $root.find(".js-identify").first().click(), F7: () => $root.find(".js-hold").click(), F8: () => $root.find(".js-return").click(), F9: () => $root.find(".js-pay-cash").first().click() };
+    const actions = { F2: () => $root.find(".ua-pos-scan").focus(), F3: () => $root.find(".js-stock").click(), F4: () => $root.find(".js-customer").first().click(), F5: () => $root.find(".js-identify").first().click(), F6: () => $root.find(".js-discount").click(), F7: () => $root.find(".js-hold").click(), F8: () => $root.find(".js-return").click(), F9: () => $root.find(".js-pay-cash").first().click() };
     if (actions[event.key]) { event.preventDefault(); actions[event.key](); }
     if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "s") { event.preventDefault(); openShift(); }
     if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "c") { event.preventDefault(); closeShift(); }
