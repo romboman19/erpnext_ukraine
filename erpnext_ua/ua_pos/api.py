@@ -79,6 +79,13 @@ def logout(pos_session_token: str):
 def session_state(pos_session_token: str) -> dict:
 	session = get_session(pos_session_token)
 	shift = active_shift(session["cash_desk"])
+	desk = frappe.db.get_value(
+		"POS Cash Desk",
+		session["cash_desk"],
+		["company", "warehouse", "terminal", "prro_cash_register"],
+		as_dict=True,
+	) or {}
+	employee_name = frappe.db.get_value("Employee", session["employee"], "employee_name")
 	unfinished = frappe.get_all(
 		"POS Order",
 		filters={"cash_desk": session["cash_desk"], "status": ("not in", ("Completed", "Cancelled"))},
@@ -86,7 +93,13 @@ def session_state(pos_session_token: str) -> dict:
 		order_by="modified desc",
 		limit=10,
 	)
-	return {**session, "shift": shift, "unfinished_orders": unfinished}
+	return {
+		**session,
+		"employee_name": employee_name or session["employee"],
+		"shift": shift,
+		"desk": desk,
+		"unfinished_orders": unfinished,
+	}
 
 
 def _count_total(rows: list[dict]) -> float:
@@ -283,6 +296,55 @@ def get_order(pos_session_token: str, order: str) -> dict:
 	doc = frappe.get_doc("POS Order", order)
 	if doc.cash_desk != session["cash_desk"]:
 		frappe.throw("Order belongs to another cash desk", frappe.PermissionError)
+	return doc.as_dict()
+
+
+@frappe.whitelist()
+def set_order_customer(pos_session_token: str, order: str, customer: str) -> dict:
+	session = get_session(pos_session_token)
+	doc = frappe.get_doc("POS Order", order)
+	if doc.cash_desk != session["cash_desk"] or doc.status != "Building":
+		frappe.throw(_("Order is not editable"), frappe.PermissionError)
+	if not frappe.db.exists("Customer", customer):
+		frappe.throw(_("Customer {0} does not exist").format(customer))
+	doc.customer = customer
+	doc.save(ignore_permissions=True)
+	return doc.as_dict()
+
+
+@frappe.whitelist()
+def set_order_mode(pos_session_token: str, order: str, fiscal_mode: str) -> dict:
+	session = get_session(pos_session_token)
+	doc = frappe.get_doc("POS Order", order)
+	if doc.cash_desk != session["cash_desk"] or doc.status != "Building":
+		frappe.throw(_("Order is not editable"), frappe.PermissionError)
+	if fiscal_mode not in {"Fiscal", "Non Fiscal"}:
+		frappe.throw(_("Unsupported fiscal mode"))
+	doc.fiscal_mode = fiscal_mode
+	doc.save(ignore_permissions=True)
+	return doc.as_dict()
+
+
+@frappe.whitelist()
+def hold_order(pos_session_token: str, order: str) -> dict:
+	session = get_session(pos_session_token)
+	doc = frappe.get_doc("POS Order", order)
+	if doc.cash_desk != session["cash_desk"] or doc.status not in {"Building", "Held"}:
+		frappe.throw(_("Order cannot be held or resumed"), frappe.PermissionError)
+	doc.status = "Held" if doc.status == "Building" else "Building"
+	doc.save(ignore_permissions=True)
+	return doc.as_dict()
+
+
+@frappe.whitelist()
+def cancel_order(pos_session_token: str, order: str) -> dict:
+	session = get_session(pos_session_token)
+	doc = frappe.get_doc("POS Order", order)
+	if doc.cash_desk != session["cash_desk"] or doc.status not in {"Building", "Held"}:
+		frappe.throw(_("Only an unpaid cart can be cancelled"), frappe.PermissionError)
+	doc.status = "Cancelled"
+	doc.save(ignore_permissions=True)
+	audit("order_cancelled", session, (doc.doctype, doc.name))
 	return doc.as_dict()
 
 
