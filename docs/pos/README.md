@@ -16,6 +16,7 @@
 | [07-permissions.md](07-permissions.md) | Ролі та матриця дозволів |
 | [08-plan-risks-questions.md](08-plan-risks-questions.md) | План по етапах, ризики, blocking questions, міграція/оновлення |
 | [09-testing.md](09-testing.md) | Стратегія тестування + 36 acceptance-сценаріїв |
+| [10-stage0-spike-report.md](10-stage0-spike-report.md) | **Етап 0 виконано**: тестовий стек + ПРРО e2e, критичні знахідки (TSP, REST/gRPC, деплой) |
 
 Діаграми — у форматі Mermaid (рендеряться на GitHub / у VS Code з розширенням Mermaid).
 
