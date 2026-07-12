@@ -44,7 +44,8 @@ def _expire_if_needed(doc):
 
 def _find_customer(phone: str) -> str | None:
 	digits = phone.replace("+", "")
-	for field in ("mobile_no", "phone"):
+	meta = frappe.get_meta("Customer")
+	for field in (field for field in ("mobile_no", "phone") if meta.has_field(field)):
 		for variant in (phone, digits, digits[-10:]):
 			customer = frappe.db.get_value("Customer", {field: ("like", f"%{variant}%")}, "name")
 			if customer:
@@ -55,10 +56,16 @@ def _find_customer(phone: str) -> str | None:
 def _customer_payload(customer: str | None) -> dict | None:
 	if not customer:
 		return None
-	row = frappe.db.get_value(
-		"Customer", customer, ["name", "customer_name", "mobile_no", "phone"], as_dict=True
-	)
-	return dict(row) if row else None
+	meta = frappe.get_meta("Customer")
+	fields = ["name", "customer_name"]
+	fields.extend(field for field in ("mobile_no", "phone") if meta.has_field(field))
+	row = frappe.db.get_value("Customer", customer, fields, as_dict=True)
+	if not row:
+		return None
+	payload = dict(row)
+	payload.setdefault("mobile_no", None)
+	payload.setdefault("phone", None)
+	return payload
 
 
 def _rate_limit(phone: str, settings) -> None:
