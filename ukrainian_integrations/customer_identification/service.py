@@ -138,6 +138,13 @@ def get_config() -> dict:
 
 
 @frappe.whitelist()
+def find_by_phone(phone: str) -> dict:
+	"""Return a minimal customer match before starting a verification request."""
+	phone = normalize_phone(phone)
+	return {"phone": phone, "customer": _customer_payload(_find_customer(phone))}
+
+
+@frappe.whitelist()
 def begin(channel: str, phone: str, reference_doctype: str | None = None, reference_name: str | None = None) -> dict:
 	settings = _settings()
 	if not settings.enabled:
