@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ukrainian_integrations"
 version = "0.1.0"
-description = "ERPNext Ukrainian Integrations"
+description = "External service connectors for ERPNext Ukraine: delivery, banks, payments, marketplaces, PBX and SMS"
 requires-python = ">=3.11"
 readme = "README.md"
 

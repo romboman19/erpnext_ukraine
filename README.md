@@ -1,10 +1,10 @@
-# ERPNext Ukrainian Integrations
+# ERPNext Ukraine Integrations
 
-Комплексна ERPNext/Frappe app для українських інтеграцій:
+Зовнішні бізнес-конектори для українських інсталяцій ERPNext/Frappe:
 
 - **Shipment UA**: Нова Пошта, Укрпошта (TTN, адреси, контакти, статуси)
 - **PBX + SMS**: VitalPBX, TurboSMS
-- **Payments UA**: Monobank, PrivatBank (Autoclient API), LiqPay, Privat POS
+- **Payments UA**: Monobank, PrivatBank (Autoclient API), LiqPay
 - **Ecommerce UA**: провайдери маркетплейсів / синхронізація замовлень
 
 ---
@@ -73,18 +73,12 @@
 
 ---
 
-### 5) Privat POS (касові термінали)
+### Банківські POS-термінали
 
-- інтеграція через `PB POS Settings` + `PB POS Terminal`
-- тестові дії прямо у формі термінала:
-  - `🟢 Тест зв'язку`
-  - `💳 Тест оплати`
-  - `↩️ Тест повернення`
-- backend методи в `ukrainian_integrations/payments/privat_pos/service.py`
-- gateway client в `ukrainian_integrations/payments/privat_pos/gateway_client.py`
-- client-side кнопки в `ukrainian_integrations/public/js/pb_pos_terminal_actions.js`
-
-Детальний технічний опис: `docs/privat_pos_flow.md`
+Інтеграцію касових терміналів перенесено до `erpnext_ukraine` (`erpnext_ua.ua_pos`),
+бо вона є частиною атомарного checkout, журналу платежів і відновлення після timeout.
+Цей застосунок імпортує банківські виписки та обробляє онлайн-платежі, але не керує
+фізичною касою.
 
 
 ## DocType налаштувань (створені)
@@ -93,7 +87,6 @@
 - `Monobank Settings`
 - `PrivatBank Settings`
 - `LiqPay Settings`
-- `PB POS Settings`
 
 ---
 
@@ -116,7 +109,7 @@
 ## Встановлення
 
 ```bash
-bench get-app https://github.com/romboman19/erpnext_ukrainian_integrations.git
+bench get-app https://github.com/romboman19/erpnext_ukraine_integrations.git
 bench --site <site> install-app ukrainian_integrations
 bench --site <site> migrate
 ```
@@ -161,4 +154,3 @@ Docker Bench (типовий):
 - виправлено TTN standalone bug (`rec_name`)
 - додано TurboSMS dialog + логування в `TurboSMS Log`
 - додано settings DocType для Monobank / PrivatBank / LiqPay
-

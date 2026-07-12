@@ -1,89 +1,32 @@
-# Privat POS Flow (ERPNext custom app)
+# Міграція Privat POS до ERPNext Ukraine
 
-Цей документ описує фактичний контур інтеграції POS-терміналів ПриватБанку в кастомній апці `ukrainian_integrations`.
+Інтеграцію фізичних банківських терміналів перенесено з `ukrainian_integrations`
+до модуля `erpnext_ua.ua_pos`. Операція термінала є частиною POS checkout-saga і
+мусить мати спільну ідемпотентність, журнал та recovery-процедуру з касовим продажем.
 
-## 1. Архітектура
+## Нові компоненти
 
-```text
-ERPNext (ukrainian_integrations)
-  -> HTTP (gateway_url + api_key)
-pb-pos-gateway (Go service)
-  -> TCP :2000
-POS terminal (Ingenico/PAX/...)
-```
+- `erpnext_ua/ua_pos/adapters/terminal.py` — контракт `TerminalAdapter`, клієнт
+  `pb-pos-gateway` і реалізація PrivatBank;
+- `erpnext_ua/ua_pos/terminal_service.py` — налаштування та діагностичні API;
+- `PB POS Settings`, `PB POS Terminal` — DocType у модулі UA POS;
+- `POS Payment Attempt`, `Terminal Transaction` — незмінний журнал касових платежів.
 
-- ERP викликає whitelisted методи в `ukrainian_integrations.payments.privat_pos.service`.
-- Gateway endpoint/ключ беруться з `PB POS Settings` (fallback: `site_config`).
-- Gateway спілкується з терміналом по TCP (`ip_address`, `tcp_port`, зазвичай 2000).
+## Що змінилося в протоколі
 
-## 2. Де в коді
+- кожен `sale/refund/void` має стабільний `operation_id`;
+- після timeout каса не повторює `sale`, а виконує тільки `status(operation_id)`;
+- gateway повинен ідемпотентно повертати збережений результат для повторного
+  `operation_id` і підтримувати `/status` та `/void`;
+- legacy `/purchase` і `/refund` отримують `operation_id` у `params`.
 
-- UI-кнопки форми терміналу:
-  - `ukrainian_integrations/public/js/pb_pos_terminal_actions.js`
-- Hooks підключення JS до DocType:
-  - `ukrainian_integrations/hooks.py` (`doctype_js["PB POS Terminal"]`)
-- Backend сервіс:
-  - `ukrainian_integrations/payments/privat_pos/service.py`
-- Gateway client:
-  - `ukrainian_integrations/payments/privat_pos/gateway_client.py`
+## Оновлення інсталяції
 
-## 3. Кнопки в DocType `PB POS Terminal`
+1. Оновити обидва застосунки.
+2. Виконати `bench --site <site> migrate`.
+3. Перевірити `PB POS Settings` та переприв'язати `PB POS Terminal` до `POS Cash Desk`.
+4. Оновити `pb-pos-gateway` до версії з idempotency/status/void.
+5. Перевірити connection test, тестову оплату та status lookup.
 
-1. `🟢 Тест зв'язку`
-2. `💳 Тест оплати`
-3. `↩️ Тест повернення`
-
-Кнопки працюють у формі **конкретного збереженого документа** (не list view).
-
-## 4. Публічні методи (ERP)
-
-- `pb_pos_test_connection(terminal)`
-- `pb_pos_test_payment(terminal, amount)`
-- `pb_pos_test_refund(terminal, amount, reference_operation_id=None)`
-- `pb_pos_sale(sales_invoice, terminal_ip, amount=None, terminal_port=2000)`
-
-## 5. Логіка резолву налаштувань
-
-1. `PB POS Settings.gateway_url`
-2. `PB POS Settings.api_key` (password field)
-3. fallback на `site_config`:
-   - `pb_pos_gateway_url`
-   - `pb_pos_api_key`
-
-## 6. Логіка резолву терміналу
-
-З DocType `PB POS Terminal`:
-- `ip_address`
-- `tcp_port`
-- `is_active`
-
-Пошук працює по `name` або `terminal_name`.
-
-## 7. Legacy-поведінка gateway (поточний production-контур)
-
-Gateway у вашому контурі працює в legacy-режимі:
-- verify/check: `/verify`
-- sale: `/purchase`
-- refund: `/refund` (`invoiceNumber` для reference)
-
-Тому в ERP-клієнті реалізовано fallback/сумісність із legacy шляхами.
-
-## 8. Типові помилки та інтерпретація
-
-- `таймаут відправки запиту до горутини` — проблема worker/reconnect на gateway (транспортний шар)
-- `connection refused` / `EOF` — мережа або TCP-сесія до терміналу
-- `Cannot obtain receipt: log file is empty (0001)` на verify — часто бізнес-стан терміналу, не обов'язково мережевий фейл
-- `methodNotImplemented` — метод не підтримується моделлю/прошивкою
-
-## 9. Мінімальний чек після деплою
-
-1. Відкрити `PB POS Terminal` документ і перевірити наявність 3 кнопок.
-2. `🟢 Тест зв'язку` на кожному терміналі.
-3. `💳 Тест оплати` на тестовій сумі.
-4. Перевірити записи в `Hunter Integration Log`.
-
-## 10. Операційні нотатки
-
-- Для стабільності gateway має бути в тій самій мережі/VLAN, що термінали.
-- Не запускати зайву паралель на один і той самий термінал.
-- Після таймаутів фіноперацій робити reconcile (перевірку останнього статусу) перед повторною оплатою.
+Python app name `erpnext_ua` не змінюється, тому перейменування GitHub-репозиторію
+не потребує перевстановлення застосунку.
