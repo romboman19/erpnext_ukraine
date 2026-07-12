@@ -51,7 +51,22 @@
   - `Hunter Integration Log`
   - `TurboSMS Log` (queued/success/error)
 
-### 4) Payments UA
+### 4) Ідентифікація покупця
+
+Єдиний API для підтвердження номера покупця перед застосуванням персональної
+картки Customer у POS:
+
+- SMS-код через TurboSMS;
+- Telegram bot deep-link із безпечною передачею контакту;
+- контрольний вхідний дзвінок через VitalPBX webhook;
+- TTL, ліміт спроб, rate limit і незмінний журнал `Customer Identification Request`;
+- пошук існуючого Customer за телефоном або швидке створення нового;
+- тестовий режим без фактичного надсилання SMS.
+
+Налаштування каналів: `Customer Identification Settings`. Контракт для POS:
+`get_config` → `begin` → `confirm`/`get_status` → verified Customer.
+
+### 5) Payments UA
 
 #### Monobank
 - імпорт statement у `Bank Transaction`

@@ -133,5 +133,21 @@ def webhook_event():
     popup_payload = {'call_id': call_id, 'direction': direction, 'status': status, 'from_number': from_no, 'to_number': to_no, 'extension': extension, 'customer': {'name': customer.name, 'customer_name': customer.customer_name, 'mobile_no': customer.mobile_no, 'phone': customer.phone} if customer else None, 'recent_sales_invoices': _recent_sales(customer.name if customer else None, limit=5), 'call_log': doc.name}
     _publish_popup(popup_payload, extension)
 
+    identification_request = None
+    if direction == 'inbound':
+        try:
+            from ukrainian_integrations.customer_identification.service import confirm_inbound_call
+
+            identification_request = confirm_inbound_call(
+                from_no, call_id, status, int(payload.get('duration') or 0)
+            )
+        except Exception:
+            frappe.log_error(frappe.get_traceback(), 'Customer identification by VitalPBX')
+
     log_event('vitalpbx', 'success', f'Webhook {status} call_id:{call_id}', request_payload=payload)
-    return {'ok': True, 'call_id': call_id, 'call_log': doc.name}
+    return {
+        'ok': True,
+        'call_id': call_id,
+        'call_log': doc.name,
+        'customer_identification_request': identification_request,
+    }

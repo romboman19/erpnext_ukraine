@@ -31,6 +31,7 @@ scheduler_events = {
         ],
         "*/10 * * * *": [
             "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_orders",
+            "ukrainian_integrations.customer_identification.service.expire_pending",
         ],
         "*/20 * * * *": [
             "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_stock",
