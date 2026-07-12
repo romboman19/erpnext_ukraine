@@ -164,7 +164,7 @@ def close_shift_confirm(pos_session_token: str, denominations, idem_key: str, co
 	if discrepancy and not comment.strip():
 		frappe.throw("A cashier comment is required when cash differs from expected")
 	doc.status = "Closed"
-	doc.closing_counts = [{**row, "context": "Closing"} for row in rows]
+	doc.set("closing_counts", [{**row, "context": "Closing"} for row in rows])
 	doc.expected_cash = expected
 	doc.counted_cash = counted
 	doc.discrepancy = discrepancy
