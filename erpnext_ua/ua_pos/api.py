@@ -339,7 +339,7 @@ def fiscal_status(pos_session_token: str) -> dict:
 @frappe.whitelist()
 def fiscal_open_shift(pos_session_token: str) -> dict:
 	session = get_session(pos_session_token)
-	_require_shift(session)
+	operational_shift = _require_shift(session)
 	desk = frappe.get_doc("POS Cash Desk", session["cash_desk"])
 	if not desk.prro_cash_register:
 		frappe.throw(_("Для каси не налаштовано ПРРО"))
@@ -347,12 +347,27 @@ def fiscal_open_shift(pos_session_token: str) -> dict:
 
 	register = frappe.get_doc("PRRO Cash Register", desk.prro_cash_register)
 	if register.current_shift:
+		# Legacy/recovered openings could miss this relation even though the
+		# management shift was validated before the fiscal operation.
+		if not frappe.db.get_value("PRRO Shift", register.current_shift, "operational_shift"):
+			frappe.db.set_value(
+				"PRRO Shift",
+				register.current_shift,
+				"operational_shift",
+				operational_shift,
+				update_modified=False,
+			)
+			frappe.db.commit()
 		return fiscal_status(pos_session_token)
 	key = desk.default_kep_key or register.default_kep_key
 	if not key:
 		frappe.throw(_("Для ПРРО не налаштовано КЕП"))
 	try:
-		orchestration.open_shift(register.name, key)
+		orchestration.open_shift(
+			register.name,
+			key,
+			operational_shift=operational_shift,
+		)
 	except Exception:
 		# Після остаточно відхиленого документа recovery має одразу звірити
 		# його відсутність у ДПС і повернути локальний номер. Інакше перша
