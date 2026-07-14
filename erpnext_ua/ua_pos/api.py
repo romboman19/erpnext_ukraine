@@ -5,12 +5,13 @@ import secrets
 import uuid
 import xml.etree.ElementTree as ET
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 
 import frappe
 from frappe import _
 from frappe.rate_limiter import rate_limit
 
+from erpnext_ua.ua_fiscal.payment import canonical_payform_name, fiscal_payform_name
 from erpnext_ua.ua_pos.services.common import (
 	SESSION_TTL,
 	active_shift,
@@ -380,6 +381,77 @@ def _fiscal_xml_head(receipt) -> dict:
 	return {child.tag: child.text or "" for child in head}
 
 
+def _xml_float(parent, tag: str) -> float:
+	if parent is None:
+		return 0.0
+	return frappe.utils.flt(parent.findtext(tag) or 0, 2)
+
+
+def _xml_int(parent, tag: str) -> int:
+	if parent is None:
+		return 0
+	return int(parent.findtext(tag) or 0)
+
+
+def _z_report_totals(receipt) -> dict:
+	"""Read immutable totals from the accepted zrep01 XML for reprinting."""
+	try:
+		root = ET.fromstring(receipt.receipt_xml.encode("windows-1251"))
+	except (AttributeError, UnicodeEncodeError, ET.ParseError) as exc:
+		frappe.throw(_("Підтверджений Z-звіт містить некоректний XML: {0}").format(exc))
+
+	def section(tag: str) -> dict:
+		element = root.find(tag)
+		payforms = []
+		if element is not None:
+			for row in element.findall("./PAYFORMS/ROW"):
+				code = _xml_int(row, "PAYFORMCD")
+				payforms.append(
+					{
+						"code": code,
+						"name": canonical_payform_name(code, row.findtext("PAYFORMNM")),
+						"sum": _xml_float(row, "SUM"),
+					}
+				)
+		taxes = []
+		if element is not None:
+			for row in element.findall("./TAXES/ROW"):
+				taxes.append(
+					{
+						"type": _xml_int(row, "TYPE"),
+						"name": row.findtext("NAME") or "",
+						"letter": row.findtext("LETTER") or "",
+						"prc": _xml_float(row, "PRC"),
+						"turnover": _xml_float(row, "TURNOVER"),
+						"sum": _xml_float(row, "SUM"),
+					}
+				)
+		return {
+			"sum": _xml_float(element, "SUM"),
+			"count": _xml_int(element, "ORDERSCNT"),
+			"payforms": payforms,
+			"taxes": taxes,
+		}
+
+	body = root.find("ZREPBODY")
+	return {
+		"realiz": section("ZREPREALIZ"),
+		"returns": section("ZREPRETURN"),
+		"service_input": _xml_float(body, "SERVICEINPUT"),
+		"service_output": _xml_float(body, "SERVICEOUTPUT"),
+	}
+
+
+def _fiscal_head_datetime(head: dict) -> str:
+	value = f"{head.get('ORDERDATE') or ''}{head.get('ORDERTIME') or ''}"
+	if len(value) != 14 or not value.isdigit():
+		return ""
+	try:
+		return datetime.strptime(value, "%d%m%Y%H%M%S").strftime("%d.%m.%Y %H:%M:%S")
+	except ValueError:
+		return ""
+
+
 def _report_datetime(value) -> str:
 	"""Format fiscal-event timestamps for a human-readable report without microseconds."""
 	if not value:
@@ -421,7 +493,9 @@ def _fiscal_report_data(cash_desk: str, report_type: str, shift_name: str | None
 	z_receipt = _fiscal_receipt_for_report(shift.name, "Z Report")
 	if kind == "Z" and not z_receipt:
 		frappe.throw(_("Підтверджений Z-звіт ще не сформовано"))
-	totals = orchestration._shift_totals(shift.name)
+	# X is a live state report; Z must reproduce the immutable document that DPS
+	# accepted rather than recalculate figures from mutable application data.
+	totals = _z_report_totals(z_receipt) if kind == "Z" else orchestration._shift_totals(shift.name)
 	head = _fiscal_xml_head(z_receipt if kind == "Z" else opening)
 
 	def payment_total(bucket: dict, code: int) -> float:
@@ -466,12 +540,16 @@ def _fiscal_report_data(cash_desk: str, report_type: str, shift_name: str | None
 		"shift_status": shift.status,
 		"opened_at": _report_datetime(shift.opened_at),
 		"closed_at": _report_datetime(shift.closed_at),
+		"document_at": _fiscal_head_datetime(head),
+		"document_uid": head.get("UID"),
 		"document_name": document.name if document else None,
 		"local_number": document.local_number if document else None,
 		"fiscal_number": document.fiscal_number if document else None,
 		"fiscal_number_label": "Фіскальний № Z-звіту" if kind == "Z" else "ЧЕК №",
 		"is_offline": int(document.is_offline or 0) if document else 0,
 		"testing": str(head.get("TESTING") or "").lower() == "true",
+		"sales_receipts_count": int(totals["realiz"]["count"]),
+		"return_receipts_count": int(totals["returns"]["count"]),
 		"receipts_count": int(totals["realiz"]["count"] + totals["returns"]["count"]),
 		"sales_total": sales,
 		"returns_total": returns,
@@ -1338,9 +1416,10 @@ def _fiscalize(order, desk, si):
 		if payment.status != "Confirmed":
 			continue
 		configured_code = frappe.db.get_value("Mode of Payment", payment.mode_of_payment, "ua_payformcd")
+		code = int(configured_code) if configured_code not in (None, "") else (0 if payment.kind == "Cash" else 1)
 		row = {
-			"code": int(configured_code) if configured_code not in (None, "") else (0 if payment.kind == "Cash" else 1),
-			"name": payment.mode_of_payment,
+			"code": code,
+			"name": fiscal_payform_name(payment.kind, code, payment.mode_of_payment),
 			"sum": payment.amount,
 		}
 		if payment.kind == "Cash":

@@ -19,6 +19,7 @@ from erpnext_ua.ua_fiscal.fiscal_client import (
 	FiscalServerError,
 	FiscalTransportError,
 )
+from erpnext_ua.ua_fiscal.payment import canonical_payform_name
 
 PAYFORM_CASH = 0
 PAYFORM_CARD = 1
@@ -1101,7 +1102,9 @@ def _shift_totals(shift_name: str) -> dict:
 		buckets[key]["sum"] += frappe.utils.flt(row.total_amount)
 		buckets[key]["count"] += 1
 		for payment in json.loads(row.payment_summary or "[]"):
-			payforms[key][(int(payment["code"]), payment["name"])] += frappe.utils.flt(payment["sum"])
+			code = int(payment["code"])
+			name = canonical_payform_name(code, payment.get("name"))
+			payforms[key][(code, name)] += frappe.utils.flt(payment["sum"])
 		for tax in json.loads(row.tax_summary or "[]"):
 			tax_key = (int(tax.get("type", 0)), tax["name"], tax.get("letter"), frappe.utils.flt(tax["prc"]))
 			taxes[key][tax_key]["turnover"] += frappe.utils.flt(tax["turnover"])

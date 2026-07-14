@@ -11,6 +11,8 @@ from datetime import datetime
 
 import frappe
 
+from erpnext_ua.ua_fiscal.payment import canonical_payform_name
+
 from erpnext_ua.ua_pos.doctype.pos_printer.pos_printer import is_lan_address
 from erpnext_ua.ua_pos.services.common import audit
 
@@ -135,6 +137,7 @@ def fiscal_snapshot(receipt, *, include_qr_image: bool = False) -> dict:
 	payments = []
 	for row in root.findall("./CHECKPAY/ROW"):
 		code = int(_xml_text(row, "PAYFORMCD", "0") or 0)
+		payment_name = canonical_payform_name(code, _xml_text(row, "PAYFORMNM"))
 		paysys = []
 		for payment_system in row.findall("./PAYSYS/ROW"):
 			paysys.append(
@@ -158,7 +161,7 @@ def fiscal_snapshot(receipt, *, include_qr_image: bool = False) -> dict:
 			{
 				"code": code,
 				"form": "ГОТІВКА" if code == 0 else ("БЕЗГОТІВКОВА" if code == 1 else "ІНШЕ"),
-				"means": _xml_text(row, "PAYFORMNM"),
+				"means": payment_name,
 				"amount": _xml_text(row, "SUM"),
 				"provided": _xml_text(row, "PROVIDED"),
 				"change": _xml_text(row, "REMAINS"),
@@ -398,9 +401,9 @@ def render_fiscal_report(report: dict, printer, *, is_copy: bool = False) -> byt
 		output.text("ТЕСТОВИЙ РЕЖИМ", align="center", bold=True)
 	output.text(f"ФН ПРРО {report.get('cash_register_fiscal_number') or '—'}")
 	output.text(f"Локальний № ПРРО: {report.get('cash_desk_local_number') or '—'}")
-	output.text(f"Зміна: {report.get('shift') or '—'}")
+	output.text(f"Фіскальна зміна: {report.get('shift') or '—'}")
 	if report.get("operational_shift"):
-		output.text(f"POS-зміна: {report['operational_shift']}")
+		output.text(f"Управлінська зміна: {report['operational_shift']}")
 	output.text(f"Касир: {report.get('cashier') or '—'}")
 	output.text(f"Відкрито: {report.get('opened_at') or '—'}")
 
@@ -409,22 +412,28 @@ def render_fiscal_report(report: dict, printer, *, is_copy: bool = False) -> byt
 		output.text("ЗМІНУ ВІДКРИТО", align="center", bold=True)
 	else:
 		output.rule()
-		output.pair("Чеків", str(report.get("receipts_count") or 0))
+		output.pair("Чеків продажу", str(report.get("sales_receipts_count") or 0))
 		output.pair("Продажі", _money(report.get("sales_total")), bold=True)
 		for payment in report.get("sales_payforms") or []:
 			output.pair(f"  {payment.get('name') or payment.get('code')}", _money(payment.get("sum")))
+		output.pair("Чеків повернення", str(report.get("return_receipts_count") or 0))
 		output.pair("Повернення", _money(report.get("returns_total")), bold=True)
 		for payment in report.get("return_payforms") or []:
 			output.pair(f"  {payment.get('name') or payment.get('code')}", _money(payment.get("sum")))
 		output.pair("Чистий оборот", _money(report.get("net_total")), bold=True)
 		output.pair("Службове внесення", _money(report.get("service_input")))
 		output.pair("Службова видача", _money(report.get("service_output")))
-		output.pair("Готівка в касі", _money(report.get("cash_balance")), bold=True)
+		output.pair("Розрахунковий залишок", _money(report.get("cash_balance")), bold=True)
 		for tax in report.get("sales_taxes") or []:
 			label = f"Податок {tax.get('letter') or tax.get('name') or ''} {frappe.utils.flt(tax.get('prc')):g}%"
 			output.pair(label, _money(tax.get("sum")))
+		for tax in report.get("return_taxes") or []:
+			label = f"Податок повернення {tax.get('letter') or tax.get('name') or ''} {frappe.utils.flt(tax.get('prc')):g}%"
+			output.pair(label, _money(tax.get("sum")))
 		if report.get("closed_at"):
 			output.text(f"Закрито: {report['closed_at']}")
+		if report.get("document_at"):
+			output.text(f"Z-документ: {report['document_at']}")
 
 	if report.get("fiscal_number"):
 		output.rule()
@@ -434,7 +443,7 @@ def render_fiscal_report(report: dict, printer, *, is_copy: bool = False) -> byt
 			bold=True,
 		)
 	if report.get("local_number"):
-		output.text(f"Локальний № {report['local_number']}", align="center")
+		output.text(f"Локальний № документа {report['local_number']}", align="center")
 	if report.get("is_offline"):
 		output.text("ОФЛАЙН", align="center", bold=True)
 	output.text(f"Надруковано: {report.get('generated_at') or frappe.utils.now_datetime()}", align="center")

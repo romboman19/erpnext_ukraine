@@ -46,7 +46,8 @@ class TestPrintService(unittest.TestCase):
 			"<ORDERDATE>14072026</ORDERDATE><ORDERTIME>131500</ORDERTIME>"
 			"<CASHREGISTERNUM>4000545102</CASHREGISTERNUM></CHECKHEAD>"
 			"<CHECKTOTAL><SUM>450.00</SUM></CHECKTOTAL>"
-			"<CHECKPAY><ROW><PAYFORMNM>ГОТІВКА</PAYFORMNM><SUM>450.00</SUM></ROW></CHECKPAY>"
+			"<CHECKPAY><ROW><PAYFORMCD>0</PAYFORMCD><PAYFORMNM>Cash</PAYFORMNM>"
+			"<SUM>450.00</SUM></ROW></CHECKPAY>"
 			"<CHECKBODY><ROW><NAME>Ніж</NAME><AMOUNT>1</AMOUNT><PRICE>450.00</PRICE>"
 			"<COST>450.00</COST></ROW></CHECKBODY></CHECK>"
 		)
@@ -84,9 +85,12 @@ class TestPrintService(unittest.TestCase):
 		self.assertIn("14.07.2026 13:15:00".encode("cp1251"), payload)
 		self.assertIn("ОНЛАЙН".encode("cp1251"), payload)
 		self.assertIn("ФН ПРРО 4000545102".encode("cp1251"), payload)
+		self.assertIn("ГОТІВКА".encode("cp1251"), payload)
+		self.assertNotIn(b"Cash", payload)
 
 		snapshot = fiscal_snapshot(receipt)
 		self.assertEqual(snapshot["tax_prefix"], "ІД")
+		self.assertEqual(snapshot["payments"][0]["means"], "ГОТІВКА")
 		self.assertEqual(
 			snapshot["qr_data"],
 			"https://cabinet.tax.gov.ua/cashregs/check?date=20260714&time=131500&id=6000000001&sm=450.00&fn=4000545102",
@@ -121,7 +125,7 @@ class TestPrintService(unittest.TestCase):
 		self.assertIn("X-ЗВІТ".encode("cp1251"), payload)
 		self.assertIn("НЕФІСКАЛЬНИЙ".encode("cp1251"), payload)
 		self.assertIn("298.00 грн".encode("cp1251"), payload)
-		self.assertIn("Готівка в касі".encode("cp1251"), payload)
+		self.assertIn("Розрахунковий залишок".encode("cp1251"), payload)
 
 	def test_render_z_report_labels_fiscal_fields_unambiguously(self):
 		printer = frappe._dict({"characters_per_line": 48, "encoding": "cp1251", "code_page": 46})
@@ -137,6 +141,7 @@ class TestPrintService(unittest.TestCase):
 			"cashier": "Касир",
 			"opened_at": "14.07.2026 20:37:41",
 			"closed_at": "14.07.2026 21:07:59",
+			"document_at": "14.07.2026 21:07:57",
 			"fiscal_number": "7324103331",
 			"fiscal_number_label": "Фіскальний № Z-звіту",
 			"local_number": 3199,
@@ -146,6 +151,8 @@ class TestPrintService(unittest.TestCase):
 		self.assertIn("ІД 3423612974".encode("cp1251"), payload)
 		self.assertIn("ФН ПРРО 4000545102".encode("cp1251"), payload)
 		self.assertIn("Фіскальний № Z-звіту 7324103331".encode("cp1251"), payload)
+		self.assertIn("Z-документ: 14.07.2026 21:07:57".encode("cp1251"), payload)
+		self.assertIn("Локальний № документа 3199".encode("cp1251"), payload)
 		self.assertIn("Надруковано: 14.07.2026 21:44:55".encode("cp1251"), payload)
 		self.assertNotIn(b".998758", payload)
 
