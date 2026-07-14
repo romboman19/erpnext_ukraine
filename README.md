@@ -78,7 +78,9 @@ bench --site <site> migrate
 
 Production-налаштування, backup/rollback і go-live checklist:
 [`docs/production-runbook.md`](docs/production-runbook.md). Відповідність чинному
-протоколу ДПС: [`docs/prro-conformance.md`](docs/prro-conformance.md).
+протоколу ДПС: [`docs/prro-conformance.md`](docs/prro-conformance.md). Вимоги до
+фіскальних друкованих форм і дозволеного додаткового footer:
+[`docs/receipt-printing-requirements.md`](docs/receipt-printing-requirements.md).
 
 ## Межі відповідальності
 

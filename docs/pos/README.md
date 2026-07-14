@@ -18,6 +18,7 @@
 | [09-testing.md](09-testing.md) | Стратегія тестування + 36 acceptance-сценаріїв |
 | [10-stage0-spike-report.md](10-stage0-spike-report.md) | **Етап 0 виконано**: тестовий стек + ПРРО e2e, критичні знахідки (TSP, REST/gRPC, деплой) |
 | [11-cashier-guide.md](11-cashier-guide.md) | Коротка інструкція касира для готового core POS |
+| [Вимоги до друку чеків](../receipt-printing-requirements.md) | Обов'язкові реквізити ФКЧ-1, QR ДПС, готівка/решта та дозволений додатковий footer |
 
 Діаграми — у форматі Mermaid (рендеряться на GitHub / у VS Code з розширенням Mermaid).
 

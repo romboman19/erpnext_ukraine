@@ -5,6 +5,10 @@
 <https://cabinet.tax.gov.ua/help/api.html>. XSD `check01`, `zrep01` і `ticket01`
 в репозиторії побайтово відповідають архіву ДПС, наданому разом зі специфікацією.
 
+Вимоги до браузерної та ESC/POS-форми чека, обов'язкових реквізитів і
+допустимого сервісного footer наведені в
+[receipt-printing-requirements.md](receipt-printing-requirements.md).
+
 ## Реалізовано
 
 | Вимога ДПС | Реалізація |
