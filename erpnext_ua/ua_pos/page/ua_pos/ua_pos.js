@@ -188,7 +188,8 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
               <div class="ua-pos-total-row"><span>Повна сума</span><strong><span class="js-net">0,00</span> грн</strong></div>
               <div class="ua-pos-total-row discount"><span>Знижка</span><strong>− <span class="js-discount">0,00</span> грн</strong></div>
               <div class="ua-pos-total-row"><span>Бонуси</span><strong>0,00 грн</strong></div>
-              <div class="ua-pos-total-row"><span>Отримано</span><strong><span class="js-paid">0,00</span> грн</strong></div>
+              <div class="ua-pos-total-row"><span>Оплачено</span><strong><span class="js-paid">0,00</span> грн</strong></div>
+              <div class="ua-pos-total-row js-cash-received-row" style="display:none"><span>Отримано готівкою</span><strong><span class="js-cash-received">0,00</span> грн</strong></div>
               <div class="ua-pos-total-row"><span>Решта</span><strong><span class="js-change">0,00</span> грн</strong></div>
             </div>
             <div class="ua-pos-due"><div class="ua-pos-due-label">Сума до оплати</div><div class="ua-pos-due-value"><span class="js-total">0,00</span> <small>грн</small></div><button class="ua-pos-pay-main js-pay-cash" disabled>Оплатити · F9</button><div class="ua-pos-pay-split"><button class="js-pay-cash" disabled>Готівка</button><button class="card js-pay-card" disabled>Банківська картка</button><button class="js-pay-mixed" disabled>Змішана оплата</button><button class="js-print" disabled>Друк чека</button></div></div>
@@ -333,6 +334,10 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     $root.find(".js-net").text(money(order?.net_total));
     $root.find(".js-discount").text(money(order?.discount_total));
     $root.find(".js-paid").text(money(order?.paid_total));
+    const confirmedCash = (order?.payments_plan || []).filter((payment) => payment.kind === "Cash" && payment.status === "Confirmed");
+    const cashReceived = confirmedCash.reduce((sum, payment) => sum + flt(payment.tendered_amount || payment.amount), 0);
+    $root.find(".js-cash-received-row").toggle(confirmedCash.length > 0);
+    $root.find(".js-cash-received").text(money(cashReceived));
     $root.find(".js-change").text(money(order?.change_amount));
     $root.find(".js-total").text(money(order?.grand_total));
     $root.find(".js-lines").text(items.length);
@@ -1099,7 +1104,18 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   $root.on("click", ".js-fiscal-menu", fiscalMenu);
   $root.on("click", ".js-retry-fiscal", async () => {
     if (!state.order) return;
-    renderOrder(await api("retry_fiscalization", { pos_session_token: state.token, order: state.order.name }));
+    const button = $root.find(".js-retry-fiscal");
+    button.prop("disabled", true).text("Звіряємо з ДПС…");
+    try {
+      const recovered = await api("retry_fiscalization", { pos_session_token: state.token, order: state.order.name });
+      renderOrder(recovered);
+      if (["Completed", "Printing", "Completed Print Error"].includes(recovered.status)) {
+        clearNotice();
+        frappe.show_alert({ message: `${recovered.name}: фіскалізацію підтверджено`, indicator: "green" });
+      }
+    } finally {
+      button.prop("disabled", false).text("↻ Відновити фіскалізацію");
+    }
   });
   $root.on("click", ".js-stock", stockSearch);
   $root.on("click", ".js-reports", showReports);

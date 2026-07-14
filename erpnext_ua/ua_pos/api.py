@@ -1392,6 +1392,20 @@ def _fiscalize(order, desk, si):
 	)
 
 
+def _reconcile_existing_receipt(receipt_name: str | None, *, include_error: bool = False) -> dict | None:
+	"""Safely resolve an existing fiscal document without blindly resending it."""
+	if not receipt_name:
+		return None
+	status = frappe.db.get_value("PRRO Receipt", receipt_name, "status")
+	if status == "Fiscalized":
+		return {"name": receipt_name, "status": status}
+	if status != "Uncertain" and not (include_error and status == "Error"):
+		return {"name": receipt_name, "status": status}
+	from erpnext_ua.ua_fiscal.orchestration import reconcile_receipt
+
+	return reconcile_receipt(receipt_name)
+
+
 def _completed_returns(original_order: str) -> list[str]:
 	return frappe.get_all(
 		"POS Order",
@@ -1579,8 +1593,20 @@ def _complete_paid_order(doc, desk, session) -> dict:
 		try:
 			receipt = _fiscalize(doc, desk, si)
 		except Exception as exc:
-			doc.status = "Fiscal Pending"
-			doc.recovery_note = str(exc)[:500]
+			# The document can already be accepted by DPS even when verification
+			# of the signed ticket fails locally. Resolve by local number before
+			# returning Fiscal Pending; never submit a second sale blindly.
+			receipt = doc.prro_receipt or frappe.db.get_value(
+				"PRRO Receipt", {"pos_order": doc.name}, "name", order_by="local_number desc"
+			)
+			recovered = None
+			try:
+				recovered = _reconcile_existing_receipt(receipt)
+			except Exception:
+				frappe.log_error(frappe.get_traceback(), f"POS immediate fiscal recovery {doc.name}")
+			doc.prro_receipt = receipt
+			doc.status = "Completed" if recovered and recovered.get("status") == "Fiscalized" else "Fiscal Pending"
+			doc.recovery_note = None if doc.status == "Completed" else str(exc)[:500]
 		else:
 			doc.prro_receipt = receipt
 			receipt_status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
@@ -1641,12 +1667,10 @@ def retry_fiscalization(pos_session_token: str, order: str) -> dict:
 	failed_receipt = doc.prro_receipt or frappe.db.get_value(
 		"PRRO Receipt", {"pos_order": doc.name}, "name", order_by="local_number desc"
 	)
-	if failed_receipt and frappe.db.get_value("PRRO Receipt", failed_receipt, "status") == "Error":
-		# Reconcile спершу перевіряє DocumentInfoByLocalNum. Повтор дозволяється
-		# лише якщо registrar state підтвердив, що останній номер не спожито.
-		from erpnext_ua.ua_fiscal.orchestration import reconcile_receipt
-
-		reconcile_receipt(failed_receipt)
+	# Reconcile first for both ambiguous delivery and a definite error.
+	# A retry after Error is allowed only when registrar state proves that the
+	# last local number was not consumed; orchestration enforces that invariant.
+	_reconcile_existing_receipt(failed_receipt, include_error=True)
 	desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
 	receipt = _fiscalize(doc, desk, frappe.get_doc("Sales Invoice", doc.sales_invoice))
 	status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
@@ -1667,6 +1691,10 @@ def recover_pos_fiscal_pending():
 			if not doc.sales_invoice:
 				continue
 			desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
+			failed_receipt = doc.prro_receipt or frappe.db.get_value(
+				"PRRO Receipt", {"pos_order": doc.name}, "name", order_by="local_number desc"
+			)
+			_reconcile_existing_receipt(failed_receipt)
 			receipt = _fiscalize(doc, desk, frappe.get_doc("Sales Invoice", doc.sales_invoice))
 			status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
 			if not receipt or status in {"Fiscalized", "Offline"}:
