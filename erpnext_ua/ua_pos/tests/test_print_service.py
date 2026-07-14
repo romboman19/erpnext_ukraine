@@ -5,11 +5,13 @@ from unittest.mock import patch
 import frappe
 
 from erpnext_ua.ua_pos.doctype.pos_printer.pos_printer import is_lan_address
+from erpnext_ua.ua_pos.barcode import code128_svg_data_uri, decode_lookup_token, encode_lookup_token
 from erpnext_ua.ua_pos.print_service import (
 	EscPosReceipt,
 	_qr_svg_data_uri,
 	fiscal_snapshot,
 	render_browser_fiscal_receipt,
+	render_browser_fiscal_report,
 	render_fiscal_report,
 	render_order_receipt,
 )
@@ -38,6 +40,14 @@ class TestPrintService(unittest.TestCase):
 		uri = _qr_svg_data_uri("https://cabinet.tax.gov.ua/cashregs/check?id=1")
 		self.assertTrue(uri.startswith("data:image/svg+xml;base64,"))
 		self.assertGreater(len(uri), 500)
+
+	def test_return_lookup_barcode_is_compact_and_reversible(self):
+		token = "dec4a628-2965-479a-a666-956fbf0ccb41"
+		barcode = encode_lookup_token(token)
+		self.assertEqual(len(barcode), 22)
+		self.assertEqual(decode_lookup_token(barcode), token)
+		self.assertEqual(decode_lookup_token(token), token)
+		self.assertTrue(code128_svg_data_uri(barcode).startswith("data:image/svg+xml;base64,"))
 
 	def test_render_fiscal_receipt_uses_immutable_xml(self):
 		xml = (
@@ -89,7 +99,8 @@ class TestPrintService(unittest.TestCase):
 		self.assertIn("ФН ПРРО 4000545102".encode("cp1251"), payload)
 		self.assertIn("ГОТІВКА".encode("cp1251"), payload)
 		self.assertIn("ОТРИМАНО".encode("cp1251"), payload)
-		self.assertIn("Виробник ПРРО: HUNTER.rv".encode("cp1251"), payload)
+		self.assertIn("ПРРО ERPNext Україна".encode("cp1251"), payload)
+		self.assertIn(b"\x1dkI", payload)
 		self.assertNotIn(b"Cash", payload)
 
 		snapshot = fiscal_snapshot(receipt, include_qr_image=True)
@@ -110,7 +121,8 @@ class TestPrintService(unittest.TestCase):
 		self.assertIn("РЕШТА: 50.00 UAH", html)
 		self.assertIn("Кількість тютюнових виробів в одиниці: 20", html)
 		self.assertIn("Об’єм алкогольного напою: 0.7 л", html)
-		self.assertIn("Виробник ПРРО: HUNTER.rv", html)
+		self.assertIn("ПРРО ERPNext Україна", html)
+		self.assertIn("fiscal-barcode", html)
 
 	def test_return_uses_fkc2_without_sale_only_totals(self):
 		xml = (
@@ -192,6 +204,10 @@ class TestPrintService(unittest.TestCase):
 		self.assertIn("НЕФІСКАЛЬНИЙ".encode("cp1251"), payload)
 		self.assertIn("298.00 грн".encode("cp1251"), payload)
 		self.assertIn("Розрахунковий залишок".encode("cp1251"), payload)
+		html = render_browser_fiscal_report(report)
+		self.assertIn("X-ЗВІТ", html)
+		self.assertIn("НЕФІСКАЛЬНИЙ", html)
+		self.assertIn("ПРРО ERPNext Україна", html)
 
 	def test_render_z_report_labels_fiscal_fields_unambiguously(self):
 		printer = frappe._dict({"characters_per_line": 48, "encoding": "cp1251", "code_page": 46})

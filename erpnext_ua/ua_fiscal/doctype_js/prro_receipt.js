@@ -3,7 +3,7 @@ frappe.ui.form.on("PRRO Receipt", {
 		const printable =
 			!frm.is_new() &&
 			["Fiscalized", "Offline"].includes(frm.doc.status) &&
-			["Sale", "Return", "Storno"].includes(frm.doc.receipt_kind);
+			["Sale", "Return", "Storno", "Open Shift", "Z Report"].includes(frm.doc.receipt_kind);
 
 		if (!printable) return;
 
@@ -31,7 +31,7 @@ function fiscal_receipt_document(title, body, auto_print = false) {
 		@page{size:80mm auto;margin:4mm}body{width:72mm;margin:0 auto;font:12px/1.35 monospace;color:#000}
 		.fiscal-center{text-align:center}.fiscal-muted{color:#555;font-size:10px}.fiscal-table{width:100%;border-collapse:collapse;margin:8px 0}
 		.fiscal-table td{padding:3px 0;border-bottom:1px dotted #777;vertical-align:top}.fiscal-table td:last-child{text-align:right;white-space:nowrap}
-		.fiscal-qr img{width:190px;height:190px}.fiscal-url{overflow-wrap:anywhere}.print-action{width:100%;margin-top:12px;padding:9px}
+		.fiscal-qr img{width:190px;height:190px}.fiscal-url{overflow-wrap:anywhere}.fiscal-barcode img{display:block;width:100%;max-width:460px;height:auto;margin:5px auto;image-rendering:pixelated}.fiscal-rule{border-top:1px dashed #000;margin:8px 0}.fiscal-title{font-size:18px}.print-action{width:100%;margin-top:12px;padding:9px}
 		@media print{.print-action{display:none}}
 	</style></head><body>${body}<button class="print-action" onclick="window.print()">Друкувати</button>${
 		auto_print ? "<script>window.addEventListener('load',()=>window.print())<\\/script>" : ""
@@ -42,7 +42,7 @@ async function open_fiscal_receipt(frm, print_immediately) {
 	const print_window = print_immediately ? window.open("", "_blank", "width=520,height=760") : null;
 	try {
 		const data = await fiscal_receipt_preview(frm.doc.name);
-		const title = `${__("Фіскальний чек")} № ${data.fiscal_number || frm.doc.fiscal_number || frm.doc.name}`;
+		const title = `${__(data.title || "Фіскальний чек")} № ${data.fiscal_number || frm.doc.fiscal_number || frm.doc.name}`;
 		if (print_immediately) {
 			if (!print_window) {
 				frappe.msgprint(__("Браузер заблокував вікно друку."));
@@ -68,6 +68,8 @@ async function open_fiscal_receipt(frm, print_immediately) {
 						.prro-preview .fiscal-table td{padding:4px 0;border-bottom:1px dotted #aaa;vertical-align:top}
 						.prro-preview .fiscal-table td:last-child{text-align:right;white-space:nowrap}
 						.prro-preview .fiscal-qr img{width:190px;height:190px}.prro-preview .fiscal-url{overflow-wrap:anywhere}
+						.prro-preview .fiscal-barcode img{display:block;width:100%;max-width:460px;height:auto;margin:5px auto;image-rendering:pixelated}
+						.prro-preview .fiscal-rule{border-top:1px dashed #777;margin:10px 0}.prro-preview .fiscal-title{font-size:18px}
 					</style><div class="prro-preview">${data.html}</div>`,
 				},
 			],

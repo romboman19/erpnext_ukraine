@@ -14,13 +14,14 @@ import frappe
 
 from erpnext_ua.ua_fiscal.payment import canonical_payform_name
 
+from erpnext_ua.ua_pos.barcode import code128_svg_data_uri, encode_lookup_token
 from erpnext_ua.ua_pos.doctype.pos_printer.pos_printer import is_lan_address
 from erpnext_ua.ua_pos.services.common import audit
 
 
 MAX_PRINT_PAYLOAD = 128 * 1024
 STALE_PRINT_MINUTES = 10
-PRRO_SOFTWARE_PRODUCER = "HUNTER.rv · ERPNext Україна"
+PRRO_SOFTWARE_PRODUCT = "ПРРО ERPNext Україна"
 
 
 class EscPosReceipt:
@@ -64,6 +65,14 @@ class EscPosReceipt:
 		self.command(b"\x1d(k" + bytes([length & 0xFF, length >> 8]) + b"1P0" + data)
 		self.command(b"\x1d(k\x03\x001Q0")
 		self.command(b"\n")
+
+	def barcode_code128(self, value: str):
+		data = str(value or "").encode("ascii", errors="strict")
+		if not data or len(data) > 250:
+			return
+		payload = b"{B" + data
+		self.command(b"\x1ba\x01\x1dH\x02\x1dh\x50\x1dw\x02")
+		self.command(b"\x1dkI" + bytes([len(payload)]) + payload + b"\n")
 
 	def finish(self) -> bytes:
 		self.command(b"\n\n\n\x1dV\x00")
@@ -224,7 +233,7 @@ def fiscal_snapshot(receipt, *, include_qr_image: bool = False) -> dict:
 		"fiscal_number": receipt.fiscal_number,
 		"local_number": receipt.local_number,
 		"qr_data": qr_data,
-		"producer": PRRO_SOFTWARE_PRODUCER,
+		"software_product": PRRO_SOFTWARE_PRODUCT,
 	}
 	if include_qr_image:
 		snapshot["qr_svg"] = _qr_svg_data_uri(qr_data)
@@ -326,9 +335,12 @@ def render_browser_fiscal_receipt(snapshot: dict, *, lookup_token: str | None = 
 		offline_control = f"<br>Контрольне число: {esc(snapshot['offline_control_number'])}"
 	lookup = ""
 	if lookup_token:
+		lookup_barcode = encode_lookup_token(lookup_token)
 		lookup = (
 			'<p class="fiscal-center fiscal-muted">Код чека для повернення:<br>'
-			f"<b>{esc(lookup_token)}</b></p>"
+			'<span class="fiscal-barcode">'
+			f'<img src="{esc(code128_svg_data_uri(lookup_barcode))}" alt="Штрихкод повернення">'
+			f"</span><br><b>{esc(lookup_barcode)}</b></p>"
 		)
 
 	summary_rows = (
@@ -342,7 +354,7 @@ def render_browser_fiscal_receipt(snapshot: dict, *, lookup_token: str | None = 
 		summary_rows += (
 			f'<tr><td><b>ДО СПЛАТИ</b></td><td><b>{money(snapshot.get("total"))} UAH</b></td></tr>'
 		)
-	producer = f'<br><span class="fiscal-muted">Виробник ПРРО: {esc(snapshot.get("producer"))}</span>'
+	software_product = f'<br><b>{esc(snapshot.get("software_product"))}</b>'
 
 	return (
 		'<div class="fiscal-receipt">'
@@ -360,7 +372,7 @@ def render_browser_fiscal_receipt(snapshot: dict, *, lookup_token: str | None = 
 		+ qr
 		+ f'<p class="fiscal-center"><b>{esc(snapshot.get("mode"))}</b>{offline_control}<br>'
 		+ f'ФН ПРРО {esc(snapshot.get("register_number"))}<br><b>{esc(snapshot.get("title"))}</b>'
-		+ producer
+		+ software_product
 		+ "</p>"
 		+ lookup
 		+ "</div>"
@@ -515,16 +527,99 @@ def render_order_receipt(order, printer, *, is_copy: bool = False) -> bytes:
 			output.text(f"Контрольне число: {snapshot['offline_control_number']}", align="center")
 		output.text(f"ФН ПРРО {snapshot['register_number']}", align="center")
 		output.text(snapshot["title"], align="center", bold=True)
-		output.text(f"Виробник ПРРО: {snapshot['producer']}", align="center")
+		output.text(snapshot["software_product"], align="center", bold=True)
 	output.text(f"Чек {order.name}", align="center")
 	output.text("Код для повернення:", align="center")
-	output.text(order.lookup_token, align="center", bold=True)
+	lookup_barcode = encode_lookup_token(order.lookup_token)
+	output.barcode_code128(lookup_barcode)
+	output.text(lookup_barcode, align="center", bold=True)
 	if not receipt:
 		output.text(str(frappe.utils.now_datetime()), align="center")
 	payload = output.finish()
 	if len(payload) > MAX_PRINT_PAYLOAD:
 		frappe.throw("Сформований чек перевищує ліміт друку 128 KiB")
 	return payload
+
+
+def render_browser_fiscal_report(report: dict) -> str:
+	"""Render an opening/X/Z report for Desk preview and browser printing."""
+	def esc(value) -> str:
+		return html.escape(str(value or ""), quote=True)
+
+	def money(value) -> str:
+		return f"{frappe.utils.flt(value):.2f} грн"
+
+	def payment_rows(label: str, rows: list[dict]) -> str:
+		return "".join(
+			f"<tr><td>{esc(label)} · {esc(row.get('name') or row.get('code'))}</td>"
+			f"<td>{money(row.get('sum'))}</td></tr>"
+			for row in rows or []
+		)
+
+	tax_rows = "".join(
+		f"<tr><td>Податок продажу {esc(row.get('letter') or row.get('name'))} "
+		f"{frappe.utils.flt(row.get('prc')):g}%</td><td>{money(row.get('sum'))}</td></tr>"
+		for row in report.get("sales_taxes") or []
+	)
+	tax_rows += "".join(
+		f"<tr><td>Податок повернення {esc(row.get('letter') or row.get('name'))} "
+		f"{frappe.utils.flt(row.get('prc')):g}%</td><td>{money(row.get('sum'))}</td></tr>"
+		for row in report.get("return_taxes") or []
+	)
+	totals = ""
+	if report.get("report_type") != "OPENING":
+		totals = (
+			'<div class="fiscal-rule"></div><table class="fiscal-table">'
+			f'<tr><td>Чеків продажу</td><td>{int(report.get("sales_receipts_count") or 0)}</td></tr>'
+			f'<tr><td><b>Продажі</b></td><td><b>{money(report.get("sales_total"))}</b></td></tr>'
+			+ payment_rows("Продаж", report.get("sales_payforms") or [])
+			+ f'<tr><td>Чеків повернення</td><td>{int(report.get("return_receipts_count") or 0)}</td></tr>'
+			+ f'<tr><td><b>Повернення</b></td><td><b>{money(report.get("returns_total"))}</b></td></tr>'
+			+ payment_rows("Повернення", report.get("return_payforms") or [])
+			+ f'<tr><td><b>Чистий оборот</b></td><td><b>{money(report.get("net_total"))}</b></td></tr>'
+			+ f'<tr><td>Службове внесення</td><td>{money(report.get("service_input"))}</td></tr>'
+			+ f'<tr><td>Службова видача</td><td>{money(report.get("service_output"))}</td></tr>'
+			+ f'<tr><td><b>Розрахунковий залишок</b></td><td><b>{money(report.get("cash_balance"))}</b></td></tr>'
+			+ tax_rows
+			+ "</table>"
+		)
+	opening = (
+		'<div class="fiscal-center"><b>ЗМІНУ ВІДКРИТО</b></div>'
+		if report.get("report_type") == "OPENING"
+		else ""
+	)
+	fiscal_number = ""
+	if report.get("fiscal_number"):
+		fiscal_number = (
+			'<div class="fiscal-rule"></div><div class="fiscal-center">'
+			f'<b>{esc(report.get("fiscal_number_label") or "Фіскальний №")} '
+			f'{esc(report.get("fiscal_number"))}</b><br>'
+			f'Локальний № документа {esc(report.get("local_number"))}</div>'
+		)
+	return (
+		'<div class="fiscal-form">'
+		f'<div class="fiscal-center"><b>{esc(report.get("organization"))}</b><br>'
+		f'{esc(report.get("point_name"))}<br>{esc(report.get("point_address"))}<br>'
+		f'{esc(report.get("tax_prefix") or "ІД")} {esc(report.get("tax_number") or report.get("tax_id"))}</div>'
+		'<div class="fiscal-rule"></div>'
+		f'<div class="fiscal-center fiscal-title"><b>{esc(report.get("title"))}</b></div>'
+		+ ('<div class="fiscal-center"><b>НЕФІСКАЛЬНИЙ</b></div>' if report.get("non_fiscal") else "")
+		+ ('<div class="fiscal-center"><b>ТЕСТОВИЙ РЕЖИМ</b></div>' if report.get("testing") else "")
+		+ f'<p>ФН ПРРО {esc(report.get("cash_register_fiscal_number") or "—")}<br>'
+		+ f'Локальний № ПРРО: {esc(report.get("cash_desk_local_number") or "—")}<br>'
+		+ f'Фіскальна зміна: {esc(report.get("shift") or "—")}<br>'
+		+ f'Касир: {esc(report.get("cashier") or "—")}<br>'
+		+ f'Відкрито: {esc(report.get("opened_at") or "—")}'
+		+ (f'<br>Закрито: {esc(report.get("closed_at"))}' if report.get("closed_at") else "")
+		+ (f'<br>Z-документ: {esc(report.get("document_at"))}' if report.get("document_at") else "")
+		+ "</p>"
+		+ opening
+		+ totals
+		+ fiscal_number
+		+ ('<div class="fiscal-center"><b>ОФЛАЙН</b></div>' if report.get("is_offline") else "")
+		+ f'<p class="fiscal-center fiscal-muted">Надруковано: {esc(report.get("generated_at"))}<br>'
+		+ f'<b>{esc(PRRO_SOFTWARE_PRODUCT)}</b></p></div>'
+	)
 
 
 def render_fiscal_report(report: dict, printer, *, is_copy: bool = False) -> bytes:
@@ -599,6 +694,7 @@ def render_fiscal_report(report: dict, printer, *, is_copy: bool = False) -> byt
 	if report.get("is_offline"):
 		output.text("ОФЛАЙН", align="center", bold=True)
 	output.text(f"Надруковано: {report.get('generated_at') or frappe.utils.now_datetime()}", align="center")
+	output.text(PRRO_SOFTWARE_PRODUCT, align="center", bold=True)
 	payload = output.finish()
 	if len(payload) > MAX_PRINT_PAYLOAD:
 		frappe.throw("Сформований звіт перевищує ліміт друку 128 KiB")

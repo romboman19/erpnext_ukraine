@@ -1552,9 +1552,12 @@ def _return_summary(original) -> dict:
 @frappe.whitelist()
 def return_details(pos_session_token: str, token: str) -> dict:
 	session = get_session(pos_session_token)
+	from erpnext_ua.ua_pos.barcode import decode_lookup_token
+
+	lookup_token = decode_lookup_token(token)
 	name = frappe.db.get_value(
 		"POS Order",
-		{"lookup_token": (token or "").strip(), "status": ("in", tuple(FINAL_ORDER_STATUSES))},
+		{"lookup_token": lookup_token, "status": ("in", tuple(FINAL_ORDER_STATUSES))},
 		"name",
 	)
 	if not name:
@@ -1951,6 +1954,9 @@ def receipt_data(pos_session_token: str, order: str) -> dict:
 		"Company", desk.company, ["company_name", "tax_id", "company_description"], as_dict=True
 	) or {}
 	employee_name = frappe.db.get_value("Employee", doc.employee, "employee_name") or doc.employee
+	from erpnext_ua.ua_pos.barcode import code128_svg_data_uri, encode_lookup_token
+
+	lookup_barcode = encode_lookup_token(doc.lookup_token)
 	fiscal_receipt = None
 	if doc.fiscal_mode == "Fiscal":
 		if not doc.prro_receipt:
@@ -1978,6 +1984,8 @@ def receipt_data(pos_session_token: str, order: str) -> dict:
 		"cash_desk": desk.desk_name,
 		"employee_name": employee_name,
 		"fiscal_receipt": fiscal_receipt,
+		"lookup_barcode": lookup_barcode,
+		"lookup_barcode_svg": code128_svg_data_uri(lookup_barcode),
 		"printed_at": str(frappe.utils.now_datetime()),
 	}
 
