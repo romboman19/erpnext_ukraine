@@ -334,7 +334,21 @@ def fiscal_status(pos_session_token: str) -> dict:
 		return {"configured": False, "message": _("Для каси не налаштовано ПРРО")}
 	register = frappe.get_doc("PRRO Cash Register", desk.prro_cash_register)
 	shift = frappe.get_doc("PRRO Shift", register.current_shift).as_dict() if register.current_shift else None
-	return {"configured": True, "register": register.name, "current_shift": shift}
+	last_shift_name = frappe.db.get_value(
+		"PRRO Shift",
+		{"cash_register": register.name},
+		"name",
+		order_by="creation desc",
+	)
+	last_shift = None
+	if last_shift_name:
+		last_shift = frappe.db.get_value(
+			"PRRO Shift",
+			last_shift_name,
+			["name", "status", "opened_at", "closed_at", "z_report_fiscal_number"],
+			as_dict=True,
+		)
+	return {"configured": True, "register": register.name, "current_shift": shift, "last_shift": last_shift}
 
 
 def _fiscal_receipt_for_report(shift_name: str, receipt_kind: str):
@@ -376,6 +390,13 @@ def _fiscal_report_data(cash_desk: str, report_type: str, shift_name: str | None
 		frappe.throw(_("Для каси не налаштовано ПРРО"))
 	register = frappe.get_doc("PRRO Cash Register", desk.prro_cash_register)
 	shift_name = shift_name or register.current_shift
+	if not shift_name and kind in {"OPENING", "Z"}:
+		shift_name = frappe.db.get_value(
+			"PRRO Shift",
+			{"cash_register": register.name},
+			"name",
+			order_by="creation desc",
+		)
 	if not shift_name:
 		frappe.throw(_("Фіскальну зміну не знайдено"))
 	shift = frappe.get_doc("PRRO Shift", shift_name)
@@ -561,7 +582,32 @@ def fiscal_close_shift(pos_session_token: str) -> dict:
 	key = desk.default_kep_key or register.default_kep_key
 	if not key:
 		frappe.throw(_("Для ПРРО не налаштовано КЕП"))
-	orchestration.close_shift(register.name, key)
+	try:
+		orchestration.close_shift(register.name, key)
+	except Exception:
+		failed_name = frappe.db.get_value(
+			"PRRO Receipt",
+			{
+				"cash_register": register.name,
+				"shift": register.current_shift,
+				"receipt_kind": ("in", ("Z Report", "Close Shift")),
+				"status": ("in", ("Uncertain", "Error", "Fiscalized")),
+			},
+			"name",
+			order_by="local_number desc",
+		)
+		recovered = None
+		if failed_name:
+			try:
+				recovered = orchestration.reconcile_receipt(failed_name)
+			except Exception:
+				frappe.log_error(frappe.get_traceback(), f"PRRO close-shift recovery {failed_name}")
+		if not recovered or recovered.get("status") != "Fiscalized":
+			raise
+		# If only Z was accepted, continue with the distinct Close Shift
+		# document. close_shift resumes the confirmed Z idempotently.
+		if recovered.get("receipt_kind") == "Z Report":
+			orchestration.close_shift(register.name, key)
 	audit("fiscal_shift_close", session, ("PRRO Cash Register", register.name))
 	return fiscal_status(pos_session_token)
 

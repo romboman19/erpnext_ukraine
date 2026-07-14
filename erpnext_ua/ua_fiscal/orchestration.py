@@ -1210,73 +1210,73 @@ def close_shift(cash_register: str, kep_key: str, client: FiscalClient | None = 
 	shift.db_set("status", "Closing", update_modified=False)
 	fop = _fop_dict(register.fop_profile)
 	cashier_name, _user = _cashier(kep_key)
-	z_local = register.allocate_local_number()
-	zrep = xb.build_zrep(
-		fop=fop,
-		register=_register_dict(register),
-		local_number=z_local,
-		cashier_name=cashier_name,
-		realiz=totals["realiz"],
-		returns=totals["returns"],
-		service_input=totals["service_input"],
-		service_output=totals["service_output"],
-		testing=_testing_flag(client),
-	)
-	z_ledger = _new_ledger(
-		register=register,
-		shift=shift,
-		kind="Z Report",
-		local_number=z_local,
-		xml=zrep,
-		idem_key=_idem_key("z-report", register.name, shift.name),
-	)
-	z_ticket = _send_online(client, z_ledger, zrep, kep_key)
+	z_idem = _idem_key("z-report", register.name, shift.name)
+	z_ledger = _existing_receipt(z_idem)
+	if z_ledger:
+		if z_ledger.status != "Fiscalized":
+			raise FiscalProtocolError(
+				f"Z-звіт {z_ledger.name} має статус {z_ledger.status}; спочатку потрібна звірка з ДПС"
+			)
+		zrep = z_ledger.receipt_xml.encode("windows-1251")
+	else:
+		z_local = register.allocate_local_number()
+		zrep = xb.build_zrep(
+			fop=fop,
+			register=_register_dict(register),
+			local_number=z_local,
+			cashier_name=cashier_name,
+			realiz=totals["realiz"],
+			returns=totals["returns"],
+			service_input=totals["service_input"],
+			service_output=totals["service_output"],
+			testing=_testing_flag(client),
+		)
+		z_ledger = _new_ledger(
+			register=register,
+			shift=shift,
+			kind="Z Report",
+			local_number=z_local,
+			xml=zrep,
+			idem_key=z_idem,
+		)
+		_send_online(client, z_ledger, zrep, kep_key)
+		z_ledger.reload()
+	_finalize_confirmed_receipt(z_ledger, register, shift, client)
+	frappe.db.commit()
 
 	# Z-звіт також споживає наскрізний номер. Повторна звірка перед документом
 	# закриття виконує офіційну вимогу перевіряти номер перед кожним /doc.
 	_preflight_online_document(register, kep_key, client, expected_shift_state=1)
 	register.reload()
-	c_local = register.allocate_local_number()
-	head = xb.build_check_head(
-		doctype=xb.DOCTYPE_CLOSE_SHIFT,
-		fop=fop,
-		register=_register_dict(register),
-		local_number=c_local,
-		cashier_name=cashier_name,
-		testing=_testing_flag(client),
-	)
-	close_xml = xb.build_service_document(head)
-	close_ledger = _new_ledger(
-		register=register,
-		shift=shift,
-		kind="Close Shift",
-		local_number=c_local,
-		xml=close_xml,
-		idem_key=_idem_key("close-shift", register.name, shift.name),
-	)
-	close_ticket = _send_online(client, close_ledger, close_xml, kep_key)
-	frappe.db.set_value(
-		"PRRO Shift",
-		shift.name,
-		{
-			"status": "Closed",
-			"closed_at": frappe.utils.now_datetime(),
-			"closing_fiscal_number": close_ticket["order_tax_num"],
-			"closing_local_number": c_local,
-			"z_report_fiscal_number": z_ticket["order_tax_num"],
-			"z_report_xml": zrep.decode("windows-1251"),
-			"sales_total": totals["realiz"]["sum"],
-			"refunds_total": totals["returns"]["sum"],
-			"receipts_count": totals["realiz"]["count"] + totals["returns"]["count"],
-		},
-		update_modified=False,
-	)
-	frappe.db.set_value(
-		"PRRO Cash Register",
-		register.name,
-		{"current_shift": None, "runtime_state": "Online", "last_server_sync": frappe.utils.now_datetime()},
-		update_modified=False,
-	)
+	close_idem = _idem_key("close-shift", register.name, shift.name)
+	close_ledger = _existing_receipt(close_idem)
+	if close_ledger:
+		if close_ledger.status != "Fiscalized":
+			raise FiscalProtocolError(
+				f"Документ закриття {close_ledger.name} має статус {close_ledger.status}; спочатку потрібна звірка з ДПС"
+			)
+	else:
+		c_local = register.allocate_local_number()
+		head = xb.build_check_head(
+			doctype=xb.DOCTYPE_CLOSE_SHIFT,
+			fop=fop,
+			register=_register_dict(register),
+			local_number=c_local,
+			cashier_name=cashier_name,
+			testing=_testing_flag(client),
+		)
+		close_xml = xb.build_service_document(head)
+		close_ledger = _new_ledger(
+			register=register,
+			shift=shift,
+			kind="Close Shift",
+			local_number=c_local,
+			xml=close_xml,
+			idem_key=close_idem,
+		)
+		_send_online(client, close_ledger, close_xml, kep_key)
+		close_ledger.reload()
+	_finalize_confirmed_receipt(close_ledger, register, shift, client)
 	frappe.db.commit()
 	return shift.name
 

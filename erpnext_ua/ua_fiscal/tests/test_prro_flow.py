@@ -210,6 +210,19 @@ def run():
 	)
 	assert frappe.db.get_value("PRRO Receipt", retried, "local_number") == 4
 
+	# Z-звіт прийнято ДПС, але перевірка відповіді перервалась. Після
+	# reconcile повторний close_shift має використати вже підтверджений Z і
+	# надіслати лише окремий документ закриття, без дублю Z-звіту.
+	client.uncertain_next = True
+	try:
+		orch.close_shift(TESTNAME, kep.name, client=client)
+	except FiscalTransportError:
+		pass
+	else:
+		raise AssertionError("Тестовий timeout Z-звіту мав перервати першу спробу закриття")
+	z_receipt = frappe.get_doc("PRRO Receipt", {"shift": shift_name, "receipt_kind": "Z Report"})
+	assert z_receipt.status == "Uncertain"
+	orch.reconcile_receipt(z_receipt.name, client=client)
 	orch.close_shift(TESTNAME, kep.name, client=client)
 	shift = frappe.get_doc("PRRO Shift", shift_name)
 	assert shift.status == "Closed"
@@ -219,7 +232,7 @@ def run():
 	nums = sorted(frappe.db.get_value("PRRO Receipt", r, "local_number") for r in (r1, r2))
 	assert nums == [2, 3], nums  # відкриття=1, чеки=2,3 — наскрізна нумерація
 	assert client.sent == ["CHECK", "CHECK", "CHECK", "CHECK", "CHECK", "ZREP", "CHECK"], client.sent
-	assert client.device_calls == 7 and client.state_calls == 8
+	assert client.device_calls == 8 and client.state_calls == 9
 
 	print(f"OK: shift {shift_name} відкрито→2 чеки→Z-звіт {shift.z_report_fiscal_number}→закрито; "
 		  f"local nums {nums}; docs {client.sent}")
