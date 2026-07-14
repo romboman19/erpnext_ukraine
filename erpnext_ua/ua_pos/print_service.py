@@ -185,6 +185,73 @@ def render_order_receipt(order, printer, *, is_copy: bool = False) -> bytes:
 	return payload
 
 
+def render_fiscal_report(report: dict, printer, *, is_copy: bool = False) -> bytes:
+	"""Render opening, X and Z shift reports as an ESC/POS thermal form."""
+	output = EscPosReceipt(
+		width=printer.characters_per_line,
+		encoding=printer.encoding,
+		code_page=printer.code_page,
+	)
+	if is_copy:
+		output.text("*** КОПІЯ ***", align="center", bold=True)
+	for value in (
+		report.get("organization"),
+		f"РНОКПП/ЄДРПОУ: {report.get('tax_id')}" if report.get("tax_id") else None,
+		report.get("point_name"),
+		report.get("point_address"),
+	):
+		if value:
+			output.text(value, align="center")
+	output.rule()
+	output.text(report.get("title") or "ЗВІТ ПРРО", align="center", bold=True)
+	if report.get("non_fiscal"):
+		output.text("НЕФІСКАЛЬНИЙ", align="center", bold=True)
+	if report.get("testing"):
+		output.text("ТЕСТОВИЙ РЕЖИМ", align="center", bold=True)
+	output.text(f"ПРРО: {report.get('cash_register_fiscal_number') or '—'}")
+	output.text(f"Локальний № ПРРО: {report.get('cash_desk_local_number') or '—'}")
+	output.text(f"Зміна: {report.get('shift') or '—'}")
+	if report.get("operational_shift"):
+		output.text(f"POS-зміна: {report['operational_shift']}")
+	output.text(f"Касир: {report.get('cashier') or '—'}")
+	output.text(f"Відкрито: {report.get('opened_at') or '—'}")
+
+	if report.get("report_type") == "OPENING":
+		output.rule()
+		output.text("ЗМІНУ ВІДКРИТО", align="center", bold=True)
+	else:
+		output.rule()
+		output.pair("Чеків", str(report.get("receipts_count") or 0))
+		output.pair("Продажі", _money(report.get("sales_total")), bold=True)
+		for payment in report.get("sales_payforms") or []:
+			output.pair(f"  {payment.get('name') or payment.get('code')}", _money(payment.get("sum")))
+		output.pair("Повернення", _money(report.get("returns_total")), bold=True)
+		for payment in report.get("return_payforms") or []:
+			output.pair(f"  {payment.get('name') or payment.get('code')}", _money(payment.get("sum")))
+		output.pair("Чистий оборот", _money(report.get("net_total")), bold=True)
+		output.pair("Службове внесення", _money(report.get("service_input")))
+		output.pair("Службова видача", _money(report.get("service_output")))
+		output.pair("Готівка в касі", _money(report.get("cash_balance")), bold=True)
+		for tax in report.get("sales_taxes") or []:
+			label = f"Податок {tax.get('letter') or tax.get('name') or ''} {frappe.utils.flt(tax.get('prc')):g}%"
+			output.pair(label, _money(tax.get("sum")))
+		if report.get("closed_at"):
+			output.text(f"Закрито: {report['closed_at']}")
+
+	if report.get("fiscal_number"):
+		output.rule()
+		output.text(f"Фіскальний № {report['fiscal_number']}", align="center", bold=True)
+	if report.get("local_number"):
+		output.text(f"Локальний № {report['local_number']}", align="center")
+	if report.get("is_offline"):
+		output.text("ОФЛАЙН", align="center", bold=True)
+	output.text(f"Сформовано: {report.get('generated_at') or frappe.utils.now_datetime()}", align="center")
+	payload = output.finish()
+	if len(payload) > MAX_PRINT_PAYLOAD:
+		frappe.throw("Сформований звіт перевищує ліміт друку 128 KiB")
+	return payload
+
+
 def queue_order_receipt(order, *, is_copy: bool = False, idem_key: str | None = None):
 	if isinstance(order, str):
 		order = frappe.get_doc("POS Order", order)
@@ -222,6 +289,44 @@ def queue_order_receipt(order, *, is_copy: bool = False, idem_key: str | None = 
 		queue="short",
 		enqueue_after_commit=True,
 		job_name=f"pos-print-{job.name}",
+		job_name_ref=job.name,
+	)
+	return job
+
+
+def queue_fiscal_report(cash_desk: str, report: dict, *, idem_key: str):
+	"""Create an immutable print job for a PRRO shift report snapshot."""
+	desk = frappe.get_doc("POS Cash Desk", cash_desk)
+	if not desk.receipt_printer:
+		return None
+	printer = frappe.get_doc("POS Printer", desk.receipt_printer)
+	if printer.status == "Disabled":
+		frappe.throw(f"Принтер {printer.name} вимкнено")
+	key = f"fiscal-report:{str(report.get('report_type') or '').lower()}:{report.get('shift')}:{idem_key}"[:140]
+	existing = frappe.db.get_value("POS Print Job", {"idem_key": key}, "name")
+	if existing:
+		return frappe.get_doc("POS Print Job", existing)
+	payload = render_fiscal_report(report, printer)
+	job = frappe.get_doc(
+		{
+			"doctype": "POS Print Job",
+			"printer": printer.name,
+			"cash_desk": desk.name,
+			"job_type": "Report",
+			"reference_doctype": "PRRO Shift",
+			"reference_name": report["shift"],
+			"format": "ESC/POS",
+			"status": "Queued",
+			"max_attempts": printer.max_attempts,
+			"idem_key": key,
+			"payload_base64": base64.b64encode(payload).decode(),
+		}
+	).insert(ignore_permissions=True)
+	frappe.enqueue(
+		"erpnext_ua.ua_pos.print_service.process_print_job",
+		queue="short",
+		enqueue_after_commit=True,
+		job_name=f"pos-fiscal-report-{job.name}",
 		job_name_ref=job.name,
 	)
 	return job

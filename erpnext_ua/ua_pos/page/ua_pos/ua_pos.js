@@ -532,11 +532,44 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     dialog.$wrapper.on("click", ".js-cash-report", () => { dialog.hide(); showReports(); });
   }
 
+  function fiscalReportHtml(report) {
+    const paymentRows = (label, rows) => (rows || []).map((row) => `<tr><td>${esc(label)} · ${esc(row.name || row.code)}</td><td>${money(row.sum)} грн</td></tr>`).join("");
+    const taxRows = (report.sales_taxes || []).map((row) => `<tr><td>Податок ${esc(row.letter || row.name || "")} ${money(row.prc)}%</td><td>${money(row.sum)} грн</td></tr>`).join("");
+    const totals = report.report_type === "OPENING" ? "" : `<div class="fiscal-rule"></div><table><tr><td>Кількість чеків</td><td>${esc(report.receipts_count)}</td></tr><tr class="strong"><td>Продажі</td><td>${money(report.sales_total)} грн</td></tr>${paymentRows("Продаж", report.sales_payforms)}<tr class="strong"><td>Повернення</td><td>${money(report.returns_total)} грн</td></tr>${paymentRows("Повернення", report.return_payforms)}<tr class="strong"><td>Чистий оборот</td><td>${money(report.net_total)} грн</td></tr><tr><td>Службове внесення</td><td>${money(report.service_input)} грн</td></tr><tr><td>Службова видача</td><td>${money(report.service_output)} грн</td></tr><tr class="strong"><td>Готівка в касі</td><td>${money(report.cash_balance)} грн</td></tr>${taxRows}</table>`;
+    return `<div class="fiscal-form" style="max-width:420px;margin:0 auto;font-family:monospace;color:#111"><div style="text-align:center"><b>${esc(report.organization || "")}</b><br>РНОКПП/ЄДРПОУ: ${esc(report.tax_id || "—")}<br>${esc(report.point_name || "")}<br>${esc(report.point_address || "")}</div><div class="fiscal-rule" style="border-top:1px dashed #555;margin:10px 0"></div><div style="text-align:center;font-size:18px;font-weight:700">${esc(report.title)}</div>${report.non_fiscal ? '<div style="text-align:center;font-weight:700">НЕФІСКАЛЬНИЙ</div>' : ""}${report.testing ? '<div style="text-align:center;font-weight:700">ТЕСТОВИЙ РЕЖИМ</div>' : ""}<p>ПРРО: ${esc(report.cash_register_fiscal_number || "—")}<br>Локальний № ПРРО: ${esc(report.cash_desk_local_number || "—")}<br>Зміна: ${esc(report.shift)}${report.operational_shift ? `<br>POS-зміна: ${esc(report.operational_shift)}` : ""}<br>Касир: ${esc(report.cashier || "—")}<br>Відкрито: ${esc(report.opened_at || "—")}${report.closed_at ? `<br>Закрито: ${esc(report.closed_at)}` : ""}</p>${report.report_type === "OPENING" ? '<div style="text-align:center;font-size:17px;font-weight:700">ЗМІНУ ВІДКРИТО</div>' : ""}${totals}${report.fiscal_number ? `<div class="fiscal-rule" style="border-top:1px dashed #555;margin:10px 0"></div><div style="text-align:center"><b>Фіскальний № ${esc(report.fiscal_number)}</b><br>Локальний № ${esc(report.local_number)}</div>` : ""}${report.is_offline ? '<div style="text-align:center;font-weight:700">ОФЛАЙН</div>' : ""}<p style="text-align:center;font-size:11px">Сформовано: ${esc(report.generated_at)}</p></div>`;
+  }
+
+  function printFiscalHtml(report, html) {
+    const win = window.open("", "_blank", "width=520,height=760");
+    if (!win) return frappe.msgprint("Браузер заблокував вікно друку.");
+    win.document.write(`<!doctype html><html lang="uk"><head><meta charset="utf-8"><title>${esc(report.title)}</title><style>@page{size:80mm auto;margin:4mm}body{width:72mm;margin:0 auto;font:12px/1.35 monospace;color:#000}.fiscal-form{max-width:none!important}table{width:100%;border-collapse:collapse}td{padding:2px 0}td:last-child{text-align:right}.strong{font-weight:700}.fiscal-rule{border-top:1px dashed #000!important;margin:8px 0!important}button{width:100%;margin-top:12px;padding:8px}@media print{button{display:none}}</style></head><body>${html}<button onclick="window.print()">Друкувати</button></body></html>`);
+    win.document.close();
+    win.focus();
+  }
+
+  async function showFiscalReport(reportType, shiftName) {
+    const report = await api("fiscal_report_data", { pos_session_token: state.token, report_type: reportType, shift: shiftName });
+    const html = fiscalReportHtml(report);
+    const dialog = new frappe.ui.Dialog({
+      title: report.title,
+      fields: [{ fieldname: "report", fieldtype: "HTML", options: html }],
+      primary_action_label: "Друкувати",
+      primary_action: async () => {
+        if (!state.session?.desk?.receipt_printer) return printFiscalHtml(report, html);
+        const result = await api("queue_fiscal_report_print", { pos_session_token: state.token, report_type: reportType, shift: shiftName, idem_key: idem() });
+        if (result.fallback_browser) return printFiscalHtml(report, html);
+        frappe.show_alert({ message: "Звіт поставлено в чергу друку", indicator: "green" });
+        dialog.hide();
+      },
+    });
+    dialog.show();
+  }
+
   async function fiscalMenu() {
     const status = await api("fiscal_status", { pos_session_token: state.token });
     const configured = Boolean(status.configured);
     const open = Boolean(status.current_shift);
-    const dialog = new frappe.ui.Dialog({ title: "Фіскальний реєстратор", fields: [{ fieldname: "status", fieldtype: "HTML", options: `<div class="ua-pos-modal-note">ПРРО: <b>${esc(status.register || "не налаштовано")}</b><br>Фіскальна зміна: <b>${open ? esc(status.current_shift.name) : "закрита"}</b></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn btn-primary js-fiscal-open" ${configured && !open ? "" : "disabled"}>Відкрити фіскальну зміну</button><button class="btn btn-default js-x-report" ${configured && open ? "" : "disabled"}>X-звіт / стан</button><button class="btn btn-danger js-fiscal-close" ${configured && open ? "" : "disabled"}>Z-звіт і закриття</button><button class="btn btn-default js-fiscal-cash-in" ${openedAttribute()}>Службове внесення</button><button class="btn btn-default js-fiscal-cash-out" ${openedAttribute()}>Службова видача</button></div>${configured ? "" : "<p class='text-muted' style='margin-top:12px'>Прив’яжіть PRRO Cash Register у налаштуваннях каси.</p>"}` }] });
+    const dialog = new frappe.ui.Dialog({ title: "Фіскальний реєстратор", fields: [{ fieldname: "status", fieldtype: "HTML", options: `<div class="ua-pos-modal-note">ПРРО: <b>${esc(status.register || "не налаштовано")}</b><br>Фіскальна зміна: <b>${open ? esc(status.current_shift.name) : "закрита"}</b></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn btn-primary js-fiscal-open" ${configured && !open ? "" : "disabled"}>Відкрити фіскальну зміну</button><button class="btn btn-default js-opening-report" ${configured && open ? "" : "disabled"}>Друк відкриття</button><button class="btn btn-default js-x-report" ${configured && open ? "" : "disabled"}>X-звіт / друк</button><button class="btn btn-danger js-fiscal-close" ${configured && open ? "" : "disabled"}>Z-звіт і закриття</button><button class="btn btn-default js-fiscal-cash-in" ${openedAttribute()}>Службове внесення</button><button class="btn btn-default js-fiscal-cash-out" ${openedAttribute()}>Службова видача</button></div>${configured ? "" : "<p class='text-muted' style='margin-top:12px'>Прив’яжіть PRRO Cash Register у налаштуваннях каси.</p>"}` }] });
     function openedAttribute() { return configured && open ? "" : "disabled"; }
     dialog.show();
     dialog.$wrapper.on("click", ".js-fiscal-open", async function () {
@@ -545,10 +578,11 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
       $button.prop("disabled", true).text("Відкриваємо зміну…");
       frappe.dom.freeze("Підписуємо документ і очікуємо відповідь ДПС…");
       try {
-        await api("fiscal_open_shift", { pos_session_token: state.token });
+        const result = await api("fiscal_open_shift", { pos_session_token: state.token });
         dialog.hide();
         await refreshSession();
         frappe.show_alert({ message: "Фіскальну зміну відкрито", indicator: "green" });
+        if (result.current_shift?.name) await showFiscalReport("Opening", result.current_shift.name);
       } catch (error) {
         const message = serverErrorMessage(error);
         frappe.msgprint({
@@ -561,8 +595,23 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
         if (dialog.$wrapper.is(":visible")) $button.prop("disabled", false).text("Відкрити фіскальну зміну");
       }
     });
-    dialog.$wrapper.on("click", ".js-x-report", () => frappe.msgprint({ title: "Стан ПРРО", message: `<pre>${esc(JSON.stringify(status.current_shift, null, 2))}</pre>` }));
-    dialog.$wrapper.on("click", ".js-fiscal-close", () => frappe.confirm("Сформувати Z-звіт і закрити фіскальну зміну?", async () => { await api("fiscal_close_shift", { pos_session_token: state.token }); dialog.hide(); await refreshSession(); frappe.show_alert({ message: "Z-звіт сформовано, фіскальну зміну закрито", indicator: "green" }); }));
+    dialog.$wrapper.on("click", ".js-opening-report", () => { dialog.hide(); showFiscalReport("Opening", status.current_shift.name); });
+    dialog.$wrapper.on("click", ".js-x-report", () => { dialog.hide(); showFiscalReport("X", status.current_shift.name); });
+    dialog.$wrapper.on("click", ".js-fiscal-close", () => frappe.confirm("Сформувати Z-звіт і закрити фіскальну зміну?", async () => {
+      const shiftName = status.current_shift.name;
+      frappe.dom.freeze("Формуємо Z-звіт і закриваємо зміну в ДПС…");
+      try {
+        await api("fiscal_close_shift", { pos_session_token: state.token });
+        dialog.hide();
+        await refreshSession();
+        frappe.show_alert({ message: "Z-звіт сформовано, фіскальну зміну закрито", indicator: "green" });
+        await showFiscalReport("Z", shiftName);
+      } catch (error) {
+        frappe.msgprint({ title: "Не вдалося закрити фіскальну зміну", indicator: "red", message: esc(serverErrorMessage(error)).replaceAll("\n", "<br>") });
+      } finally {
+        frappe.dom.unfreeze();
+      }
+    }));
     dialog.$wrapper.on("click", ".js-fiscal-cash-in", () => { dialog.hide(); cashOperationDialog("Cash In", "Службове внесення"); });
     dialog.$wrapper.on("click", ".js-fiscal-cash-out", () => { dialog.hide(); cashOperationDialog("Incassation Out", "Службова видача"); });
   }

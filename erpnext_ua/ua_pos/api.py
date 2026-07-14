@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import secrets
 import uuid
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 from datetime import date
 
@@ -334,6 +335,149 @@ def fiscal_status(pos_session_token: str) -> dict:
 	register = frappe.get_doc("PRRO Cash Register", desk.prro_cash_register)
 	shift = frappe.get_doc("PRRO Shift", register.current_shift).as_dict() if register.current_shift else None
 	return {"configured": True, "register": register.name, "current_shift": shift}
+
+
+def _fiscal_receipt_for_report(shift_name: str, receipt_kind: str):
+	name = frappe.db.get_value(
+		"PRRO Receipt",
+		{
+			"shift": shift_name,
+			"receipt_kind": receipt_kind,
+			"status": ("in", ("Fiscalized", "Offline")),
+		},
+		"name",
+		order_by="local_number desc",
+	)
+	return frappe.get_doc("PRRO Receipt", name) if name else None
+
+
+def _fiscal_xml_head(receipt) -> dict:
+	if not receipt or not receipt.receipt_xml:
+		return {}
+	try:
+		root = ET.fromstring(receipt.receipt_xml.encode("windows-1251"))
+	except (UnicodeEncodeError, ET.ParseError):
+		return {}
+	head = root.find("CHECKHEAD")
+	if head is None:
+		head = root.find("ZREPHEAD")
+	if head is None:
+		return {}
+	return {child.tag: child.text or "" for child in head}
+
+
+def _fiscal_report_data(cash_desk: str, report_type: str, shift_name: str | None = None) -> dict:
+	"""Builds a printable snapshot from the immutable PRRO ledger."""
+	kind = str(report_type or "").strip().upper()
+	if kind not in {"OPENING", "X", "Z"}:
+		frappe.throw(_("Невідомий тип звіту ПРРО"))
+	desk = frappe.get_doc("POS Cash Desk", cash_desk)
+	if not desk.prro_cash_register:
+		frappe.throw(_("Для каси не налаштовано ПРРО"))
+	register = frappe.get_doc("PRRO Cash Register", desk.prro_cash_register)
+	shift_name = shift_name or register.current_shift
+	if not shift_name:
+		frappe.throw(_("Фіскальну зміну не знайдено"))
+	shift = frappe.get_doc("PRRO Shift", shift_name)
+	if shift.cash_register != register.name:
+		frappe.throw(_("Зміна належить іншій касі ПРРО"), frappe.PermissionError)
+
+	from erpnext_ua.ua_fiscal import orchestration
+
+	opening = _fiscal_receipt_for_report(shift.name, "Open Shift")
+	if not opening:
+		frappe.throw(_("Підтверджений документ відкриття зміни не знайдено"))
+	z_receipt = _fiscal_receipt_for_report(shift.name, "Z Report")
+	if kind == "Z" and not z_receipt:
+		frappe.throw(_("Підтверджений Z-звіт ще не сформовано"))
+	totals = orchestration._shift_totals(shift.name)
+	head = _fiscal_xml_head(z_receipt if kind == "Z" else opening)
+
+	def payment_total(bucket: dict, code: int) -> float:
+		return frappe.utils.flt(
+			sum(frappe.utils.flt(row.get("sum")) for row in bucket.get("payforms", []) if int(row.get("code") or 0) == code),
+			2,
+		)
+
+	sales = frappe.utils.flt(totals["realiz"]["sum"], 2)
+	returns = frappe.utils.flt(totals["returns"]["sum"], 2)
+	cash_balance = frappe.utils.flt(
+		payment_total(totals["realiz"], 0)
+		- payment_total(totals["returns"], 0)
+		+ totals["service_input"]
+		- totals["service_output"],
+		2,
+	)
+	document = opening if kind == "OPENING" else z_receipt if kind == "Z" else None
+	titles = {
+		"OPENING": "ЧЕК ВІДКРИТТЯ ЗМІНИ",
+		"X": "X-ЗВІТ",
+		"Z": "Z-ЗВІТ",
+	}
+	return {
+		"report_type": kind,
+		"title": titles[kind],
+		"non_fiscal": kind == "X",
+		"generated_at": str(frappe.utils.now_datetime()),
+		"organization": head.get("ORGNM") or frappe.db.get_value("FOP Profile", register.fop_profile, "prro_registered_name"),
+		"tax_id": head.get("TIN") or frappe.db.get_value("FOP Profile", register.fop_profile, "tax_id"),
+		"point_name": head.get("POINTNM") or register.unit_name,
+		"point_address": head.get("POINTADDR") or register.unit_address,
+		"cashier": head.get("CASHIER") or shift.cashier,
+		"cash_register": register.name,
+		"cash_register_fiscal_number": register.fiscal_number,
+		"cash_desk_local_number": register.register_local_number,
+		"shift": shift.name,
+		"operational_shift": shift.operational_shift,
+		"shift_status": shift.status,
+		"opened_at": str(shift.opened_at or ""),
+		"closed_at": str(shift.closed_at or ""),
+		"document_name": document.name if document else None,
+		"local_number": document.local_number if document else None,
+		"fiscal_number": document.fiscal_number if document else None,
+		"is_offline": int(document.is_offline or 0) if document else 0,
+		"testing": str(head.get("TESTING") or "").lower() == "true",
+		"receipts_count": int(totals["realiz"]["count"] + totals["returns"]["count"]),
+		"sales_total": sales,
+		"returns_total": returns,
+		"net_total": frappe.utils.flt(sales - returns, 2),
+		"service_input": frappe.utils.flt(totals["service_input"], 2),
+		"service_output": frappe.utils.flt(totals["service_output"], 2),
+		"cash_balance": cash_balance,
+		"sales_payforms": totals["realiz"]["payforms"],
+		"return_payforms": totals["returns"]["payforms"],
+		"sales_taxes": totals["realiz"]["taxes"],
+		"return_taxes": totals["returns"]["taxes"],
+	}
+
+
+@frappe.whitelist()
+def fiscal_report_data(pos_session_token: str, report_type: str, shift: str | None = None) -> dict:
+	session = get_session(pos_session_token)
+	return _fiscal_report_data(session["cash_desk"], report_type, shift)
+
+
+@frappe.whitelist()
+def queue_fiscal_report_print(
+	pos_session_token: str,
+	report_type: str,
+	shift: str | None = None,
+	idem_key: str | None = None,
+) -> dict:
+	session = get_session(pos_session_token)
+	report = _fiscal_report_data(session["cash_desk"], report_type, shift)
+	desk = frappe.get_doc("POS Cash Desk", session["cash_desk"])
+	if not desk.receipt_printer:
+		return {"fallback_browser": True, "report": report}
+	from erpnext_ua.ua_pos.print_service import queue_fiscal_report
+
+	job = queue_fiscal_report(
+		desk.name,
+		report,
+		idem_key=idem_key or uuid.uuid4().hex,
+	)
+	audit("fiscal_report_print_queued", session, ("PRRO Shift", report["shift"]), {"print_job": job.name})
+	return {"fallback_browser": False, "job": job.name, "status": job.status}
 
 
 @frappe.whitelist()

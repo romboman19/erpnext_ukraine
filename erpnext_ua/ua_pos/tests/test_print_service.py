@@ -5,7 +5,7 @@ from unittest.mock import patch
 import frappe
 
 from erpnext_ua.ua_pos.doctype.pos_printer.pos_printer import is_lan_address
-from erpnext_ua.ua_pos.print_service import EscPosReceipt, render_order_receipt
+from erpnext_ua.ua_pos.print_service import EscPosReceipt, render_fiscal_report, render_order_receipt
 
 
 class TestPrintService(unittest.TestCase):
@@ -67,6 +67,37 @@ class TestPrintService(unittest.TestCase):
 		self.assertIn("ФОП Тест".encode("cp1251"), payload)
 		self.assertIn(b"6000000001", payload)
 		self.assertIn("КОПІЯ".encode("cp1251"), payload)
+
+	def test_render_x_report_contains_shift_totals(self):
+		printer = frappe._dict({"characters_per_line": 48, "encoding": "cp1251", "code_page": 46})
+		report = {
+			"report_type": "X",
+			"title": "X-ЗВІТ",
+			"non_fiscal": True,
+			"testing": True,
+			"organization": "КОЗЯРЧУК РОМАН",
+			"tax_id": "3423612974",
+			"point_name": "Магазин Hunter",
+			"cash_register_fiscal_number": "4000545102",
+			"cash_desk_local_number": 4,
+			"shift": "SHIFT-1",
+			"cashier": "Касир",
+			"opened_at": "2026-07-14 20:37:41",
+			"receipts_count": 2,
+			"sales_total": 298,
+			"returns_total": 0,
+			"net_total": 298,
+			"service_input": 100,
+			"service_output": 0,
+			"cash_balance": 398,
+			"sales_payforms": [{"code": 0, "name": "ГОТІВКА", "sum": 298}],
+			"generated_at": "2026-07-14 21:00:00",
+		}
+		payload = render_fiscal_report(report, printer)
+		self.assertIn("X-ЗВІТ".encode("cp1251"), payload)
+		self.assertIn("НЕФІСКАЛЬНИЙ".encode("cp1251"), payload)
+		self.assertIn("298.00 грн".encode("cp1251"), payload)
+		self.assertIn("Готівка в касі".encode("cp1251"), payload)
 
 
 if __name__ == "__main__":
