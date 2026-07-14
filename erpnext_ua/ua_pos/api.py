@@ -1968,9 +1968,10 @@ def receipt_data(pos_session_token: str, order: str) -> dict:
 		)
 		if not fiscal_receipt or fiscal_receipt.status not in {"Fiscalized", "Offline"}:
 			frappe.throw(_("Фіскальний документ ще не підтверджено і його не можна друкувати"))
-		from erpnext_ua.ua_pos.print_service import fiscal_snapshot
+		from erpnext_ua.ua_pos.print_service import fiscal_snapshot, render_browser_fiscal_receipt
 
-		fiscal_receipt["snapshot"] = fiscal_snapshot(receipt_doc, include_qr_image=True)
+		snapshot = fiscal_snapshot(receipt_doc, include_qr_image=True)
+		fiscal_receipt["html"] = render_browser_fiscal_receipt(snapshot, lookup_token=doc.lookup_token)
 	return {
 		"order": doc.as_dict(),
 		"company": company,

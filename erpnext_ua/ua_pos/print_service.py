@@ -20,6 +20,7 @@ from erpnext_ua.ua_pos.services.common import audit
 
 MAX_PRINT_PAYLOAD = 128 * 1024
 STALE_PRINT_MINUTES = 10
+PRRO_SOFTWARE_PRODUCER = "HUNTER.rv · ERPNext Україна"
 
 
 class EscPosReceipt:
@@ -223,6 +224,7 @@ def fiscal_snapshot(receipt, *, include_qr_image: bool = False) -> dict:
 		"fiscal_number": receipt.fiscal_number,
 		"local_number": receipt.local_number,
 		"qr_data": qr_data,
+		"producer": PRRO_SOFTWARE_PRODUCER,
 	}
 	if include_qr_image:
 		snapshot["qr_svg"] = _qr_svg_data_uri(qr_data)
@@ -247,6 +249,14 @@ def render_browser_fiscal_receipt(snapshot: dict, *, lookup_token: str | None = 
 		if row.get("barcode"):
 			codes.append(f"Штрихкод {esc(row['barcode'])}")
 		codes.extend(f"Акцизна марка {esc(value)}" for value in row.get("excise_labels") or [])
+		if row.get("tobacco_qty"):
+			codes.append(f"Кількість тютюнових виробів в одиниці: {esc(row['tobacco_qty'])}")
+		if row.get("tobacco_weight"):
+			codes.append(f"Вага одиниці тютюнового виробу: {esc(row['tobacco_weight'])}")
+		if row.get("alcohol_volume"):
+			codes.append(f"Об’єм алкогольного напою: {esc(row['alcohol_volume'])} л")
+		if row.get("alcohol_strength"):
+			codes.append(f"Міцність алкогольного напою: {esc(row['alcohol_strength'])}%")
 		code_html = f"<br><small>{'<br>'.join(codes)}</small>" if codes else ""
 		description = f"<br>{esc(row['description'])}" if row.get("description") else ""
 		item_rows.append(
@@ -264,15 +274,16 @@ def render_browser_fiscal_receipt(snapshot: dict, *, lookup_token: str | None = 
 			f"<td>{money(row.get('amount'))} UAH</td></tr>"
 		)
 
+	is_return = snapshot.get("operation") == "ПОВЕРНЕННЯ"
 	payment_rows = []
 	for row in snapshot.get("payments") or []:
 		means = ""
 		if row.get("means") and str(row["means"]).upper() != str(row.get("form") or "").upper():
 			means = f"<br><small>Засіб оплати: {esc(row['means'])}</small>"
 		details = []
-		if row.get("provided") not in (None, ""):
+		if not is_return and row.get("provided") not in (None, ""):
 			details.append(f"ОТРИМАНО: {money(row['provided'])} {esc(row.get('currency'))}")
-		if row.get("change") not in (None, ""):
+		if not is_return and row.get("change") not in (None, ""):
 			details.append(f"РЕШТА: {money(row['change'])} {esc(row.get('currency'))}")
 		for payment_system in row.get("paysys") or []:
 			merchant = payment_system.get("name") or payment_system.get("tax_number")
@@ -293,6 +304,7 @@ def render_browser_fiscal_receipt(snapshot: dict, *, lookup_token: str | None = 
 				details.append(f"Ідентифікатор операції: {esc(payment_system['transaction_id'])}")
 			if payment_system.get("commission"):
 				details.append(f"Комісія: {money(payment_system['commission'])} {esc(row.get('currency'))}")
+			details.append(f"Вид операції: {esc(snapshot.get('operation'))}")
 		detail_html = f"<br><small>{'<br>'.join(details)}</small>" if details else ""
 		payment_rows.append(
 			f"<tr><td>{esc(row.get('form'))}{means}{detail_html}</td>"
@@ -319,6 +331,19 @@ def render_browser_fiscal_receipt(snapshot: dict, *, lookup_token: str | None = 
 			f"<b>{esc(lookup_token)}</b></p>"
 		)
 
+	summary_rows = (
+		f'<tr><td><b>СУМА</b></td><td><b>{money(snapshot.get("total"))} UAH</b></td></tr>'
+		if is_return
+		else f'<tr><td><b>УСЬОГО</b></td><td><b>{money(snapshot.get("total"))} UAH</b></td></tr>'
+	)
+	summary_rows += "".join(tax_rows)
+	if not is_return:
+		summary_rows += rounding
+		summary_rows += (
+			f'<tr><td><b>ДО СПЛАТИ</b></td><td><b>{money(snapshot.get("total"))} UAH</b></td></tr>'
+		)
+	producer = f'<br><span class="fiscal-muted">Виробник ПРРО: {esc(snapshot.get("producer"))}</span>'
+
 	return (
 		'<div class="fiscal-receipt">'
 		f'<div class="fiscal-center"><b>{esc(snapshot.get("seller"))}</b><br>'
@@ -327,18 +352,16 @@ def render_browser_fiscal_receipt(snapshot: dict, *, lookup_token: str | None = 
 		f'<span class="fiscal-muted">Касир: {esc(snapshot.get("cashier"))}</span></div>'
 		+ ('<p class="fiscal-center"><b>ТЕСТОВИЙ РЕЖИМ</b></p>' if snapshot.get("testing") else "")
 		+ f'<table class="fiscal-table">{"".join(item_rows)}</table>'
-		+ '<table class="fiscal-table">'
-		+ f'<tr><td><b>УСЬОГО</b></td><td><b>{money(snapshot.get("total"))} UAH</b></td></tr>'
-		+ "".join(tax_rows)
-		+ rounding
-		+ f'<tr><td><b>ДО СПЛАТИ</b></td><td><b>{money(snapshot.get("total"))} UAH</b></td></tr></table>'
+		+ f'<table class="fiscal-table">{summary_rows}</table>'
 		+ f'<table class="fiscal-table">{"".join(payment_rows)}</table>'
 		+ f'<p class="fiscal-center"><b>ЧЕК № {esc(snapshot.get("fiscal_number"))}</b><br>'
 		+ f'Локальний № {esc(snapshot.get("local_number"))}<br>'
 		+ f'{esc(snapshot.get("date"))} {esc(snapshot.get("time"))}</p>'
 		+ qr
 		+ f'<p class="fiscal-center"><b>{esc(snapshot.get("mode"))}</b>{offline_control}<br>'
-		+ f'ФН ПРРО {esc(snapshot.get("register_number"))}<br><b>{esc(snapshot.get("title"))}</b></p>'
+		+ f'ФН ПРРО {esc(snapshot.get("register_number"))}<br><b>{esc(snapshot.get("title"))}</b>'
+		+ producer
+		+ "</p>"
 		+ lookup
 		+ "</div>"
 	)
@@ -412,6 +435,14 @@ def render_order_receipt(order, printer, *, is_copy: bool = False) -> bytes:
 			output.text(f"Штрихкод {item['barcode']}")
 		for label in item.get("excise_labels") or []:
 			output.text(f"Акцизна марка {label}")
+		if item.get("tobacco_qty"):
+			output.text(f"Кількість тютюнових виробів в одиниці: {item['tobacco_qty']}")
+		if item.get("tobacco_weight"):
+			output.text(f"Вага одиниці тютюнового виробу: {item['tobacco_weight']}")
+		if item.get("alcohol_volume"):
+			output.text(f"Об’єм алкогольного напою: {item['alcohol_volume']} л")
+		if item.get("alcohol_strength"):
+			output.text(f"Міцність алкогольного напою: {item['alcohol_strength']}%")
 		amount = _money(item["amount"])
 		if item.get("letters"):
 			amount += f" {item['letters']}"
@@ -420,7 +451,8 @@ def render_order_receipt(order, printer, *, is_copy: bool = False) -> bytes:
 			amount,
 		)
 	output.rule()
-	output.pair("УСЬОГО", f"{frappe.utils.flt(total):.2f} UAH", bold=True)
+	is_return = bool(receipt and snapshot["operation"] == "ПОВЕРНЕННЯ")
+	output.pair("СУМА" if is_return else "УСЬОГО", f"{frappe.utils.flt(total):.2f} UAH", bold=True)
 	if receipt:
 		for tax in snapshot["taxes"]:
 			label = "ПДВ" if tax["type"] == 0 else (tax["name"] or "ПОДАТОК")
@@ -428,13 +460,16 @@ def render_order_receipt(order, printer, *, is_copy: bool = False) -> bytes:
 				f"{label} {tax['letter']} {frappe.utils.flt(tax['rate']):g}%".strip(),
 				f"{frappe.utils.flt(tax['amount']):.2f} UAH",
 			)
-		if snapshot["rounding"]:
+		if snapshot["rounding"] and not is_return:
 			output.pair("Заокруглення", f"{frappe.utils.flt(snapshot['rounding']):.2f} UAH")
-		output.pair("ДО СПЛАТИ", f"{frappe.utils.flt(total):.2f} UAH", bold=True)
+		if not is_return:
+			output.pair("ДО СПЛАТИ", f"{frappe.utils.flt(total):.2f} UAH", bold=True)
 		for payment in payments:
 			output.pair(payment["form"], f"{frappe.utils.flt(payment['amount']):.2f} {payment['currency']}")
 			if payment["means"] and payment["means"].upper() != payment["form"]:
 				output.text(f"Засіб оплати: {payment['means']}")
+			if not is_return and payment["provided"]:
+				output.pair("ОТРИМАНО", f"{frappe.utils.flt(payment['provided']):.2f} {payment['currency']}")
 			for payment_system in payment["paysys"]:
 				merchant = payment_system["name"] or payment_system["tax_number"]
 				acquirer = payment_system["acquirer_name"] or payment_system["acquirer_id"]
@@ -460,7 +495,7 @@ def render_order_receipt(order, printer, *, is_copy: bool = False) -> bytes:
 				)
 				if payment_details:
 					output.text(f"ПЛАТІЖНА СИСТЕМА {payment_details}")
-		if any(payment["code"] == 0 for payment in payments):
+		if not is_return and any(payment["code"] == 0 for payment in payments):
 			output.pair("РЕШТА", f"{frappe.utils.flt(snapshot['change']):.2f} UAH")
 	else:
 		for payment in payments:
@@ -480,6 +515,7 @@ def render_order_receipt(order, printer, *, is_copy: bool = False) -> bytes:
 			output.text(f"Контрольне число: {snapshot['offline_control_number']}", align="center")
 		output.text(f"ФН ПРРО {snapshot['register_number']}", align="center")
 		output.text(snapshot["title"], align="center", bold=True)
+		output.text(f"Виробник ПРРО: {snapshot['producer']}", align="center")
 	output.text(f"Чек {order.name}", align="center")
 	output.text("Код для повернення:", align="center")
 	output.text(order.lookup_token, align="center", bold=True)

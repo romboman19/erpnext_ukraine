@@ -728,10 +728,10 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     dialog.show();
   }
 
-  function printHtml(title, body, targetWindow = null) {
+  function printHtml(title, body, targetWindow = null, hideTitle = false) {
     const win = targetWindow || window.open("", "_blank", "width=900,height=700");
     if (!win) return frappe.msgprint("Браузер заблокував вікно друку.");
-    win.document.write(`<!doctype html><html lang="uk"><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:6px;text-align:right}th:first-child,td:first-child{text-align:left}.center{text-align:center}.total{font-size:24px;font-weight:700}.muted{color:#666;font-size:12px}@media print{button{display:none}}</style></head><body><h2>${esc(title)}</h2>${body}<p><button onclick="window.print()">Друкувати</button></p></body></html>`);
+    win.document.write(`<!doctype html><html lang="uk"><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:6px;text-align:right}th:first-child,td:first-child{text-align:left}.center,.fiscal-center{text-align:center}.total{font-size:24px;font-weight:700}.muted,.fiscal-muted{color:#666;font-size:12px}.fiscal-receipt{max-width:430px;margin:0 auto;font-family:monospace}.fiscal-table td{border-bottom:1px dotted #aaa}.fiscal-qr img{width:190px;height:190px}.fiscal-url{overflow-wrap:anywhere}@media print{button{display:none}}</style></head><body>${hideTitle ? "" : `<h2>${esc(title)}</h2>`}${body}<p><button onclick="window.print()">Друкувати</button></p></body></html>`);
     win.document.close();
     win.focus();
   }
@@ -744,24 +744,13 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     const fiscal = data.fiscal_receipt;
 	let body;
 	if (fiscal) {
-	  const snap = fiscal.snapshot;
-	  const items = (snap.items || []).map((row) => {
-		const codes = [row.uktzed ? `УКТ ЗЕД ${esc(row.uktzed)}` : "", row.dkpp ? `ДКПП ${esc(row.dkpp)}` : "", row.barcode ? `Штрихкод ${esc(row.barcode)}` : "", ...(row.excise_labels || []).map((value) => `Акцизна марка ${esc(value)}`)].filter(Boolean).join("<br>");
-		return `<tr><td style="text-align:left"><b>${esc(row.name)}</b>${row.description ? `<br>${esc(row.description)}` : ""}${codes ? `<br><small>${codes}</small>` : ""}<br>${esc(row.qty)} ${esc(row.uom || "")} × ${money(row.price)}</td><td>${money(row.amount)} UAH${row.letters ? ` ${esc(row.letters)}` : ""}</td></tr>`;
-	  }).join("");
-	  const taxes = (snap.taxes || []).map((row) => `<tr><td>${esc(row.type === 0 ? "ПДВ" : (row.name || "ПОДАТОК"))} ${esc(row.letter || "")} ${money(row.rate)}%</td><td>${money(row.amount)} UAH</td></tr>`).join("");
-	  const payments = (snap.payments || []).map((row) => {
-		const systems = (row.paysys || []).map((system) => `<div class="muted">${system.name || system.tax_number ? `Торговець: ${esc(system.name || system.tax_number)}<br>` : ""}${system.acquirer_name || system.acquirer_id ? `Еквайр: ${esc(system.acquirer_name || system.acquirer_id)}<br>` : ""}${system.device_id ? `Платіжний пристрій: ${esc(system.device_id)}<br>` : ""}${system.commission ? `Комісія: ${money(system.commission)} UAH<br>` : ""}Вид операції: ${esc(snap.operation)}${system.epz_details ? `<br>ЕПЗ ${esc(system.epz_details)}` : ""}${system.auth_code || system.transaction_number || system.transaction_id ? `<br>ПЛАТІЖНА СИСТЕМА ${esc([system.auth_code, system.transaction_number, system.transaction_id].filter(Boolean).join(" "))}` : ""}</div>`).join("");
-		return `<tr><td style="text-align:left">${esc(row.form)}${row.means && row.means.toUpperCase() !== row.form ? `<br><small>Засіб оплати: ${esc(row.means)}</small>` : ""}${systems}</td><td>${money(row.amount)} ${esc(row.currency)}</td></tr>`;
-	  }).join("");
-	  const qr = snap.qr_svg ? `<div class="center"><img src="${esc(snap.qr_svg)}" alt="QR перевірки чека" style="width:190px;height:190px"><div class="muted" style="overflow-wrap:anywhere">${esc(snap.qr_data)}</div></div>` : "";
-	  body = `<div class="center"><b>${esc(snap.seller)}</b><br>${esc(snap.point)}<br>${esc(snap.address)}<br>${esc(snap.tax_prefix)} ${esc(snap.tax_number)}<br><span class="muted">Касир: ${esc(snap.cashier)}</span></div>${snap.testing ? '<p class="center"><b>ТЕСТОВИЙ РЕЖИМ</b></p>' : ""}<table>${items}</table><table><tr><td><b>УСЬОГО</b></td><td><b>${money(snap.total)} UAH</b></td></tr>${taxes}${snap.rounding ? `<tr><td>Заокруглення</td><td>${money(snap.rounding)} UAH</td></tr>` : ""}<tr><td><b>ДО СПЛАТИ</b></td><td><b>${money(snap.total)} UAH</b></td></tr></table><table>${payments}</table>${(snap.payments || []).some((row) => row.code === 0) ? `<p>РЕШТА: ${money(snap.change)} UAH</p>` : ""}<p class="center"><b>ЧЕК № ${esc(snap.fiscal_number)}</b><br>Локальний № ${esc(snap.local_number)}<br>${esc(snap.date)} ${esc(snap.time)}</p>${qr}<p class="center"><b>${esc(snap.mode)}</b>${snap.offline_control_number ? `<br>Контрольне число: ${esc(snap.offline_control_number)}` : ""}<br>ФН ПРРО ${esc(snap.register_number)}<br><b>${esc(snap.title)}</b></p><p class="center muted">Код чека для повернення:<br><b>${esc(order.lookup_token)}</b></p>`;
+	  body = fiscal.html;
 	} else {
 	  const items = (order.items || []).map((row) => `<tr><td>${esc(row.item_name || row.item_code)} × ${esc(row.qty)}</td><td>${money(row.amount)} грн</td></tr>`).join("");
 	  const payments = (order.payments_plan || []).filter((row) => row.status === "Confirmed").map((row) => `<tr><td>${esc(row.mode_of_payment)}</td><td>${money(row.amount)} грн</td></tr>`).join("");
 	  body = `<div class="center"><b>${esc(data.company.company_name || "")}</b><br>${esc(data.cash_desk)}<br><span class="muted">Касир: ${esc(data.employee_name)}</span></div><p class="center"><b>НЕФІСКАЛЬНИЙ ТОВАРНИЙ ЧЕК</b></p><p><b>ЧЕК ${esc(order.name)}</b></p><table>${items}</table><p class="total">Разом: ${money(order.grand_total)} грн</p><table>${payments}</table>${order.change_amount ? `<p>Решта: ${money(order.change_amount)} грн</p>` : ""}<p class="center muted">Код чека для повернення:<br><b>${esc(order.lookup_token)}</b><br>${esc(data.printed_at)}</p>`;
 	}
-	printHtml(`${order.order_type === "Return" ? "Повернення" : "Чек"} ${order.name}`, body, win);
+	printHtml(`${order.order_type === "Return" ? "Повернення" : "Чек"} ${order.name}`, body, win, Boolean(fiscal));
   }
 
   async function printReceipt() {

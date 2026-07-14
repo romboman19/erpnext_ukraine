@@ -48,9 +48,10 @@ class TestPrintService(unittest.TestCase):
 			"<CASHREGISTERNUM>4000545102</CASHREGISTERNUM></CHECKHEAD>"
 			"<CHECKTOTAL><SUM>450.00</SUM></CHECKTOTAL>"
 			"<CHECKPAY><ROW><PAYFORMCD>0</PAYFORMCD><PAYFORMNM>Cash</PAYFORMNM>"
-			"<SUM>450.00</SUM></ROW></CHECKPAY>"
+			"<SUM>450.00</SUM><PROVIDED>500.00</PROVIDED><REMAINS>50.00</REMAINS></ROW></CHECKPAY>"
 			"<CHECKBODY><ROW><NAME>Ніж</NAME><AMOUNT>1</AMOUNT><PRICE>450.00</PRICE>"
-			"<COST>450.00</COST></ROW></CHECKBODY></CHECK>"
+			"<COST>450.00</COST><TOBACCOQT>20</TOBACCOQT><TOBACCOWEIGHT>0.8</TOBACCOWEIGHT>"
+			"<ALCOVOL>0.7</ALCOVOL><ALCOSTRENGTH>40</ALCOSTRENGTH></ROW></CHECKBODY></CHECK>"
 		)
 		receipt = frappe._dict(
 			{
@@ -87,6 +88,8 @@ class TestPrintService(unittest.TestCase):
 		self.assertIn("ОНЛАЙН".encode("cp1251"), payload)
 		self.assertIn("ФН ПРРО 4000545102".encode("cp1251"), payload)
 		self.assertIn("ГОТІВКА".encode("cp1251"), payload)
+		self.assertIn("ОТРИМАНО".encode("cp1251"), payload)
+		self.assertIn("Виробник ПРРО: HUNTER.rv".encode("cp1251"), payload)
 		self.assertNotIn(b"Cash", payload)
 
 		snapshot = fiscal_snapshot(receipt, include_qr_image=True)
@@ -103,6 +106,61 @@ class TestPrintService(unittest.TestCase):
 		self.assertIn("ФН ПРРО 4000545102", html)
 		self.assertIn("return-token", html)
 		self.assertIn("data:image/svg+xml;base64,", html)
+		self.assertIn("ОТРИМАНО: 500.00 UAH", html)
+		self.assertIn("РЕШТА: 50.00 UAH", html)
+		self.assertIn("Кількість тютюнових виробів в одиниці: 20", html)
+		self.assertIn("Об’єм алкогольного напою: 0.7 л", html)
+		self.assertIn("Виробник ПРРО: HUNTER.rv", html)
+
+	def test_return_uses_fkc2_without_sale_only_totals(self):
+		xml = (
+			'<?xml version="1.0" encoding="windows-1251"?>'
+			"<CHECK><CHECKHEAD><TIN>3184710691</TIN><ORGNM>ФОП Тест</ORGNM>"
+			"<POINTNM>Магазин</POINTNM><POINTADDR>м. Рівне</POINTADDR><CASHIER>Касир</CASHIER>"
+			"<DOCSUBTYPE>1</DOCSUBTYPE><ORDERDATE>14072026</ORDERDATE><ORDERTIME>141500</ORDERTIME>"
+			"<CASHREGISTERNUM>4000545102</CASHREGISTERNUM></CHECKHEAD>"
+			"<CHECKTOTAL><SUM>149.00</SUM><RNDSUM>0.05</RNDSUM></CHECKTOTAL>"
+			"<CHECKPAY><ROW><PAYFORMCD>0</PAYFORMCD><PAYFORMNM>Cash</PAYFORMNM>"
+			"<SUM>149.00</SUM><PROVIDED>200.00</PROVIDED><REMAINS>51.00</REMAINS></ROW></CHECKPAY>"
+			"<CHECKBODY><ROW><NAME>Повернений товар</NAME><AMOUNT>1</AMOUNT><PRICE>149.00</PRICE>"
+			"<COST>149.00</COST></ROW></CHECKBODY></CHECK>"
+		)
+		receipt = frappe._dict(
+			{
+				"name": "PRRO-RETURN-1",
+				"status": "Fiscalized",
+				"fiscal_number": "6000000002",
+				"local_number": 3,
+				"is_offline": 0,
+				"receipt_xml": xml,
+				"total_amount": 149,
+			}
+		)
+		order = frappe._dict(
+			{
+				"name": "POS-RETURN-1",
+				"fiscal_mode": "Fiscal",
+				"prro_receipt": receipt.name,
+				"lookup_token": "return-token",
+			}
+		)
+		printer = frappe._dict({"characters_per_line": 48, "encoding": "cp1251", "code_page": 46})
+		snapshot = fiscal_snapshot(receipt)
+		html = render_browser_fiscal_receipt(snapshot)
+		self.assertIn("<b>СУМА</b>", html)
+		self.assertIn("ВИДАТКОВИЙ ЧЕК", html)
+		self.assertNotIn("ДО СПЛАТИ", html)
+		self.assertNotIn("ОТРИМАНО", html)
+		self.assertNotIn("РЕШТА", html)
+		self.assertNotIn("Заокруглення", html)
+
+		with patch("frappe.get_doc", return_value=receipt):
+			payload = render_order_receipt(order, printer)
+		self.assertIn("СУМА".encode("cp1251"), payload)
+		self.assertIn("ВИДАТКОВИЙ ЧЕК".encode("cp1251"), payload)
+		self.assertNotIn("ДО СПЛАТИ".encode("cp1251"), payload)
+		self.assertNotIn("ОТРИМАНО".encode("cp1251"), payload)
+		self.assertNotIn("РЕШТА".encode("cp1251"), payload)
 
 	def test_render_x_report_contains_shift_totals(self):
 		printer = frappe._dict({"characters_per_line": 48, "encoding": "cp1251", "code_page": 46})
