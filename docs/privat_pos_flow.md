@@ -1,37 +1,32 @@
-# PrivatBank POS production flow
+# Міграція Privat POS до ERPNext Ukraine
 
-```text
-ERPNext → authenticated HTTPS gateway → terminal TCP endpoint
-```
+Інтеграцію фізичних банківських терміналів перенесено з `ukrainian_integrations`
+до модуля `erpnext_ua.ua_pos`. Операція термінала є частиною POS checkout-saga і
+мусить мати спільну ідемпотентність, журнал та recovery-процедуру з касовим продажем.
 
-The ERP application never connects directly to a terminal. `PB POS Settings` defines one explicit gateway protocol (`legacy` or `v1`) and `PB POS Terminal` contains the allowlisted terminal IP/port.
+## Нові компоненти
 
-## Safety guarantees
+- `erpnext_ua/ua_pos/adapters/terminal.py` — контракт `TerminalAdapter`, клієнт
+  `pb-pos-gateway` і реалізація PrivatBank;
+- `erpnext_ua/ua_pos/terminal_service.py` — налаштування та діагностичні API;
+- `PB POS Settings`, `PB POS Terminal` — DocType у модулі UA POS;
+- `POS Payment Attempt`, `Terminal Transaction` — незмінний журнал касових платежів.
 
-- Sales are limited to submitted UAH Sales Invoices and cannot exceed outstanding amount.
-- Every sale, real test payment and refund requires an idempotency key.
-- The request is recorded as `unknown` immediately before the gateway call.
-- No automatic protocol fallback or financial retry is performed.
-- One database lock serializes calls to a terminal within ERPNext.
-- Explicit 4xx/provider declines become `failed`; timeout, 5xx, empty or malformed responses remain `unknown`.
+## Що змінилося в протоколі
 
-An `unknown` result means that the card may have been charged. Check the physical receipt, gateway journal and acquirer report, then resolve the matching `UA Integration Operation`. Never create a new key merely to bypass reconciliation.
+- кожен `sale/refund/void` має стабільний `operation_id`;
+- після timeout каса не повторює `sale`, а виконує тільки `status(operation_id)`;
+- gateway повинен ідемпотентно повертати збережений результат для повторного
+  `operation_id` і підтримувати `/status` та `/void`;
+- legacy `/purchase` і `/refund` отримують `operation_id` у `params`.
 
-## Configuration
+## Оновлення інсталяції
 
-- `PB POS Settings.gateway_url`: HTTPS by default. For a controlled private-network HTTP gateway, set `pb_pos_allow_insecure_http=1` in `site_config.json`.
-- `PB POS Settings.api_key`: Password field.
-- `request_timeout_sec`: 5–180 seconds.
-- `allow_test_operations`: keep off in production except during an approved, supervised acceptance window.
-- Terminal records require a valid IPv4/IPv6 address and TCP port 1–65535.
+1. Оновити обидва застосунки.
+2. Виконати `bench --site <site> migrate`.
+3. Перевірити `PB POS Settings` та переприв'язати `PB POS Terminal` до `POS Cash Desk`.
+4. Оновити `pb-pos-gateway` до версії з idempotency/status/void.
+5. Перевірити connection test, тестову оплату та status lookup.
 
-Settings are authoritative when their DocType exists; a read/decryption error does not fall back to site configuration.
-
-## Acceptance
-
-1. Test connection on every active terminal.
-2. Enable real test operations for a short supervised window.
-3. Run a low-value payment with a unique key and verify ERP, gateway and physical receipt identifiers.
-4. Run a refund against that receipt and verify the acquirer report.
-5. Simulate gateway timeout after submission; verify the operation remains `unknown` and no retry occurs.
-6. Disable real test operations again.
+Python app name `erpnext_ua` не змінюється, тому перейменування GitHub-репозиторію
+не потребує перевстановлення застосунку.

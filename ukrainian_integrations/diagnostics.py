@@ -3,6 +3,9 @@ from __future__ import annotations
 import frappe
 
 REQUIRED_DOCTYPES = (
+    "Customer Birthday Greeting Log",
+    "Customer Identification Request",
+    "Customer Identification Settings",
     "Hunter Integration Log",
     "LiqPay Profile",
     "LiqPay Settings",
@@ -10,8 +13,6 @@ REQUIRED_DOCTYPES = (
     "Monobank Settings",
     "NP Sender Branch Row",
     "NP Sender Profile",
-    "PB POS Settings",
-    "PB POS Terminal",
     "PrivatBank Profile",
     "PrivatBank Settings",
     "RZ Delivery Sender Profile",
@@ -36,10 +37,6 @@ REQUIRED_CUSTOM_FIELDS = {
         "np_status",
         "np_sender_profile",
         "np_last_sync_at",
-        "pb_pos_status",
-        "pb_pos_rrn",
-        "pb_pos_invoice_number",
-        "pb_pos_card_mask",
         "rz_track_id",
         "rz_status_code",
         "rz_status",
@@ -59,10 +56,13 @@ REQUIRED_CUSTOM_FIELDS = {
 }
 
 SECRET_FIELDS = {
+    "Customer Identification Settings": (
+        "telegram_bot_token",
+        "telegram_webhook_secret",
+    ),
     "LiqPay Profile": ("private_key",),
     "Monobank Profile": ("token",),
     "NP Sender Profile": ("api_key",),
-    "PB POS Settings": ("api_key",),
     "PrivatBank Profile": ("token",),
     "RZ Delivery Sender Profile": ("api_token",),
     "TurboSMS Settings": ("token",),
@@ -100,6 +100,8 @@ def run_installation_checks(*, raise_on_error: bool = True) -> dict:
     for doctype, fieldname in (
         ("Bank Transaction", "ua_integration_key"),
         ("Customer", "ua_external_customer_key"),
+        ("Customer Birthday Greeting Log", "unique_key"),
+        ("Customer Identification Request", "request_token"),
         ("Sales Order", "ua_external_order_key"),
         ("Sales Invoice", "rz_track_id"),
         ("UA Integration Operation", "idempotency_key"),

@@ -250,8 +250,26 @@ def webhook_event():
     popup_payload = {'call_id': call_id, 'direction': doc.direction, 'status': doc.status, 'from_number': doc.from_number, 'to_number': doc.to_number, 'extension': doc.extension, 'call_log': doc.name}
     _publish_popup(popup_payload, doc.extension)
 
+    identification_request = None
+    if direction == 'inbound':
+        try:
+            from ukrainian_integrations.customer_identification.service import confirm_inbound_call
+
+            identification_request = confirm_inbound_call(from_no, call_id, status, duration)
+        except Exception:
+            frappe.logger('ukrainian_integrations').warning(
+                'Inbound-call customer identification could not be updated',
+                exc_info=True,
+            )
+
     log_event('vitalpbx', 'success', f'Webhook {status} call_id:{call_id}', request_payload={'call_id': call_id, 'direction': direction, 'status': status, 'extension': extension})
-    return {'ok': True, 'call_id': call_id, 'call_log': doc.name, 'status': doc.status}
+    return {
+        'ok': True,
+        'call_id': call_id,
+        'call_log': doc.name,
+        'status': doc.status,
+        'customer_identification_request': identification_request,
+    }
 
 
 @frappe.whitelist()

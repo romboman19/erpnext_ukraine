@@ -2,6 +2,9 @@
 
 ## 0.3.0
 
+- Merged the current customer-identification/POS-support line and retained its newer customer workflows.
+- Hardened SMS, Telegram and inbound-call verification with explicit roles, PII gating, rate limits, row locks, replay-safe messaging and fail-closed webhook secrets.
+- Kept PrivatBank terminal checkout in `erpnext_ua.ua_pos` instead of reintroducing the removed legacy implementation.
 - Added production-oriented Rozetka Delivery integration against the official RZ-Delivery OpenAPI contract.
 - Added static-token sender profiles, Company isolation, sender city/department selection and HTTPS host allowlisting.
 - Added department-to-department Sales Invoice and manager-only standalone track creation with weight/dimensions, payer, insured value and COD validation.
@@ -17,7 +20,7 @@
 - Added missing Settings/Profile/Terminal/Sender/Log DocTypes and idempotent custom-field migration.
 - Added exact unique bank transaction keys, profile/company validation and reliable pagination.
 - Upgraded new LiqPay checkout signatures to API v7/SHA3-256 while retaining v3 callback migration compatibility; hardened callback concurrency, reversal handling, state transitions, amount/currency/action checks and optional reconciliation.
-- Removed automatic POS protocol retries/fallback; added UAH/outstanding checks and terminal locking.
+- Removed the legacy PB POS implementation after its migration to `erpnext_ua.ua_pos`.
 - Added shipment/SMS/call idempotency and unknown-outcome handling.
 - Bound Nova Poshta labels to authorized operations and removed API-key prefix diagnostics.
 - Corrected Prom.ua `last_id` pagination and external-ID stock update contract.

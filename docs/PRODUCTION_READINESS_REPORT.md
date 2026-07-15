@@ -17,22 +17,22 @@ Deployment readiness for a specific company: **NO-GO until every applicable item
 
 | # | Area | Result | Evidence |
 |---|---|---|---|
-| 1 | Clean install and schema | Pass | Frappe 16.25.0 / ERPNext 16.26.2 upgrade migration on two isolated sites and diagnostics; 19 required DocTypes found |
-| 2 | Authorization | Pass | Every authenticated whitelisted method has an explicit role check; only two signed/secret-protected guest webhooks remain |
+| 1 | Clean install and schema | Pass | Frappe 16.25.0 / ERPNext 16.26.2 upgrade migration and diagnostics; 20 required DocTypes found |
+| 2 | Authorization | Pass | Every authenticated whitelisted method has an explicit role check; only three signed/secret-protected guest webhooks remain |
 | 3 | Secrets and network boundaries | Pass | Password fields, recursive log redaction, HTTPS validation, provider host allowlists and bounded webhook bodies |
 | 4 | Idempotency and concurrency | Pass | Durable unique operation ledger, immutable request hashes, row locks/unique-key race recovery and no blind side-effect retry |
-| 5 | Financial correctness | Pass | Positive outstanding checks, UAH/company/account validation, exact bank keys, explicit gateway approval, LiqPay v7 signatures and safe reversal reconciliation |
+| 5 | Financial correctness | Pass | Positive outstanding checks, UAH/company/account validation, exact bank keys, LiqPay v7 signatures and safe reversal reconciliation |
 | 6 | Provider failure handling | Pass | Timeouts and ambiguous responses become `unknown`; explicit 4xx/business rejections become `failed`; scheduler failures surface as failed jobs |
 | 7 | Data integrity and migration | Pass | Idempotent custom-field migration, unique integration keys, fail-closed profile validation and safe legacy backfill |
 | 8 | Operations | Pass | Sanitized bounded logs, retention jobs, diagnostics, monitoring/reconciliation runbook and rollback procedure |
-| 9 | Automated quality | Pass | 50 local and 50 native Frappe unit/contract tests; Ruff, compile, Node 24 syntax, Bandit and dependency audit all pass; live read-only Rozetka city/department smoke test passed through the shipped client |
+| 9 | Automated quality | Pass | 48 local and 48 native Frappe unit/contract tests; Ruff, compile, Node 24 syntax, Bandit and dependency audit all pass; live read-only Rozetka city/department smoke test passed through the shipped client |
 | 10 | CI, packaging and documentation | Pass | `bench build`, wheel and sdist pass; wheel contents include Frappe discovery, Rozetka modules/DocType/assets; CI repeats clean ERPNext v16 migration/tests/build/audit; runbook, migration and provider acceptance docs included |
 
 ## Important behavior now enforced
 
 - Financial, shipment, SMS and PBX mutations require idempotency keys.
 - A timeout never triggers an automatic financial or external side-effect retry.
-- Paid invoices cannot start LiqPay or POS payment flows.
+- Paid invoices cannot start new LiqPay payment flows.
 - New LiqPay checkouts use API v7/SHA3-256; signed v3 callbacks remain supported for migration. A reversal after success requires manual accounting reconciliation and never auto-cancels a submitted Payment Entry.
 - Bank imports use exact unique provider-account/transaction keys and reject account-company/currency mismatches.
 - Prom.ua imports are all-or-nothing per order and paginate with `last_id`; stock updates use product `external_id` and verify all processed IDs.
@@ -40,6 +40,8 @@ Deployment readiness for a specific company: **NO-GO until every applicable item
 - Ukrposhta weight conversion and return enums match the current contract; dynamic URL path identifiers are validated/encoded.
 - Rozetka Delivery follows the official create/status/label/directory DTOs, persists unique track IDs, protects mutations with durable idempotency and authorizes PDF labels by invoice/operation.
 - TurboSMS and VitalPBX require explicit provider acceptance signals; message bodies are redacted by default and call states cannot regress.
+- Customer-identification endpoints enforce POS/Sales roles, hide PII until verification, fail closed on Telegram secrets and preserve ambiguous message outcomes without automatic resend.
+- PrivatBank terminal checkout remains in `erpnext_ua.ua_pos`; the removed legacy implementation is not reintroduced by this release.
 
 ## Required deployment evidence
 

@@ -54,9 +54,17 @@ Complete only the sections used by the deployment. Record date, operator, enviro
 - [ ] A paid invoice/partial prior reconciliation does not overbook automatically.
 - [ ] A `reversed` callback after success is accepted, changes the operation to `unknown`, and raises a manual accounting-reconciliation signal without auto-cancelling entries.
 
-## PB POS
+## PB POS (`erpnext_ua.ua_pos`)
 
 - [ ] Complete the supervised sequence in `docs/privat_pos_flow.md`.
+
+## Customer identification
+
+- [ ] Confirm unauthenticated users cannot call Desk identification APIs or retrieve customer PII.
+- [ ] Confirm the same pending SMS request is reused and does not send a second message after an ambiguous timeout.
+- [ ] Confirm Telegram rejects missing/wrong webhook secrets and accepts the configured secret.
+- [ ] Verify customer data is returned only after SMS, Telegram or inbound-call verification succeeds.
+- [ ] Simulate an ambiguous Telegram birthday send and confirm the `Unknown` log is not retried automatically.
 
 ## TurboSMS
 

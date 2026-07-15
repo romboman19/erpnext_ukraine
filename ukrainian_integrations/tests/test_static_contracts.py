@@ -17,7 +17,7 @@ class ProductionStaticContractsTest(unittest.TestCase):
             json.loads(path.read_text(encoding="utf-8"))
 
     def test_whitelisted_methods_are_explicitly_authorized(self):
-        guest_allowlist = {"liqpay_callback", "webhook_event"}
+        guest_allowlist = {"liqpay_callback", "webhook", "webhook_event"}
         missing = []
         unexpected_guest = []
         for path in PACKAGE.rglob("*.py"):
@@ -52,13 +52,10 @@ class ProductionStaticContractsTest(unittest.TestCase):
                 offenders.append(str(path.relative_to(ROOT)))
         self.assertEqual(offenders, [])
 
-    def test_paid_invoices_cannot_start_a_new_payment(self):
+    def test_paid_invoices_cannot_start_a_new_liqpay_payment(self):
         liqpay = (PACKAGE / "payments" / "liqpay" / "service.py").read_text(encoding="utf-8")
-        pos = (PACKAGE / "payments" / "privat_pos" / "service.py").read_text(encoding="utf-8")
         self.assertIn("Sales Invoice has no positive outstanding amount", liqpay)
-        self.assertIn("Sales Invoice has no positive outstanding amount", pos)
         self.assertNotIn("si.outstanding_amount or si.grand_total", liqpay)
-        self.assertNotIn("si.outstanding_amount or si.grand_total", pos)
 
     def test_liqpay_defaults_to_v7_and_keeps_explicit_v3_callback_compatibility(self):
         client = (PACKAGE / "payments" / "liqpay" / "client.py").read_text(encoding="utf-8")
@@ -74,14 +71,15 @@ class ProductionStaticContractsTest(unittest.TestCase):
 
     def test_required_production_doctypes_are_shipped(self):
         required = {
+            "Customer Birthday Greeting Log",
+            "Customer Identification Request",
+            "Customer Identification Settings",
             "NP Sender Profile",
             "NP Sender Branch Row",
             "UP Sender Profile",
             "TurboSMS Settings",
             "TurboSMS Sender",
             "TurboSMS Log",
-            "PB POS Settings",
-            "PB POS Terminal",
             "RZ Delivery Sender Profile",
             "UA Integration Operation",
         }
@@ -93,9 +91,6 @@ class ProductionStaticContractsTest(unittest.TestCase):
     def test_external_mutations_require_idempotency_keys(self):
         required = {
             "liqpay_initiate",
-            "pb_pos_sale",
-            "pb_pos_test_payment",
-            "pb_pos_test_refund",
             "send_sms",
             "send_sms_from_settings",
             "send_sms_to_customer",
@@ -201,6 +196,25 @@ class ProductionStaticContractsTest(unittest.TestCase):
         self.assertIn('@frappe.whitelist(methods=["POST"])', service)
         self.assertIn('"rozetka_delivery"', operations)
         self.assertIn('"api_token"', logger)
+
+    def test_customer_identification_is_authorized_and_does_not_disclose_pii_early(self):
+        service = (PACKAGE / "customer_identification" / "service.py").read_text(
+            encoding="utf-8"
+        )
+        telegram = (PACKAGE / "customer_identification" / "telegram.py").read_text(
+            encoding="utf-8"
+        )
+        birthday = (PACKAGE / "customer_identification" / "birthday.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("IDENTIFICATION_ROLES", service)
+        self.assertIn('if doc.status == "Verified" else None', service)
+        self.assertIn('idempotency_key=sms_key', service)
+        self.assertIn("SELECT name FROM `tabCustomer Identification Request`", service)
+        self.assertIn("telegram_webhook_secret", telegram)
+        self.assertIn("secrets_equal", telegram)
+        self.assertIn("allow_redirects=False", telegram)
+        self.assertIn('log.status = "Unknown"', birthday)
 
     def test_sensitive_logs_have_partition_or_manager_only_access(self):
         hooks = (PACKAGE / "hooks.py").read_text(encoding="utf-8")

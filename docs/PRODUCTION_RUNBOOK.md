@@ -47,9 +47,10 @@ The scheduler polls non-terminal Sales Invoice tracks every 30 minutes. A provid
 - LiqPay must call the documented callback URL over HTTPS.
 - New LiqPay checkouts default to API v7/SHA3-256. The callback verifier also accepts signed v3 payloads so checkouts issued immediately before an upgrade can finish safely; do not force `liqpay_api_version=3` except for a time-bounded rollback.
 - VitalPBX must send `X-Webhook-Key`; use a random 32+ byte secret and, where possible, an IP allowlist at the proxy.
+- Telegram must send `X-Telegram-Bot-Api-Secret-Token`; the endpoint rejects requests when the configured secret is absent.
 - Restrict outbound egress to official provider endpoints and explicitly approved gateway/sandbox hosts.
 - Allow Rozetka Delivery traffic only to `rz-delivery.rozetka.ua` unless a controlled sandbox host is explicitly listed in `rozetka_delivery_allowed_api_hosts`.
-- Keep `vitalpbx_allow_query_key`, `vitalpbx_allow_insecure_recording_url`, `vitalpbx_verify_ssl=0` and `pb_pos_allow_insecure_http` disabled unless a documented private-network exception exists.
+- Keep `vitalpbx_allow_query_key`, `vitalpbx_allow_insecure_recording_url` and `vitalpbx_verify_ssl=0` disabled unless a documented private-network exception exists.
 
 ## Reconciliation
 

@@ -1,0 +1,25 @@
+{
+ "doctype": "DocType",
+ "name": "Customer Birthday Greeting Log",
+ "module": "Ukrainian Integrations",
+ "autoname": "BDAY-MSG-.YYYY.-.#####",
+ "field_order": ["customer", "greeting_year", "channel", "sent_at", "status", "response", "error", "unique_key"],
+ "fields": [
+  {"fieldname": "customer", "fieldtype": "Link", "label": "Покупець", "options": "Customer", "reqd": 1, "read_only": 1},
+  {"fieldname": "greeting_year", "fieldtype": "Int", "label": "Рік привітання", "reqd": 1, "read_only": 1},
+  {"fieldname": "channel", "fieldtype": "Select", "label": "Канал", "options": "SMS\nTelegram", "reqd": 1, "read_only": 1},
+  {"fieldname": "sent_at", "fieldtype": "Datetime", "label": "Надіслано", "read_only": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Статус", "options": "Pending\nSent\nFailed\nUnknown", "default": "Pending", "reqd": 1, "read_only": 1},
+  {"fieldname": "response", "fieldtype": "Code", "label": "Відповідь сервісу", "read_only": 1},
+  {"fieldname": "error", "fieldtype": "Small Text", "label": "Помилка", "read_only": 1},
+  {"fieldname": "unique_key", "fieldtype": "Data", "label": "Unique Key", "unique": 1, "reqd": 1, "read_only": 1}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1},
+  {"role": "POS Manager", "read": 1},
+  {"role": "POS Administrator", "read": 1}
+ ],
+ "engine": "InnoDB",
+ "sort_field": "sent_at",
+ "sort_order": "DESC"
+}

@@ -27,10 +27,12 @@ Migration 0.3.0 adds `RZ Delivery Sender Profile` and unique Rozetka Delivery fi
 - [ ] Populate and enable explicit NP/UP sender profiles.
 - [ ] Populate `RZ Delivery Sender Profile`, select sender city/department, verify the static token and assign Company where applicable.
 - [ ] Populate Monobank, PrivatBank and LiqPay profile rows; verify Company/Bank Account ownership.
-- [ ] Populate PB POS and TurboSMS Settings; do not rely on legacy fallback after the DocType exists.
+- [ ] Populate TurboSMS Settings; do not rely on legacy fallback after the DocType exists.
+- [ ] Configure `Customer Identification Settings`; Telegram must have both a bot token and webhook secret.
+- [ ] If `erpnext_ua.ua_pos` is deployed, complete the separate PB POS migration in `docs/privat_pos_flow.md`.
 - [ ] Set `User.vitalpbx_extension` and rotate the VitalPBX webhook key.
 - [ ] Configure all required Prom.ua keys, including `prom_ua_company` and warehouse allowlist.
-- [ ] Keep sandbox callbacks and real POS test operations disabled in production.
+- [ ] Keep sandbox callbacks and customer-identification test mode disabled in production.
 - [ ] Confirm new LiqPay checkout payloads use API v7; do not set `liqpay_api_version=3` except for a time-bounded rollback (old v3 callbacks remain verifiable automatically).
 
 ## Validate before schedulers

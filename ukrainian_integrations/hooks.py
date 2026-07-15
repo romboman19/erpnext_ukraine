@@ -1,7 +1,7 @@
 app_name = "ukrainian_integrations"
-app_title = "Ukrainian Integrations"
+app_title = "ERPNext Ukraine Integrations"
 app_publisher = "HUNTER.rv"
-app_description = "UA shipment, payments, PBX/SMS and ecommerce integrations for ERPNext"
+app_description = "External connectors for ERPNext Ukraine: delivery, banks, online payments, marketplaces, PBX and SMS"
 app_email = "it@hunter.rv.ua"
 app_license = "MIT"
 required_apps = ["erpnext"]
@@ -24,7 +24,6 @@ doctype_js = {
     "Monobank Settings": "public/js/monobank_settings_actions.js",
     "PrivatBank Settings": "public/js/privatbank_settings_actions.js",
     "LiqPay Settings": "public/js/liqpay_settings_actions.js",
-    "PB POS Terminal": "public/js/pb_pos_terminal_actions.js",
 }
 
 scheduler_events = {
@@ -37,12 +36,14 @@ scheduler_events = {
         ],
         "*/10 * * * *": [
             "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_orders",
+            "ukrainian_integrations.customer_identification.service.expire_pending",
         ],
         "*/20 * * * *": [
             "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_stock",
         ],
     },
     "daily": [
+        "ukrainian_integrations.customer_identification.birthday.send_scheduled_greetings",
         "ukrainian_integrations.utils.logger.purge_old_logs",
     ],
 }

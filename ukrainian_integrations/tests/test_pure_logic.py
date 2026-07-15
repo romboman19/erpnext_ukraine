@@ -21,12 +21,14 @@ except ModuleNotFoundError:
     frappe.db = types.SimpleNamespace(exists=lambda *args, **kwargs: False)
     sys.modules["frappe"] = frappe
 
+from ukrainian_integrations.customer_identification.telegram import (
+    TelegramAPIError,
+    _telegram,
+)
 from ukrainian_integrations.ecommerce.providers.prom_ua.api import PromUAClient
 from ukrainian_integrations.ecommerce.providers.prom_ua.service import _order_item_rows
 from ukrainian_integrations.payments.liqpay.client import LiqPayClient
 from ukrainian_integrations.payments.monobank.client import MonobankClient
-from ukrainian_integrations.payments.privat_pos.gateway_client import PrivatPOSGatewayClient
-from ukrainian_integrations.payments.privat_pos.service import GatewayAmbiguousError, _assert_gateway_ok
 from ukrainian_integrations.payments.privatbank.service import _normalize_amount, _pagination_state
 from ukrainian_integrations.pbx_sms.sms.turbosms import classify_send_response, successful_message_ids
 from ukrainian_integrations.pbx_sms.vitalpbx.events import is_status_transition_allowed
@@ -62,10 +64,15 @@ class PureLogicTest(unittest.TestCase):
         )
 
     def test_traceback_and_url_secrets_are_redacted(self):
-        raw = 'GET https://example.test/path?token=abc123&x=1 Authorization: Bearer secret-value'
+        raw = (
+            "GET https://example.test/path?token=abc123&x=1 "
+            "Authorization: Bearer secret-value "
+            "https://api.telegram.org/bot123456:telegram-secret/sendMessage"
+        )
         sanitized = sanitize_text(raw)
         self.assertNotIn("abc123", sanitized)
         self.assertNotIn("secret-value", sanitized)
+        self.assertNotIn("telegram-secret", sanitized)
 
     def test_canonical_hash_is_order_independent(self):
         self.assertEqual(canonical_hash({"a": 1, "b": 2}), canonical_hash({"b": 2, "a": 1}))
@@ -205,6 +212,31 @@ class PureLogicTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             _assert_call_accepted({"message": "received"})
 
+    @patch("ukrainian_integrations.customer_identification.telegram._settings")
+    @patch("ukrainian_integrations.customer_identification.telegram.requests.post")
+    def test_telegram_client_rejects_redirects_and_bounds_requests(self, post, settings):
+        settings.return_value.get_password.return_value = "token"
+        raw = b'{"ok":true,"result":{"message_id":1}}'
+        response = Mock(status_code=200, headers={"Content-Length": str(len(raw))})
+        response.iter_content.return_value = [raw]
+        post.return_value = response
+        self.assertTrue(_telegram("sendMessage", {"chat_id": "1", "text": "test"})["ok"])
+        self.assertFalse(post.call_args.kwargs["allow_redirects"])
+        self.assertTrue(post.call_args.kwargs["stream"])
+        self.assertEqual(post.call_args.kwargs["timeout"], (10, 20))
+
+    @patch("ukrainian_integrations.customer_identification.telegram._settings")
+    @patch("ukrainian_integrations.customer_identification.telegram.requests.post")
+    def test_telegram_server_error_is_ambiguous(self, post, settings):
+        settings.return_value.get_password.return_value = "token"
+        raw = b'{"ok":false}'
+        response = Mock(status_code=503, headers={"Content-Length": str(len(raw))})
+        response.iter_content.return_value = [raw]
+        post.return_value = response
+        with self.assertRaises(TelegramAPIError) as raised:
+            _telegram("sendMessage", {"chat_id": "1", "text": "test"})
+        self.assertFalse(raised.exception.definite)
+
     def test_ukrposhta_ui_weight_is_converted_from_kg_to_grams(self):
         values = _shipment_parameters({"weight": 1.25}, default_declared_value=100)
         self.assertEqual(values["weight"], 1250)
@@ -327,47 +359,6 @@ class PureLogicTest(unittest.TestCase):
         ambiguous = requests.HTTPError("503", response=ambiguous_response)
         self.assertTrue(_rz_explicit_rejection(rejected))
         self.assertFalse(_rz_explicit_rejection(ambiguous))
-
-    @patch("ukrainian_integrations.payments.privat_pos.gateway_client.requests.post")
-    def test_pos_legacy_sale_is_never_retried(self, post):
-        response = Mock(status_code=200, text='{"responseCode":"0000"}')
-        response.json.return_value = {"responseCode": "0000"}
-        post.return_value = response
-        client = PrivatPOSGatewayClient("https://gateway.example", "key", protocol="legacy")
-        client.sale("10.0.0.10", 1.25, "op-1")
-        self.assertEqual(post.call_count, 1)
-
-    @patch("ukrainian_integrations.payments.privat_pos.gateway_client.requests.post")
-    def test_pos_timeout_is_not_retried_or_fallbacked(self, post):
-        post.side_effect = requests.Timeout("lost response")
-        client = PrivatPOSGatewayClient("https://gateway.example", "key", protocol="legacy")
-        with self.assertRaises(requests.Timeout):
-            client.sale("10.0.0.10", 1.25, "op-1")
-        self.assertEqual(post.call_count, 1)
-
-    @patch("ukrainian_integrations.payments.privat_pos.gateway_client.requests.post")
-    def test_pos_empty_success_response_is_ambiguous(self, post):
-        response = Mock(status_code=200, text="")
-        response.json.return_value = {}
-        post.return_value = response
-        client = PrivatPOSGatewayClient("https://gateway.example", "key", protocol="legacy")
-        self.assertEqual(client.sale("10.0.0.10", 1.25, "op-1"), {})
-
-    def test_pos_requires_explicit_gateway_approval(self):
-        with self.assertRaises(GatewayAmbiguousError):
-            _assert_gateway_ok({"message": "request accepted"}, "Sale")
-        _assert_gateway_ok({"responseCode": "0000"}, "Sale")
-
-    @patch("ukrainian_integrations.payments.privat_pos.gateway_client.requests.post")
-    def test_pos_legacy_server_error_is_ambiguous(self, post):
-        response = Mock(status_code=503, text='{"error":true}')
-        response.raise_for_status.side_effect = requests.HTTPError("503")
-        post.return_value = response
-        client = PrivatPOSGatewayClient("https://gateway.example", "key", protocol="legacy")
-        with self.assertRaises(requests.HTTPError):
-            client.sale("10.0.0.10", 1.25, "op-1")
-        self.assertEqual(post.call_count, 1)
-
 
 if __name__ == "__main__":
     unittest.main()

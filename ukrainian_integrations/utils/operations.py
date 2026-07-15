@@ -12,7 +12,7 @@ from ukrainian_integrations.utils.logger import sanitize_payload, sanitize_text
 from ukrainian_integrations.utils.security import ACCOUNTS_MANAGER_ROLES, SALES_MANAGER_ROLES, require_roles
 
 DOCTYPE = "UA Integration Operation"
-FINANCIAL_INTEGRATIONS = frozenset({"liqpay", "privat_pos", "monobank", "privatbank"})
+FINANCIAL_INTEGRATIONS = frozenset({"liqpay", "monobank", "privatbank"})
 SALES_INTEGRATIONS = frozenset(
     {"nova_poshta", "ukrposhta", "rozetka_delivery", "turbosms", "prom_ua", "vitalpbx"}
 )

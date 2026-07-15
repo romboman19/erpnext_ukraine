@@ -1,0 +1,36 @@
+{
+ "doctype": "DocType",
+ "name": "Customer Identification Settings",
+ "module": "Ukrainian Integrations",
+ "issingle": 1,
+ "field_order": [
+  "enabled", "ttl_minutes", "max_attempts", "rate_limit_per_10_min", "test_mode", "test_code",
+  "sms_section", "sms_enabled", "sms_sender", "sms_template",
+  "telegram_section", "telegram_enabled", "telegram_bot_username", "telegram_bot_token", "telegram_webhook_secret",
+  "call_section", "call_enabled", "call_verification_number"
+ ],
+ "fields": [
+  {"fieldname": "enabled", "fieldtype": "Check", "label": "Увімкнено", "default": "0"},
+  {"fieldname": "ttl_minutes", "fieldtype": "Int", "label": "Строк дії запиту (хв)", "default": "5", "reqd": 1},
+  {"fieldname": "max_attempts", "fieldtype": "Int", "label": "Максимум спроб коду", "default": "5", "reqd": 1},
+  {"fieldname": "rate_limit_per_10_min", "fieldtype": "Int", "label": "Запитів на номер за 10 хв", "default": "5", "reqd": 1},
+  {"fieldname": "test_mode", "fieldtype": "Check", "label": "Тестовий режим", "default": "0", "description": "SMS не надсилається; код повертається лише System Manager."},
+  {"fieldname": "test_code", "fieldtype": "Data", "label": "Довідка", "hidden": 1},
+  {"fieldname": "sms_section", "fieldtype": "Section Break", "label": "SMS · TurboSMS"},
+  {"fieldname": "sms_enabled", "fieldtype": "Check", "label": "Дозволити SMS", "default": "1"},
+  {"fieldname": "sms_sender", "fieldtype": "Data", "label": "Відправник SMS"},
+  {"fieldname": "sms_template", "fieldtype": "Small Text", "label": "Шаблон SMS", "default": "Код підтвердження: {code}. Дійсний {minutes} хв."},
+  {"fieldname": "telegram_section", "fieldtype": "Section Break", "label": "Telegram bot"},
+  {"fieldname": "telegram_enabled", "fieldtype": "Check", "label": "Дозволити Telegram", "default": "0"},
+  {"fieldname": "telegram_bot_username", "fieldtype": "Data", "label": "Bot username"},
+  {"fieldname": "telegram_bot_token", "fieldtype": "Password", "label": "Bot token"},
+  {"fieldname": "telegram_webhook_secret", "fieldtype": "Password", "label": "Webhook secret"},
+  {"fieldname": "call_section", "fieldtype": "Section Break", "label": "Контрольний дзвінок · VitalPBX"},
+  {"fieldname": "call_enabled", "fieldtype": "Check", "label": "Дозволити дзвінок", "default": "0"},
+  {"fieldname": "call_verification_number", "fieldtype": "Data", "label": "Номер для контрольного дзвінка"}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1}
+ ],
+ "engine": "InnoDB"
+}

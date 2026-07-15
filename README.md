@@ -19,14 +19,16 @@ The repository is validated by static analysis, unit/contract tests, package bui
 - Rozetka Delivery: static-token sender profiles, city/department lookup, department-to-department shipment creation, COD, tracking and PDF labels.
 - Monobank and PrivatBank Autoclient: paginated statement import into `Bank Transaction`.
 - LiqPay: deterministic checkout initiation, signed callbacks and optional Payment Entry reconciliation.
-- PrivatBank POS: gateway-backed sales, controlled real test payments/refunds and per-terminal locking.
 - VitalPBX: click-to-call, authenticated event webhook, extension-scoped call logs and realtime popups.
 - TurboSMS: sender allowlist, idempotent send API and delivery request logging.
 - Prom.ua: `last_id` order pagination and stock updates by product `external_id`.
+- Customer identification: SMS, Telegram and inbound-call verification with rate limits, PII gating and birthday messaging.
+
+PrivatBank terminal checkout is owned by `erpnext_ua.ua_pos`; this app keeps only the migration guide and external connectors.
 
 ## Safety model
 
-Every externally mutating public method requires an `idempotency_key`. A key is bound to an immutable request hash. Reusing it with different parameters is rejected. A timeout or malformed response is recorded as `unknown`; the application does not blindly retry financial, shipment, SMS, or call side effects.
+Externally mutating provider calls use immutable idempotency keys or a durable business key. Reusing a key with different parameters is rejected. A timeout or malformed response is recorded as `unknown`; the application does not blindly retry financial, shipment, SMS, messaging, or call side effects.
 
 Use `UA Integration Operation` to inspect ambiguous operations. Accounting managers can access only payment/bank operations; sales managers can access only logistics, marketplace, SMS and PBX operations. Manual resolution is available through `ukrainian_integrations.utils.operations.resolve_operation` and must follow provider-side reconciliation.
 
@@ -60,9 +62,9 @@ Prefer the Settings/Profile DocTypes in Desk. When those DocTypes contain config
 | Monobank | `Monobank Settings` → enabled profiles with token, provider account, ERP Bank Account and Company |
 | PrivatBank | `PrivatBank Settings` → profiles; API host defaults to `acp.privatbank.ua` |
 | LiqPay | `LiqPay Settings` → profiles; API v7/SHA3-256 is the default; keep `Accept Sandbox Callbacks` off in production |
-| PB POS | `PB POS Settings` and active `PB POS Terminal` rows; keep real test operations off |
 | VitalPBX | `VitalPBX Settings`, unique webhook key, and `User.vitalpbx_extension` |
 | TurboSMS | `TurboSMS Settings` with official API URL, token and active sender rows |
+| Customer identification | `Customer Identification Settings`; Telegram requires bot token plus webhook secret |
 | Prom.ua | `site_config.json`; see the runbook for the complete key list |
 
 Custom non-production provider hosts must be explicitly allowlisted in `site_config.json`:
@@ -101,6 +103,15 @@ X-Webhook-Key: <random-secret>
 
 Query-string secrets are disabled by default. If legacy infrastructure temporarily requires them, set `vitalpbx_allow_query_key=1` and plan a migration to the header.
 
+Telegram customer-identification webhook:
+
+```text
+/api/method/ukrainian_integrations.customer_identification.telegram.webhook
+X-Telegram-Bot-Api-Secret-Token: <random-secret>
+```
+
+The Telegram endpoint fails closed when the secret is absent and bounds request/response bodies.
+
 ## Verification
 
 ```bash
@@ -122,7 +133,7 @@ CI repeats these gates and installs/migrates the app on a clean ERPNext v16 site
 - Follow [Production runbook](docs/PRODUCTION_RUNBOOK.md) for backup, deployment, monitoring, reconciliation and rollback.
 - Follow [Provider acceptance](docs/PROVIDER_ACCEPTANCE.md) before enabling any scheduler or live side effect.
 - See [Rozetka Delivery setup](docs/ROZETKA_DELIVERY.md) for profile configuration, workflow and acceptance steps.
-- See [Privat POS flow](docs/privat_pos_flow.md) for gateway-specific behavior.
+- See [Privat POS migration](docs/privat_pos_flow.md) for the move to `erpnext_ua.ua_pos`.
 - Security reporting and supported versions are in [SECURITY.md](SECURITY.md).
 - Release history is in [CHANGELOG.md](CHANGELOG.md).
 
