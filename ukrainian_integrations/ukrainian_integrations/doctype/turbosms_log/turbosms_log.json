@@ -2,7 +2,7 @@
   "doctype": "DocType",
   "name": "TurboSMS Log",
   "module": "Ukrainian Integrations",
-  "autoname": "autoincrement",
+  "autoname": "hash",
   "engine": "InnoDB",
   "fields": [
     {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "queued\nsuccess\nerror", "reqd": 1, "search_index": 1, "in_list_view": 1},

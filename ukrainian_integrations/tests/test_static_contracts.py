@@ -88,6 +88,17 @@ class ProductionStaticContractsTest(unittest.TestCase):
             found.add(json.loads(path.read_text(encoding="utf-8"))["name"])
         self.assertTrue(required.issubset(found), required - found)
 
+    def test_turbosms_log_keeps_upgrade_safe_hash_names(self):
+        path = (
+            PACKAGE
+            / "ukrainian_integrations"
+            / "doctype"
+            / "turbosms_log"
+            / "turbosms_log.json"
+        )
+        definition = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(definition.get("autoname"), "hash")
+
     def test_external_mutations_require_idempotency_keys(self):
         required = {
             "liqpay_initiate",
