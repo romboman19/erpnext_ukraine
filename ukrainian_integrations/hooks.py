@@ -37,8 +37,17 @@ doctype_js = {
     "LiqPay Settings": "public/js/liqpay_settings_actions.js",
 }
 
+override_doctype_class = {
+    "System Health Report": (
+        "ukrainian_integrations.monitoring.system_health.ContainerAwareSystemHealthReport"
+    ),
+}
+
 scheduler_events = {
     "cron": {
+        "* * * * *": [
+            "ukrainian_integrations.monitoring.system_health.update_scheduler_heartbeat",
+        ],
         "*/30 * * * *": [
             "ukrainian_integrations.shipment.nova_poshta.scheduler.sync_ttn_statuses",
             "ukrainian_integrations.shipment.ukr_poshta.scheduler.sync_ttn_statuses",

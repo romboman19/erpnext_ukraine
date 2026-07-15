@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2
+
+- Added complete Ukrainian labels for the Frappe v16 System Health Report and its child tables.
+- Corrected Docker false negatives for live RQ workers that do not persist a PID.
+- Added a shared Redis scheduler heartbeat so the report can distinguish an isolated container filesystem from a stopped scheduler.
+
 ## 0.3.0
 
 - Merged the current customer-identification/POS-support line and retained its newer customer workflows.

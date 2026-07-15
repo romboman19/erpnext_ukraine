@@ -194,9 +194,15 @@ class ProductionStaticContractsTest(unittest.TestCase):
         with translations.open(encoding="utf-8", newline="") as handle:
             rows = list(csv.reader(handle))
         translation_map = {row[0]: row[1] for row in rows}
-        self.assertGreaterEqual(len(translation_map), 350)
+        self.assertEqual(len(rows), len(translation_map))
+        self.assertGreaterEqual(len(translation_map), 420)
         self.assertEqual(translation_map["Ukrainian Integrations"], "Українські інтеграції")
         self.assertEqual(translation_map["Delivery"], "Доставка")
+        self.assertEqual(translation_map["System Health Report"], "Звіт про стан системи")
+        self.assertEqual(translation_map["Background Workers"], "Фонові обробники")
+        self.assertEqual(translation_map["Scheduler Status"], "Стан планувальника")
+        self.assertEqual(translation_map["Binary Logging"], "Бінарне журналювання")
+        self.assertEqual(translation_map["Failure Rate"], "Частка помилок")
         for source, translated, *_ in rows:
             self.assertTrue(source)
             self.assertTrue(translated)
@@ -204,6 +210,17 @@ class ProductionStaticContractsTest(unittest.TestCase):
                 set(re.findall(r"\{[^}]+\}", source)),
                 set(re.findall(r"\{[^}]+\}", translated)),
             )
+
+    def test_system_health_report_is_container_aware(self):
+        hooks = (PACKAGE / "hooks.py").read_text(encoding="utf-8")
+        monitoring = (PACKAGE / "monitoring" / "system_health.py").read_text(encoding="utf-8")
+        self.assertIn('"System Health Report"', hooks)
+        self.assertIn("ContainerAwareSystemHealthReport", hooks)
+        self.assertIn('"* * * * *"', hooks)
+        self.assertIn("update_scheduler_heartbeat", hooks)
+        self.assertIn("get_workers()", monitoring)
+        self.assertIn("serialize_worker", monitoring)
+        self.assertIn('self.scheduler_status = "Active"', monitoring)
 
     def test_prom_stock_contract_matches_official_external_id_endpoint(self):
         client = (PACKAGE / "ecommerce" / "providers" / "prom_ua" / "api.py").read_text(
