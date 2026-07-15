@@ -27,6 +27,7 @@ from ukrainian_integrations.customer_identification.telegram import (
 )
 from ukrainian_integrations.ecommerce.providers.prom_ua.api import PromUAClient
 from ukrainian_integrations.ecommerce.providers.prom_ua.service import _order_item_rows
+from ukrainian_integrations.migrations import _merge_app_icons_into_layout
 from ukrainian_integrations.payments.liqpay.client import LiqPayClient
 from ukrainian_integrations.payments.monobank.client import MonobankClient
 from ukrainian_integrations.payments.privatbank.service import _normalize_amount, _pagination_state
@@ -57,6 +58,37 @@ from ukrainian_integrations.utils.security import secrets_equal
 
 
 class PureLogicTest(unittest.TestCase):
+    def test_new_apps_are_merged_into_saved_desktop_layout_without_reset(self):
+        layout = [
+            {"label": "Framework", "idx": 0},
+            {"label": "Ukrainian Integrations", "idx": 1, "hidden": 1},
+        ]
+        app_icons = [
+            {"label": "Ukrainian Integrations", "idx": 10},
+            {"label": "ERPNext Ukraine", "idx": 11},
+            {"label": "Print Designer", "idx": 12},
+        ]
+
+        merged, added = _merge_app_icons_into_layout(layout, app_icons)
+
+        self.assertEqual(added, 2)
+        self.assertEqual(
+            [icon["label"] for icon in merged],
+            ["Framework", "Ukrainian Integrations", "ERPNext Ukraine", "Print Designer"],
+        )
+        self.assertEqual(merged[1]["hidden"], 1)
+        self.assertEqual(
+            layout,
+            [
+                {"label": "Framework", "idx": 0},
+                {"label": "Ukrainian Integrations", "idx": 1, "hidden": 1},
+            ],
+        )
+
+        merged_again, added_again = _merge_app_icons_into_layout(merged, app_icons)
+        self.assertEqual(added_again, 0)
+        self.assertEqual(merged_again, merged)
+
     def test_legacy_sender_profile_fieldtype_is_not_coerced(self):
         custom_fields = {
             "Sales Invoice": [

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3
+
+- Merge newly installed custom application icons into existing Frappe v16 user desktop layouts without resetting user ordering, folders or hidden icons.
+- Invalidate navigation caches for every user after app installation and migration.
+- Add a Ukrainian overlay for common Frappe Desk navigation, actions and messages that are missing from the upstream v16 language pack.
+
 ## 0.3.2
 
 - Added complete Ukrainian labels for the Frappe v16 System Health Report and its child tables.
