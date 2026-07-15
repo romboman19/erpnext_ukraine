@@ -37,8 +37,8 @@ class TestPOSIntegrationContracts(unittest.TestCase):
                 APP
                 / "ua_pos"
                 / "workspace"
-                / "ua_pos"
-                / "ua_pos.json"
+                / "ua_pos_workspace"
+                / "ua_pos_workspace.json"
             ).read_text(encoding="utf-8")
         )
         self.assertTrue(workspace["public"])
