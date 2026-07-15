@@ -11,7 +11,7 @@
  "icon": "point-of-sale",
  "idx": 0,
  "is_hidden": 0,
- "label": "UA POS",
+ "label": "UA POS Workspace",
  "links": [
   {"hidden": 0, "is_query_report": 0, "label": "Cashier", "link_count": 0, "onboard": 0, "type": "Card Break"},
   {"hidden": 0, "is_query_report": 0, "label": "Open Cashier", "link_count": 0, "link_to": "ua-pos", "link_type": "Page", "onboard": 0, "type": "Link"},
@@ -31,7 +31,7 @@
  "modified": "2026-07-15 18:30:00.000000",
  "modified_by": "Administrator",
  "module": "UA POS",
- "name": "UA POS",
+ "name": "UA POS Workspace",
  "number_cards": [],
  "owner": "Administrator",
  "parent_page": "",
@@ -40,6 +40,6 @@
  "roles": [],
  "sequence_id": 5.0,
  "shortcuts": [],
- "title": "UA POS",
+ "title": "UA POS Workspace",
  "type": "Workspace"
 }

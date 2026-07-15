@@ -30,6 +30,7 @@ class TestPOSIntegrationContracts(unittest.TestCase):
         )
         self.assertTrue(workspace["public"])
         self.assertFalse(workspace["is_hidden"])
+        self.assertEqual(workspace["name"], "UA POS Workspace")
         self.assertTrue(
             any(
                 link.get("link_type") == "Page"
