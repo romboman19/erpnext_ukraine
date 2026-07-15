@@ -62,10 +62,16 @@ class TestPOSIntegrationContracts(unittest.TestCase):
         )
 
         icon = json.loads(
-            (APP / "desktop_icon" / "ua_pos.json").read_text(encoding="utf-8")
+            (APP / "desktop_icon" / "ua_pos_workspace.json").read_text(encoding="utf-8")
         )
         self.assertEqual(icon["parent_icon"], "ERPNext Ukraine")
+        self.assertEqual(icon["link_to"], workspace["name"])
         self.assertFalse(icon["hidden"])
+
+        sidebar = json.loads(
+            (APP / "workspace_sidebar" / "ua_pos_workspace.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(sidebar["name"], workspace["name"])
 
 
 if __name__ == "__main__":
