@@ -18,6 +18,7 @@ add_to_apps_screen = [
 ]
 
 after_install = [
+	"erpnext_ua.install.ensure_app_modules",
     "erpnext_ua.install.ensure_tax_parameters",
     "erpnext_ua.install.ensure_pos_setup",
 	"erpnext_ua.install.ensure_prro_setup",
@@ -26,6 +27,7 @@ after_install = [
 ]
 
 after_migrate = [
+	"erpnext_ua.install.ensure_app_modules",
     "erpnext_ua.install.ensure_tax_parameters",
     "erpnext_ua.install.ensure_pos_setup",
 	"erpnext_ua.install.ensure_prro_setup",

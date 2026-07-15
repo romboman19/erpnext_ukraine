@@ -53,6 +53,31 @@ def ensure_tax_parameters():
 
 
 POS_ROLES = ["POS Cashier", "POS Senior Cashier", "POS Manager", "POS Administrator", "PRRO Operator"]
+APP_MODULES = ("UA FOP", "UA Fiscal", "UA POS")
+
+
+def ensure_app_modules():
+	"""Create modules added after the app was first installed.
+
+	Frappe creates entries from ``modules.txt`` on a clean install, but an
+	upgrade from an older app version can reach ``after_migrate`` without the
+	new Module Def.  Pages and other linked records must only be created after
+	their module exists.
+	"""
+	if not frappe.db.table_exists("Module Def"):
+		return
+	for module_name in APP_MODULES:
+		if frappe.db.exists("Module Def", module_name):
+			continue
+		frappe.get_doc(
+			{
+				"doctype": "Module Def",
+				"module_name": module_name,
+				"app_name": "erpnext_ua",
+				"custom": 0,
+			}
+		).insert(ignore_permissions=True)
+	frappe.db.commit()
 
 
 def ensure_pos_page():
