@@ -284,6 +284,24 @@ class ProductionStaticContractsTest(unittest.TestCase):
         service = (PACKAGE / "customer_identification" / "service.py").read_text(
             encoding="utf-8"
         )
+        settings = json.loads(
+            (
+                PACKAGE
+                / "ukrainian_integrations"
+                / "doctype"
+                / "customer_identification_settings"
+                / "customer_identification_settings.json"
+            ).read_text(encoding="utf-8")
+        )
+        workspace = json.loads(
+            (
+                PACKAGE
+                / "ukrainian_integrations"
+                / "workspace"
+                / "ukrainian_integrations"
+                / "ukrainian_integrations.json"
+            ).read_text(encoding="utf-8")
+        )
         telegram = (PACKAGE / "customer_identification" / "telegram.py").read_text(
             encoding="utf-8"
         )
@@ -291,6 +309,9 @@ class ProductionStaticContractsTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("IDENTIFICATION_ROLES", service)
+        self.assertIn("POS Cashier", service)
+        self.assertIn("def begin_pos(", service)
+        self.assertIn("_select_channel(settings, channel, for_pos=True)", service)
         self.assertIn('if doc.status == "Verified" else None', service)
         self.assertIn('idempotency_key=sms_key', service)
         self.assertIn("SELECT name FROM `tabCustomer Identification Request`", service)
@@ -298,6 +319,17 @@ class ProductionStaticContractsTest(unittest.TestCase):
         self.assertIn("secrets_equal", telegram)
         self.assertIn("allow_redirects=False", telegram)
         self.assertIn('log.status = "Unknown"', birthday)
+        fields = {field["fieldname"]: field for field in settings["fields"]}
+        self.assertEqual(fields["default_channel"]["default"], "SMS")
+        self.assertEqual(fields["pos_channel"]["default"], "SMS")
+        self.assertEqual(fields["allow_pos_channel_selection"]["default"], "0")
+        self.assertTrue(
+            any(
+                link.get("label") == "Identification Channel Settings"
+                and link.get("link_to") == "Customer Identification Settings"
+                for link in workspace["links"]
+            )
+        )
 
     def test_sensitive_logs_have_partition_or_manager_only_access(self):
         hooks = (PACKAGE / "hooks.py").read_text(encoding="utf-8")

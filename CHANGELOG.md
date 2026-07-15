@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4
+
+- Add an explicit identification-channel settings menu and administrator-controlled default/POS channel routing.
+- Lock UA POS to SMS via TurboSMS by default, with optional cashier channel selection.
+- Add the stable `begin_pos` API and authorize the UA POS cashier roles without weakening customer PII gating.
+
 ## 0.3.3
 
 - Merge newly installed custom application icons into existing Frappe v16 user desktop layouts without resetting user ordering, folders or hidden icons.

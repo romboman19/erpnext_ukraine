@@ -21,6 +21,7 @@ except ModuleNotFoundError:
     frappe.db = types.SimpleNamespace(exists=lambda *args, **kwargs: False)
     sys.modules["frappe"] = frappe
 
+from ukrainian_integrations.customer_identification.service import _select_channel
 from ukrainian_integrations.customer_identification.telegram import (
     TelegramAPIError,
     _telegram,
@@ -58,6 +59,34 @@ from ukrainian_integrations.utils.security import secrets_equal
 
 
 class PureLogicTest(unittest.TestCase):
+    def test_pos_identification_defaults_to_locked_turbosms_channel(self):
+        settings = types.SimpleNamespace(
+            default_channel="Telegram",
+            pos_channel="SMS",
+            allow_pos_channel_selection=0,
+        )
+        self.assertEqual(_select_channel(settings, for_pos=True), "SMS")
+        self.assertEqual(
+            _select_channel(settings, "Telegram", for_pos=True),
+            "SMS",
+        )
+        self.assertEqual(_select_channel(settings), "Telegram")
+
+    def test_pos_channel_selection_requires_explicit_opt_in(self):
+        settings = types.SimpleNamespace(
+            default_channel="SMS",
+            pos_channel="SMS",
+            allow_pos_channel_selection=1,
+        )
+        self.assertEqual(
+            _select_channel(settings, "Telegram", for_pos=True),
+            "Telegram",
+        )
+        self.assertEqual(
+            _select_channel(settings, "TurboSMS", for_pos=True),
+            "SMS",
+        )
+
     def test_new_apps_are_merged_into_saved_desktop_layout_without_reset(self):
         layout = [
             {"label": "Framework", "idx": 0},

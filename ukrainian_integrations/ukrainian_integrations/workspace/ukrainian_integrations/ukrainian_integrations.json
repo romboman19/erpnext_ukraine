@@ -1,7 +1,7 @@
 {
  "app": "ukrainian_integrations",
  "charts": [],
- "content": "[{\"id\":\"uaint-header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Ukraine Services</b></span>\",\"col\":12}},{\"id\":\"uaint-delivery\",\"type\":\"card\",\"data\":{\"card_name\":\"Delivery\",\"col\":4}},{\"id\":\"uaint-payments\",\"type\":\"card\",\"data\":{\"card_name\":\"Banking & Payments\",\"col\":4}},{\"id\":\"uaint-communications\",\"type\":\"card\",\"data\":{\"card_name\":\"Communications & Customers\",\"col\":4}},{\"id\":\"uaint-monitoring\",\"type\":\"card\",\"data\":{\"card_name\":\"Operations & Monitoring\",\"col\":4}}]",
+ "content": "[{\"id\":\"uaint-header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Ukraine Services</b></span>\",\"col\":12}},{\"id\":\"uaint-delivery\",\"type\":\"card\",\"data\":{\"card_name\":\"Delivery\",\"col\":4}},{\"id\":\"uaint-payments\",\"type\":\"card\",\"data\":{\"card_name\":\"Banking & Payments\",\"col\":4}},{\"id\":\"uaint-communications\",\"type\":\"card\",\"data\":{\"card_name\":\"Communications & Customers\",\"col\":4}},{\"id\":\"uaint-identification\",\"type\":\"card\",\"data\":{\"card_name\":\"Customer Identification\",\"col\":4}},{\"id\":\"uaint-monitoring\",\"type\":\"card\",\"data\":{\"card_name\":\"Operations & Monitoring\",\"col\":4}}]",
  "creation": "2026-07-15 13:30:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -28,7 +28,8 @@
   {"hidden": 0, "is_query_report": 0, "label": "TurboSMS Log", "link_count": 0, "link_to": "TurboSMS Log", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "VitalPBX Settings", "link_count": 0, "link_to": "VitalPBX Settings", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "VitalPBX Call Log", "link_count": 0, "link_to": "VitalPBX Call Log", "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Customer Identification Settings", "link_count": 0, "link_to": "Customer Identification Settings", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Customer Identification", "link_count": 0, "onboard": 0, "type": "Card Break"},
+  {"hidden": 0, "is_query_report": 0, "label": "Identification Channel Settings", "link_count": 0, "link_to": "Customer Identification Settings", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Customer Identification Requests", "link_count": 0, "link_to": "Customer Identification Request", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Birthday Greeting Log", "link_count": 0, "link_to": "Customer Birthday Greeting Log", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Operations & Monitoring", "link_count": 0, "onboard": 0, "type": "Card Break"},

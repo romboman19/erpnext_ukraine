@@ -7,20 +7,46 @@ from frappe.model.document import Document
 
 class CustomerIdentificationSettings(Document):
     def validate(self):
+        self.default_channel = self.default_channel or "SMS"
+        self.pos_channel = self.pos_channel or "SMS"
+
         for fieldname, minimum, maximum, label in (
-            ("ttl_minutes", 1, 60, "TTL"),
-            ("max_attempts", 1, 10, "Maximum attempts"),
-            ("rate_limit_per_10_min", 1, 50, "Rate limit"),
+            ("ttl_minutes", 1, 60, _("Строк дії запиту")),
+            ("max_attempts", 1, 10, _("Максимум спроб коду")),
+            ("rate_limit_per_10_min", 1, 50, _("Ліміт запитів")),
         ):
             value = int(self.get(fieldname) or 0)
             if value < minimum or value > maximum:
                 frappe.throw(
-                    _("{0} must be between {1} and {2}").format(
+                    _("{0}: значення має бути від {1} до {2}").format(
                         label,
                         minimum,
                         maximum,
                     )
                 )
+
+        channel_fields = {
+            "SMS": "sms_enabled",
+            "Telegram": "telegram_enabled",
+            "Call": "call_enabled",
+        }
+        enabled_channels = {
+            channel
+            for channel, fieldname in channel_fields.items()
+            if self.get(fieldname)
+        }
+        if self.enabled and not enabled_channels:
+            frappe.throw(_("Увімкніть хоча б один канал ідентифікації"))
+        if self.enabled:
+            for fieldname, label in (
+                ("default_channel", _("Типовий канал")),
+                ("pos_channel", _("Канал каси POS")),
+            ):
+                channel = self.get(fieldname)
+                if channel not in channel_fields:
+                    frappe.throw(_("Невідомий канал у полі {0}").format(label))
+                if channel not in enabled_channels:
+                    frappe.throw(_("Канал {0} має бути увімкнений").format(channel))
 
         if self.sms_enabled:
             template = str(self.sms_template or "")
@@ -31,21 +57,21 @@ class CustomerIdentificationSettings(Document):
             }
             if not template or not {"code", "minutes"}.issubset(fields):
                 frappe.throw(
-                    _("SMS template must contain {code} and {minutes}")
+                    _("Шаблон SMS має містити {code} та {minutes}")
                 )
 
         if self.telegram_enabled:
             if not str(self.telegram_bot_username or "").strip():
-                frappe.throw(_("Telegram bot username is required"))
+                frappe.throw(_("Потрібно вказати ім’я користувача Telegram-бота"))
             if not self.get_password("telegram_bot_token", raise_exception=False):
-                frappe.throw(_("Telegram bot token is required"))
+                frappe.throw(_("Потрібно вказати токен Telegram-бота"))
             if not self.get_password(
                 "telegram_webhook_secret",
                 raise_exception=False,
             ):
-                frappe.throw(_("Telegram webhook secret is required"))
+                frappe.throw(_("Потрібно вказати секрет webhook Telegram"))
 
         if self.call_enabled and not str(
             self.call_verification_number or ""
         ).strip():
-            frappe.throw(_("Call verification number is required"))
+            frappe.throw(_("Потрібно вказати номер для контрольного дзвінка"))

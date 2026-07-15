@@ -11,8 +11,22 @@ from ukrainian_integrations.pbx_sms.sms.turbosms import _send_sms_internal
 from ukrainian_integrations.utils.security import SALES_ROLES, permitted_doc, require_roles
 
 CHANNELS = {"SMS": "sms_enabled", "Telegram": "telegram_enabled", "Call": "call_enabled"}
+CHANNEL_ALIASES = {
+    "sms": "SMS",
+    "turbosms": "SMS",
+    "telegram": "Telegram",
+    "call": "Call",
+    "vitalpbx": "Call",
+}
+CHANNEL_PROVIDERS = {"SMS": "TurboSMS", "Telegram": "Telegram", "Call": "VitalPBX"}
 FINAL_STATUSES = {"Verified", "Expired", "Failed", "Cancelled"}
-IDENTIFICATION_ROLES = SALES_ROLES + ("POS User", "POS Manager", "POS Administrator")
+IDENTIFICATION_ROLES = SALES_ROLES + (
+    "POS User",
+    "POS Cashier",
+    "POS Senior Cashier",
+    "POS Manager",
+    "POS Administrator",
+)
 
 
 def normalize_phone(phone: str) -> str:
@@ -26,6 +40,31 @@ def normalize_phone(phone: str) -> str:
 
 def _settings():
     return frappe.get_cached_doc("Customer Identification Settings")
+
+
+def _setting(settings, fieldname: str, default=None):
+    getter = getattr(settings, "get", None)
+    value = getter(fieldname) if callable(getter) else getattr(settings, fieldname, None)
+    return default if value in (None, "") else value
+
+
+def _canonical_channel(channel: str | None) -> str:
+    raw = str(channel or "").strip()
+    return CHANNEL_ALIASES.get(raw.lower(), raw)
+
+
+def _select_channel(
+    settings,
+    requested_channel: str | None = None,
+    *,
+    for_pos: bool = False,
+) -> str:
+    """Resolve channel policy without performing I/O; POS can be locked by settings."""
+    fieldname = "pos_channel" if for_pos else "default_channel"
+    configured = _canonical_channel(_setting(settings, fieldname, "SMS")) or "SMS"
+    if for_pos and not bool(_setting(settings, "allow_pos_channel_selection", 0)):
+        return configured
+    return _canonical_channel(requested_channel) or configured
 
 
 def _hash_code(request_token: str, code: str) -> str:
@@ -153,7 +192,7 @@ def _public_result(doc, *, debug_code: str | None = None) -> dict:
 
 
 def _channel_enabled(channel: str, settings) -> bool:
-    return channel in CHANNELS and bool(settings.get(CHANNELS[channel]))
+    return channel in CHANNELS and bool(_setting(settings, CHANNELS[channel], 0))
 
 
 def _validate_reference(
@@ -201,9 +240,28 @@ def get_config() -> dict:
     require_roles(*IDENTIFICATION_ROLES)
     settings = _settings()
     channels = [channel for channel in CHANNELS if _channel_enabled(channel, settings)]
+    default_channel = _select_channel(settings)
+    pos_channel = _select_channel(settings, for_pos=True)
     return {
         "enabled": bool(settings.enabled),
         "channels": channels,
+        "channel_options": [
+            {
+                "name": channel,
+                "label": {
+                    "SMS": _("SMS-код"),
+                    "Telegram": _("Telegram-бот"),
+                    "Call": _("Контрольний дзвінок"),
+                }[channel],
+                "provider": CHANNEL_PROVIDERS[channel],
+            }
+            for channel in channels
+        ],
+        "default_channel": default_channel,
+        "pos_channel": pos_channel,
+        "allow_pos_channel_selection": bool(
+            _setting(settings, "allow_pos_channel_selection", 0)
+        ),
         "ttl_minutes": int(settings.ttl_minutes or 5),
         "call_verification_number": settings.call_verification_number or "",
         "telegram_bot_username": settings.telegram_bot_username or "",
@@ -227,16 +285,51 @@ def find_by_phone(phone: str) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def begin(
-    channel: str,
-    phone: str,
+    channel: str | None = None,
+    phone: str | None = None,
     reference_doctype: str | None = None,
     reference_name: str | None = None,
 ) -> dict:
     require_roles(*IDENTIFICATION_ROLES)
     settings = _settings()
+    return _begin_request(
+        settings,
+        _select_channel(settings, channel),
+        phone,
+        reference_doctype,
+        reference_name,
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def begin_pos(
+    phone: str,
+    channel: str | None = None,
+    reference_doctype: str | None = None,
+    reference_name: str | None = None,
+) -> dict:
+    """Start POS verification using the admin-controlled POS channel policy."""
+    require_roles(*IDENTIFICATION_ROLES)
+    settings = _settings()
+    return _begin_request(
+        settings,
+        _select_channel(settings, channel, for_pos=True),
+        phone,
+        reference_doctype,
+        reference_name,
+    )
+
+
+def _begin_request(
+    settings,
+    channel: str,
+    phone: str | None,
+    reference_doctype: str | None,
+    reference_name: str | None,
+) -> dict:
     if not settings.enabled:
         frappe.throw(_("Модуль ідентифікації покупця вимкнений"))
-    normalized_channel = str(channel or "").strip()
+    normalized_channel = _canonical_channel(channel)
     if not _channel_enabled(normalized_channel, settings):
         frappe.throw(_("Канал {0} не налаштований").format(normalized_channel))
     normalized_phone = normalize_phone(phone)

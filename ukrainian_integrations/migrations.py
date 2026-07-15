@@ -14,6 +14,7 @@ _BANK_DESCRIPTION_PATTERN = re.compile(r"^(MBX|PBX):([^|]+?)(?:\s*\||$)")
 def after_migrate() -> None:
     """Apply idempotent schema/data upgrades required by the current release."""
     ensure_integration_custom_fields()
+    ensure_identification_channel_defaults()
     backfill_integration_keys()
     refresh_desk_navigation()
 
@@ -37,6 +38,20 @@ _DESK_APP_ICON_FIELDS = (
     "icon_image",
 )
 _CUSTOM_DESK_APPS = ("ukrainian_integrations", "erpnext_ua", "print_designer")
+
+
+def ensure_identification_channel_defaults() -> dict[str, str]:
+    """Backfill channel routing without enabling provider traffic."""
+    doctype = "Customer Identification Settings"
+    if not frappe.db.exists("DocType", doctype):
+        return {}
+    updated = {}
+    for fieldname in ("default_channel", "pos_channel"):
+        if frappe.db.get_single_value(doctype, fieldname):
+            continue
+        frappe.db.set_single_value(doctype, fieldname, "SMS")
+        updated[fieldname] = "SMS"
+    return updated
 
 
 def _merge_app_icons_into_layout(

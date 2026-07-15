@@ -64,7 +64,7 @@ Prefer the Settings/Profile DocTypes in Desk. When those DocTypes contain config
 | LiqPay | `LiqPay Settings` → profiles; API v7/SHA3-256 is the default; keep `Accept Sandbox Callbacks` off in production |
 | VitalPBX | `VitalPBX Settings`, unique webhook key, and `User.vitalpbx_extension` |
 | TurboSMS | `TurboSMS Settings` with official API URL, token and active sender rows |
-| Customer identification | `Customer Identification Settings`; Telegram requires bot token plus webhook secret |
+| Customer identification | `Identification Channel Settings`; POS defaults to SMS through TurboSMS, while Telegram and VitalPBX remain optional |
 | Prom.ua | `site_config.json`; see the runbook for the complete key list |
 
 Custom non-production provider hosts must be explicitly allowlisted in `site_config.json`:
@@ -111,6 +111,16 @@ X-Telegram-Bot-Api-Secret-Token: <random-secret>
 ```
 
 The Telegram endpoint fails closed when the secret is absent and bounds request/response bodies.
+
+UA POS starts verification through the policy-aware endpoint:
+
+```text
+/api/method/ukrainian_integrations.customer_identification.service.begin_pos
+```
+
+The administrator selects the POS channel in `Identification Channel Settings`.
+The default is locked to `SMS` (TurboSMS); cashier channel selection is an explicit
+opt-in and disabled by default.
 
 ## Verification
 
