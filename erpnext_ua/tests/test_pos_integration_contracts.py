@@ -18,7 +18,7 @@ class TestPOSIntegrationContracts(unittest.TestCase):
         self.assertIn('"app_name": "erpnext_ua"', install_source)
         self.assertIn("def ensure_pos_workspace():", install_source)
         self.assertIn(
-            'import_file("erpnext_ua.ua_pos", "Workspace", "UA POS Workspace", force=True)',
+            'import_file("UA POS", "Workspace", "UA POS Workspace", force=True)',
             install_source,
         )
 

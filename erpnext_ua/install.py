@@ -87,7 +87,7 @@ def ensure_pos_workspace():
 	ensure_app_modules()
 	from frappe.modules.import_file import import_file
 
-	import_file("erpnext_ua.ua_pos", "Workspace", "UA POS Workspace", force=True)
+	import_file("UA POS", "Workspace", "UA POS Workspace", force=True)
 	frappe.db.commit()
 
 
