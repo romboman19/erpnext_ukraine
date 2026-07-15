@@ -1,10 +1,21 @@
 app_name = "ukrainian_integrations"
-app_title = "ERPNext Ukraine Integrations"
+app_title = "Ukrainian Integrations"
 app_publisher = "HUNTER.rv"
 app_description = "External connectors for ERPNext Ukraine: delivery, banks, online payments, marketplaces, PBX and SMS"
 app_email = "it@hunter.rv.ua"
 app_license = "MIT"
 required_apps = ["erpnext"]
+app_logo_url = "/assets/ukrainian_integrations/images/app-logo.svg"
+app_home = "/app/ukrainian-integrations"
+
+add_to_apps_screen = [
+    {
+        "name": app_name,
+        "logo": app_logo_url,
+        "title": app_title,
+        "route": app_home,
+    }
+]
 
 after_install = "ukrainian_integrations.install.after_install"
 before_uninstall = "ukrainian_integrations.uninstall.before_uninstall"

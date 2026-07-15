@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import ast
+import csv
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -159,6 +161,49 @@ class ProductionStaticContractsTest(unittest.TestCase):
             self.assertTrue((PACKAGE / filename).is_file(), filename)
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('"patches.txt"', pyproject)
+
+    def test_app_screen_workspace_and_ukrainian_translation_are_shipped(self):
+        hooks = (PACKAGE / "hooks.py").read_text(encoding="utf-8")
+        self.assertIn("add_to_apps_screen", hooks)
+        self.assertIn('app_home = "/app/ukrainian-integrations"', hooks)
+
+        desktop_icon = json.loads(
+            (PACKAGE / "desktop_icon" / "ukrainian_integrations.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(desktop_icon["icon_type"], "App")
+        self.assertEqual(desktop_icon["app"], "ukrainian_integrations")
+        self.assertFalse(desktop_icon["hidden"])
+
+        workspace = json.loads(
+            (
+                PACKAGE
+                / "ukrainian_integrations"
+                / "workspace"
+                / "ukrainian_integrations"
+                / "ukrainian_integrations.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(workspace["app"], "ukrainian_integrations")
+        self.assertEqual(workspace["module"], "Ukrainian Integrations")
+        self.assertTrue(workspace["public"])
+        self.assertFalse(workspace["is_hidden"])
+
+        translations = PACKAGE / "translations" / "uk.csv"
+        with translations.open(encoding="utf-8", newline="") as handle:
+            rows = list(csv.reader(handle))
+        translation_map = {row[0]: row[1] for row in rows}
+        self.assertGreaterEqual(len(translation_map), 350)
+        self.assertEqual(translation_map["Ukrainian Integrations"], "Українські інтеграції")
+        self.assertEqual(translation_map["Delivery"], "Доставка")
+        for source, translated, *_ in rows:
+            self.assertTrue(source)
+            self.assertTrue(translated)
+            self.assertEqual(
+                set(re.findall(r"\{[^}]+\}", source)),
+                set(re.findall(r"\{[^}]+\}", translated)),
+            )
 
     def test_prom_stock_contract_matches_official_external_id_endpoint(self):
         client = (PACKAGE / "ecommerce" / "providers" / "prom_ua" / "api.py").read_text(

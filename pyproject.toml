@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ukrainian_integrations"
-version = "0.3.0"
+version = "0.3.1"
 description = "ERPNext Ukrainian Integrations"
 requires-python = ">=3.11"
 readme = "README.md"
@@ -30,7 +30,15 @@ include = ["ukrainian_integrations*"]
 exclude = ["public*", "docs*", "tests*", "ukrainian_integrations.tests*"]
 
 [tool.setuptools.package-data]
-ukrainian_integrations = ["**/*.json", "public/js/*.js", "public/js/**/*.js", "modules.txt", "patches.txt"]
+ukrainian_integrations = [
+    "**/*.json",
+    "public/images/*.svg",
+    "public/js/*.js",
+    "public/js/**/*.js",
+    "translations/*.csv",
+    "modules.txt",
+    "patches.txt",
+]
 
 [tool.black]
 line-length = 120
