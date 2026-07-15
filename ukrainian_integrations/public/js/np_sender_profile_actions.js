@@ -1,6 +1,7 @@
 frappe.ui.form.on('NP Sender Profile', {
   refresh(frm) {
     frm.add_custom_button('Створити ТТН (довільно)', async () => {
+      const idempotencyKey = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : frappe.utils.get_random(32);
       const d = new frappe.ui.Dialog({
         title: 'НП ТТН із профілю (розширено)',
         fields: [
@@ -32,7 +33,7 @@ frappe.ui.form.on('NP Sender Profile', {
         size: 'extra-large',
         primary_action_label: 'Створити',
         primary_action: async (v) => {
-          const r = await frappe.call({ method: 'ukrainian_integrations.shipment.nova_poshta.service.create_ttn_standalone', args: { ...v, sender_profile: frm.doc.profile_name || frm.doc.name, sender_branch: ((v.sender_branch||"").split("::")[0] || "") } });
+          const r = await frappe.call({ method: 'ukrainian_integrations.shipment.nova_poshta.service.create_ttn_standalone', args: { ...v, idempotency_key: idempotencyKey, sender_profile: frm.doc.profile_name || frm.doc.name, sender_branch: ((v.sender_branch||"").split("::")[0] || "") } });
           const m = (r.message || {});
           const stickerUrl = m.sticker_url || m.print_url || '';
           frappe.msgprint(`ТТН: ${m.ttn_number || '-'}${stickerUrl ? `<br><a href="${stickerUrl}" target="_blank">Друк стікера 11x11</a>` : ''}`);

@@ -1,0 +1,1 @@
+"""Rozetka Delivery shipment integration."""

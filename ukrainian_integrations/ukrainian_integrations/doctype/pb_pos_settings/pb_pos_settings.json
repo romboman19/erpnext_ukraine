@@ -1,0 +1,19 @@
+{
+  "doctype": "DocType",
+  "name": "PB POS Settings",
+  "module": "Ukrainian Integrations",
+  "issingle": 1,
+  "engine": "InnoDB",
+  "fields": [
+    {"fieldname": "enabled", "fieldtype": "Check", "label": "Enabled", "default": "0"},
+    {"fieldname": "gateway_url", "fieldtype": "Data", "label": "Gateway URL", "reqd": 1},
+    {"fieldname": "api_key", "fieldtype": "Password", "label": "API Key", "reqd": 1},
+    {"fieldname": "protocol", "fieldtype": "Select", "label": "Protocol", "options": "legacy\nv1", "default": "legacy", "reqd": 1},
+    {"fieldname": "request_timeout_sec", "fieldtype": "Int", "label": "Request Timeout (sec)", "default": "60"},
+    {"fieldname": "allow_test_operations", "fieldtype": "Check", "label": "Allow Real Test Operations", "default": "0", "description": "Test payment/refund buttons perform real terminal operations."}
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1},
+    {"role": "Accounts Manager", "read": 1}
+  ]
+}

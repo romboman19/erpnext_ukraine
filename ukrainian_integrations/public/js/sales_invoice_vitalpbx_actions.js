@@ -18,7 +18,14 @@ frappe.ui.form.on('Sales Invoice', {
         primary_action: async (v) => {
           await frappe.call({
             method: 'ukrainian_integrations.pbx_sms.vitalpbx.service.click_to_call',
-            args: { extension: v.extension, destination: v.phone }
+            args: {
+              extension: v.extension,
+              destination: v.phone,
+              idempotency_key:
+                typeof crypto !== 'undefined' && crypto.randomUUID
+                  ? crypto.randomUUID()
+                  : frappe.utils.get_random(32)
+            }
           });
           frappe.show_alert({message: 'Дзвінок ініційовано', indicator: 'green'});
           d.hide();

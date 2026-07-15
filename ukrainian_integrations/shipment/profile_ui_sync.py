@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 import frappe
+
+from ukrainian_integrations.utils.security import SYSTEM_ROLES, require_roles
 
 
 def _read(rel: str) -> str:
@@ -32,6 +35,7 @@ def _upsert(name: str, dt: str, view: str, rel: str):
 
 @frappe.whitelist()
 def sync_profile_ui_scripts():
+    require_roles(*SYSTEM_ROLES)
     _upsert("UI NP Sender Profile Actions", "NP Sender Profile", "Form", "public/js/np_sender_profile_actions.js")
     _upsert("UI UP Sender Profile Actions", "UP Sender Profile", "Form", "public/js/up_sender_profile_actions.js")
     _upsert("UI NP Sender Profile List", "NP Sender Profile", "List", "public/js/np_sender_profile_list.js")

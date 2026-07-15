@@ -1,6 +1,7 @@
 frappe.listview_settings['NP Sender Profile'] = {
   onload(listview) {
     listview.page.add_menu_item('Створити ТТН (довільно)', async () => {
+      const idempotencyKey = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : frappe.utils.get_random(32);
       const r = await frappe.call({ method: 'ukrainian_integrations.shipment.nova_poshta.service.np_sender_profiles_list' });
       const opts = ((r.message && r.message.items) || []).map(x => x.name);
       const d = new frappe.ui.Dialog({
@@ -22,7 +23,7 @@ frappe.listview_settings['NP Sender Profile'] = {
         ],
         primary_action_label: 'Створити',
         primary_action: async (v) => {
-          const x = await frappe.call({ method: 'ukrainian_integrations.shipment.nova_poshta.service.create_ttn_standalone', args: v });
+          const x = await frappe.call({ method: 'ukrainian_integrations.shipment.nova_poshta.service.create_ttn_standalone', args: { ...v, idempotency_key: idempotencyKey } });
           const m=(x.message||{}); const stickerUrl=m.sticker_url || m.print_url || ''; frappe.msgprint('ТТН: ' + (m.ttn_number || '-') + (stickerUrl ? `<br><a href=\"${stickerUrl}\" target=\"_blank\">Друк стікера 11x11</a>` : ''));
           d.hide();
         }

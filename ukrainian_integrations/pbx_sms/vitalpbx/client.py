@@ -60,7 +60,7 @@ class VitalPBXClient:
             verify=self.verify_ssl,
         )
         r.raise_for_status()
-        return r.json() if (r.text or "").strip() else {"ok": True}
+        return r.json() if (r.text or "").strip() else {}
 
 
     def dialer_call(
@@ -99,4 +99,4 @@ class VitalPBXClient:
             verify=self.verify_ssl,
         )
         r.raise_for_status()
-        return r.json() if (r.text or "").strip() else {"ok": True}
+        return r.json() if (r.text or "").strip() else {}

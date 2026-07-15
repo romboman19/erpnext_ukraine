@@ -15,6 +15,8 @@ def sync_orders_all() -> dict:
                 continue
             r = p.sync_orders()
             out["providers"][p.code] = r
+            if isinstance(r, dict) and r.get("ok") is False:
+                out["ok"] = False
         except Exception:
             out["providers"][p.code] = {"ok": False, "error": "exception"}
             out["ok"] = False
@@ -33,6 +35,8 @@ def sync_stock_all() -> dict:
                 continue
             r = p.sync_stock()
             out["providers"][p.code] = r
+            if isinstance(r, dict) and r.get("ok") is False:
+                out["ok"] = False
         except Exception:
             out["providers"][p.code] = {"ok": False, "error": "exception"}
             out["ok"] = False

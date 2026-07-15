@@ -1,6 +1,7 @@
 frappe.listview_settings['UP Sender Profile'] = {
   onload(listview) {
     listview.page.add_menu_item('Створити відправлення (довільно)', async () => {
+      const idempotencyKey = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : frappe.utils.get_random(32);
       const r = await frappe.call({ method: 'ukrainian_integrations.shipment.ukr_poshta.service.up_sender_profiles_list' });
       const opts = ((r.message && r.message.items) || []).map(x => x.name);
       const d = new frappe.ui.Dialog({
@@ -28,7 +29,7 @@ frappe.listview_settings['UP Sender Profile'] = {
           };
           const x = await frappe.call({
             method: 'ukrainian_integrations.shipment.ukr_poshta.service.create_shipment_standalone',
-            args: { sender_profile: v.sender_profile, recipient, parcel: {} }
+            args: { sender_profile: v.sender_profile, recipient, parcel: {}, idempotency_key: idempotencyKey }
           });
           frappe.msgprint('Barcode: ' + ((x.message || {}).barcode || '-'));
           d.hide();

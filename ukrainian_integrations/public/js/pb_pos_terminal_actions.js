@@ -15,6 +15,10 @@ frappe.ui.form.on("PB POS Terminal", {
     });
 
     frm.add_custom_button("💳 Тест оплати", async () => {
+      const idempotencyKey =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : frappe.utils.get_random(32);
       const d = new frappe.ui.Dialog({
         title: "Тест оплати",
         fields: [{ fieldname: "amount", label: "Сума", fieldtype: "Float", reqd: 1, default: 1 }],
@@ -23,7 +27,11 @@ frappe.ui.form.on("PB POS Terminal", {
           try {
             const r = await frappe.call({
               method: "ukrainian_integrations.payments.privat_pos.service.pb_pos_test_payment",
-              args: { terminal: frm.doc.name, amount: v.amount },
+              args: {
+                terminal: frm.doc.name,
+                amount: v.amount,
+                idempotency_key: idempotencyKey,
+              },
             });
             frappe.msgprint({ title: "Успіх", indicator: "green", message: "Тест оплати відправлено" });
             d.hide();
@@ -36,6 +44,10 @@ frappe.ui.form.on("PB POS Terminal", {
     });
 
     frm.add_custom_button("↩️ Тест повернення", async () => {
+      const idempotencyKey =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : frappe.utils.get_random(32);
       const d = new frappe.ui.Dialog({
         title: "Тест повернення",
         fields: [
@@ -47,7 +59,12 @@ frappe.ui.form.on("PB POS Terminal", {
           try {
             await frappe.call({
               method: "ukrainian_integrations.payments.privat_pos.service.pb_pos_test_refund",
-              args: { terminal: frm.doc.name, amount: v.amount, reference_operation_id: v.reference_operation_id || null },
+              args: {
+                terminal: frm.doc.name,
+                amount: v.amount,
+                reference_operation_id: v.reference_operation_id || null,
+                idempotency_key: idempotencyKey,
+              },
             });
             frappe.msgprint({ title: "Успіх", indicator: "green", message: "Тест повернення відправлено" });
             d.hide();

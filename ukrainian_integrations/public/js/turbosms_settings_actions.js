@@ -12,6 +12,11 @@ frappe.ui.form.on("TurboSMS Settings", {
         defaultSender = (r.message && r.message.default_sender) || "";
       } catch (_) {}
 
+      const idempotencyKey =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : frappe.utils.get_random(32);
+
       const d = new frappe.ui.Dialog({
         title: "TurboSMS: Відправка повідомлення",
         fields: [
@@ -35,6 +40,7 @@ frappe.ui.form.on("TurboSMS Settings", {
                 sender: values.sender,
                 phone: values.phone,
                 text: values.text,
+                idempotency_key: idempotencyKey,
               },
             });
 

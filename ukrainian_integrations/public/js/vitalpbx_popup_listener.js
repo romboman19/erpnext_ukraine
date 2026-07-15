@@ -5,11 +5,22 @@
 
   function esc(v) { return frappe.utils.escape_html((v || '').toString()); }
 
-  frappe.realtime.on('vitalpbx_call_popup', function (m) {
+  frappe.realtime.on('vitalpbx_call_popup', async function (m) {
     if (!m || !m.call_id) return;
     var key = m.call_id + ':' + (m.status || '');
     if (seen[key]) return;
     seen[key] = true;
+
+    try {
+      const context = await frappe.call({
+        method: 'ukrainian_integrations.pbx_sms.vitalpbx.events.get_call_context',
+        args: { call_id: m.call_id }
+      });
+      Object.assign(m, (context && context.message) || {});
+    } catch (_) {
+      m.customer = null;
+      m.recent_sales_invoices = [];
+    }
 
     var c = m.customer || null;
     var side = (m.direction || 'inbound') === 'inbound' ? ('Вхідний: ' + (m.from_number || '')) : ('Вихідний: ' + (m.to_number || ''));

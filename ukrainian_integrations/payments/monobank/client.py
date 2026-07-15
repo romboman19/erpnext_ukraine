@@ -24,7 +24,9 @@ class MonobankClient:
         )
         r.raise_for_status()
         data = r.json() if (r.text or "").strip() else []
-        return data if isinstance(data, list) else []
+        if not isinstance(data, list):
+            raise ValueError("Monobank statement response must be a list")
+        return data
 
 
     def client_info(self) -> dict:

@@ -18,16 +18,22 @@ class PromUAClient:
             "Content-Type": "application/json",
         }
 
-    def list_orders(self, status: str | None = None, limit: int = 50, page: int = 1) -> dict:
-        params = {"limit": int(limit), "page": int(page)}
+    def list_orders(self, status: str | None = None, limit: int = 50, last_id: int | None = None) -> dict:
+        params = {"limit": int(limit)}
         if status:
             params["status"] = status
+        if last_id is not None:
+            params["last_id"] = int(last_id)
         r = requests.get(f"{self.base_url}/orders/list", headers=self._headers(), params=params, timeout=30)
         r.raise_for_status()
         return r.json() if (r.text or "").strip() else {}
 
     def update_stock(self, rows: list[dict]) -> dict:
-        payload = {"products": rows}
-        r = requests.post(f"{self.base_url}/products/edit", headers=self._headers(), json=payload, timeout=40)
+        r = requests.post(
+            f"{self.base_url}/products/edit_by_external_id",
+            headers=self._headers(),
+            json=rows,
+            timeout=40,
+        )
         r.raise_for_status()
         return r.json() if (r.text or "").strip() else {}

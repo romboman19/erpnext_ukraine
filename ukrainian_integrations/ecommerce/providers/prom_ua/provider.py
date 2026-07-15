@@ -17,5 +17,11 @@ class PromUAProvider(BaseProvider):
         return pull_orders(limit=limit)
 
     def sync_stock(self) -> dict:
-        limit = int(frappe.conf.get("prom_ua_stock_limit", 1000) or 1000)
+        limit = int(
+            frappe.conf.get(
+                "prom_ua_stock_max_items",
+                frappe.conf.get("prom_ua_stock_limit", 100_000),
+            )
+            or 100_000
+        )
         return push_stock(limit=limit)
