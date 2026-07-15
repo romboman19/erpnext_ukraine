@@ -31,6 +31,7 @@ from ukrainian_integrations.payments.liqpay.client import LiqPayClient
 from ukrainian_integrations.payments.monobank.client import MonobankClient
 from ukrainian_integrations.payments.privatbank.service import _normalize_amount, _pagination_state
 from ukrainian_integrations.pbx_sms.sms.turbosms import classify_send_response, successful_message_ids
+from ukrainian_integrations.pbx_sms.vitalpbx.custom_fields import _preserve_upgrade_stable_fieldtypes
 from ukrainian_integrations.pbx_sms.vitalpbx.events import is_status_transition_allowed
 from ukrainian_integrations.pbx_sms.vitalpbx.service import PBXRejectedError, _assert_call_accepted
 from ukrainian_integrations.shipment.rozetka_delivery.api import RZDeliveryClient
@@ -56,6 +57,25 @@ from ukrainian_integrations.utils.security import secrets_equal
 
 
 class PureLogicTest(unittest.TestCase):
+    def test_legacy_sender_profile_fieldtype_is_not_coerced(self):
+        custom_fields = {
+            "Sales Invoice": [
+                {
+                    "fieldname": "np_sender_profile",
+                    "fieldtype": "Link",
+                    "options": "NP Sender Profile",
+                }
+            ]
+        }
+
+        def get_existing(*args, **kwargs):
+            return {"fieldtype": "Data", "options": None}
+
+        _preserve_upgrade_stable_fieldtypes(custom_fields, get_existing=get_existing)
+        field = custom_fields["Sales Invoice"][0]
+        self.assertEqual(field["fieldtype"], "Data")
+        self.assertNotIn("options", field)
+
     def test_payload_redaction_is_recursive(self):
         payload = {"token": "secret", "nested": [{"private_key": "private", "value": 4}]}
         self.assertEqual(

@@ -1,9 +1,43 @@
 from __future__ import annotations
 
-from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+import frappe
+
+
+_UPGRADE_STABLE_FIELDTYPES = {
+    ("Sales Invoice", "np_sender_profile"),
+    ("Sales Invoice", "up_sender_profile"),
+}
+
+
+def _preserve_upgrade_stable_fieldtypes(custom_fields, *, get_existing=None):
+    """Never coerce legacy sender profile fields during an app upgrade."""
+    get_existing = get_existing or frappe.db.get_value
+    for doctype, fieldname in _UPGRADE_STABLE_FIELDTYPES:
+        field = next(
+            (row for row in custom_fields.get(doctype, []) if row.get("fieldname") == fieldname),
+            None,
+        )
+        if not field:
+            continue
+        existing = get_existing(
+            "Custom Field",
+            {"dt": doctype, "fieldname": fieldname},
+            ["fieldtype", "options"],
+            as_dict=True,
+        ) or {}
+        existing_type = existing.get("fieldtype")
+        if not existing_type or existing_type == field.get("fieldtype"):
+            continue
+        field["fieldtype"] = existing_type
+        if existing.get("options"):
+            field["options"] = existing["options"]
+        else:
+            field.pop("options", None)
 
 
 def ensure_integration_custom_fields():
+    from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
     custom_fields = {
         "User": [
             {
@@ -59,6 +93,7 @@ def ensure_integration_custom_fields():
             {"fieldname": "ua_external_customer_key", "label": "UA External Customer Key", "fieldtype": "Data", "insert_after": "customer_name", "read_only": 1, "unique": 1, "no_copy": 1, "length": 80}
         ],
     }
+    _preserve_upgrade_stable_fieldtypes(custom_fields)
     create_custom_fields(custom_fields, update=True)
 
 

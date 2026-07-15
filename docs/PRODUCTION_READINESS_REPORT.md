@@ -25,7 +25,7 @@ Deployment readiness for a specific company: **NO-GO until every applicable item
 | 6 | Provider failure handling | Pass | Timeouts and ambiguous responses become `unknown`; explicit 4xx/business rejections become `failed`; scheduler failures surface as failed jobs |
 | 7 | Data integrity and migration | Pass | Idempotent custom-field migration, unique integration keys, fail-closed profile validation and safe legacy backfill |
 | 8 | Operations | Pass | Sanitized bounded logs, retention jobs, diagnostics, monitoring/reconciliation runbook and rollback procedure |
-| 9 | Automated quality | Pass | 49 local and 49 native Frappe unit/contract tests; Ruff, compile, Node 24 syntax, Bandit and dependency audit all pass; live read-only Rozetka city/department smoke test passed through the shipped client |
+| 9 | Automated quality | Pass | 50 local and 50 native Frappe unit/contract tests; Ruff, compile, Node 24 syntax, Bandit and dependency audit all pass; live read-only Rozetka city/department smoke test passed through the shipped client |
 | 10 | CI, packaging and documentation | Pass | `bench build`, wheel and sdist pass; wheel contents include Frappe discovery, Rozetka modules/DocType/assets; CI repeats clean ERPNext v16 migration/tests/build/audit; runbook, migration and provider acceptance docs included |
 
 ## Important behavior now enforced
