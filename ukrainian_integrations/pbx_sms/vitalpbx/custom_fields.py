@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import frappe
 
-
 _UPGRADE_STABLE_FIELDTYPES = {
     ("Sales Invoice", "np_sender_profile"),
     ("Sales Invoice", "up_sender_profile"),
