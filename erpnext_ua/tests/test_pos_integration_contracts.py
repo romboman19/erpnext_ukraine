@@ -16,11 +16,20 @@ class TestPOSIntegrationContracts(unittest.TestCase):
         self.assertIn("def ensure_app_modules():", install_source)
         self.assertIn('"module_name": module_name', install_source)
         self.assertIn('"app_name": "erpnext_ua"', install_source)
+        self.assertIn("def ensure_pos_workspace():", install_source)
+        self.assertIn(
+            'import_file("erpnext_ua.ua_pos", "Workspace", "UA POS Workspace", force=True)',
+            install_source,
+        )
 
         modules_hook = "erpnext_ua.install.ensure_app_modules"
+        workspace_hook = "erpnext_ua.install.ensure_pos_workspace"
         page_hook = "erpnext_ua.install.ensure_pos_page"
+        self.assertLess(hooks.before_migrate.index(modules_hook), hooks.before_migrate.index(workspace_hook))
         self.assertLess(hooks.after_install.index(modules_hook), hooks.after_install.index(page_hook))
+        self.assertLess(hooks.after_install.index(workspace_hook), hooks.after_install.index(page_hook))
         self.assertLess(hooks.after_migrate.index(modules_hook), hooks.after_migrate.index(page_hook))
+        self.assertLess(hooks.after_migrate.index(workspace_hook), hooks.after_migrate.index(page_hook))
 
     def test_pos_uses_policy_aware_identification_endpoint(self):
         source = (APP / "ua_pos" / "page" / "ua_pos" / "ua_pos.js").read_text(

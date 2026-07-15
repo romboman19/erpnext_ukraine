@@ -80,6 +80,17 @@ def ensure_app_modules():
 	frappe.db.commit()
 
 
+def ensure_pos_workspace():
+	"""Import the POS workspace on upgrades as well as clean installs."""
+	if not frappe.db.table_exists("Workspace"):
+		return
+	ensure_app_modules()
+	from frappe.modules.import_file import import_file
+
+	import_file("erpnext_ua.ua_pos", "Workspace", "UA POS Workspace", force=True)
+	frappe.db.commit()
+
+
 def ensure_pos_page():
 	"""Keep the Desk page present even when Frappe's orphan cleanup runs during migrate."""
 	if not frappe.db.table_exists("Page"):
