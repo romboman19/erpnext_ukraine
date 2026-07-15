@@ -1,0 +1,52 @@
+{
+  "doctype": "DocType",
+  "name": "RZ Delivery Sender Profile",
+  "module": "Ukrainian Integrations",
+  "autoname": "field:profile_name",
+  "title_field": "profile_name",
+  "engine": "InnoDB",
+  "field_order": [
+    "profile_name",
+    "is_active",
+    "is_default",
+    "company",
+    "api_section",
+    "api_base",
+    "api_token",
+    "content_language",
+    "carrier_id",
+    "sender_section",
+    "sender_first_name",
+    "sender_middle_name",
+    "sender_last_name",
+    "sender_phone",
+    "sender_city_id",
+    "sender_city_label",
+    "sender_department_id",
+    "sender_department_label"
+  ],
+  "fields": [
+    {"fieldname": "profile_name", "fieldtype": "Data", "label": "Profile Name", "reqd": 1, "unique": 1, "in_list_view": 1},
+    {"fieldname": "is_active", "fieldtype": "Check", "label": "Active", "default": "1", "in_list_view": 1},
+    {"fieldname": "is_default", "fieldtype": "Check", "label": "Default", "default": "0", "in_list_view": 1},
+    {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "in_list_view": 1},
+    {"fieldname": "api_section", "fieldtype": "Section Break", "label": "API"},
+    {"fieldname": "api_base", "fieldtype": "Data", "label": "API Base", "default": "https://rz-delivery.rozetka.ua", "reqd": 1},
+    {"fieldname": "api_token", "fieldtype": "Password", "label": "Static API Token", "reqd": 1, "description": "Static bearer token created in the Rozetka Delivery partner account."},
+    {"fieldname": "content_language", "fieldtype": "Select", "label": "Content Language", "options": "uk\nen\nru", "default": "uk", "reqd": 1},
+    {"fieldname": "carrier_id", "fieldtype": "Data", "label": "Carrier ID", "description": "Optional UUID returned by /api/carrier. Leave empty for Rozetka Delivery departments."},
+    {"fieldname": "sender_section", "fieldtype": "Section Break", "label": "Sender"},
+    {"fieldname": "sender_first_name", "fieldtype": "Data", "label": "First Name", "reqd": 1},
+    {"fieldname": "sender_middle_name", "fieldtype": "Data", "label": "Middle Name"},
+    {"fieldname": "sender_last_name", "fieldtype": "Data", "label": "Last Name", "reqd": 1},
+    {"fieldname": "sender_phone", "fieldtype": "Data", "label": "Phone", "reqd": 1},
+    {"fieldname": "sender_city_id", "fieldtype": "Data", "label": "City ID", "reqd": 1},
+    {"fieldname": "sender_city_label", "fieldtype": "Data", "label": "City", "read_only": 1},
+    {"fieldname": "sender_department_id", "fieldtype": "Data", "label": "Department ID", "reqd": 1},
+    {"fieldname": "sender_department_label", "fieldtype": "Data", "label": "Department", "read_only": 1}
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+    {"role": "Sales Manager", "read": 1, "write": 1, "create": 1}
+  ]
+}

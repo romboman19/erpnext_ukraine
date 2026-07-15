@@ -1,57 +1,48 @@
-# Migration Checklist: hunter_integrations_repo -> erpnext_ukrainian_integrations
+# Upgrade checklist: 0.1.x / 0.2.x → 0.3.0
 
-## 1) Shipment
-- [x] Nova Poshta: базовий client + tracking + scheduler sync
-- [x] Ukrposhta: базовий client + tracking + scheduler sync
-- [ ] Перенести повний create-TTN flow (NP)
-- [ ] Перенести повний create-shipment flow (UP)
-- [ ] Перенести customer delivery profiles (NP/UP)
-- [ ] Перенести UI кнопки/діалоги Sales Invoice
+## Before maintenance
 
-## 2) PBX/SMS
-- [x] TurboSMS: send_sms + send_sms_to_customer
-- [ ] Перенести sender profiles + test-send settings UI
-- [ ] Перенести TurboSMS Log parity (якщо потрібно окремо від unified log)
-- [ ] Додати VitalPBX інтеграцію (MVP)
+- [ ] Record the current app and ERPNext commits.
+- [ ] Run `bench --site <site> backup --with-files` and copy the backup off-host.
+- [ ] Confirm a tested restore path and maintenance window.
+- [ ] Stop schedulers/workers or put the site in maintenance mode.
+- [ ] Export current `site_config.json` securely; never commit it.
 
-## 3) Payments
-- [x] Privat POS: gateway client + sale service
-- [x] LiqPay: signed initiate + callback
-- [x] PrivatBank statements fetch/import
-- [x] Monobank statements fetch/import
-- [x] Unified bank import orchestrator
-- [ ] Поля write-back у SI/POS Invoice (стабільна схема)
-- [ ] Payment Entry reconciliation flow
+## Deploy
 
-## 4) Ecommerce
-- [x] Core contracts/registry/orchestrator
-- [x] PromUA provider template
-- [ ] Реалізувати PromUA order pull
-- [ ] Реалізувати PromUA stock push
-- [ ] Перенести Shop-Express реальну логіку
-- [ ] Додати Rozetka provider (template + MVP)
+- [ ] Deploy the same 0.3.0 commit to backend, scheduler and every queue worker.
+- [ ] Run `./env/bin/pip install -e apps/erpnext_ukraine_integrations`.
+- [ ] Confirm `./env/bin/python -c "import requests; print(requests.__version__)"` reports 2.33.0 or newer.
+- [ ] Run `bench --site <site> migrate` once.
+- [ ] Run `bench build --app ukrainian_integrations`.
+- [ ] Restart backend, scheduler and workers.
+- [ ] Run `bench --site <site> execute ukrainian_integrations.diagnostics.run_installation_checks`.
 
-## 5) Platform/Quality
-- [x] CONTRIBUTING + basic CI (py_compile)
-- [x] Unified Hunter Integration Log doctype
-- [ ] install/uninstall hooks (реальна логіка)
-- [ ] config/desktop workspace icons + pages
-- [ ] smoke tests (API/scheduler/critical flows)
-- [ ] release playbook scripts (staging/prod/rollback)
+Migration 0.2.0 creates deterministic unique keys for bank transactions, customers and sales orders. Legacy bank keys are backfilled only when the provider account can be mapped unambiguously from a profile. Ambiguous records are intentionally left for manual review.
 
-## Priority Plan
+Migration 0.3.0 adds `RZ Delivery Sender Profile` and unique Rozetka Delivery fields to Sales Invoice. Run migration before any shipment creation so a confirmed provider track can always be persisted locally.
 
-### Sprint A (найближчий)
-1. PromUA real API (orders + stock)
-2. NP/UP create shipment/TTN parity
-3. TurboSMS settings/test UI parity
+## Reconfigure
 
-### Sprint B
-1. VitalPBX MVP
-2. Payment reconciliation improvements
-3. Rozetka template + MVP
+- [ ] Populate and enable explicit NP/UP sender profiles.
+- [ ] Populate `RZ Delivery Sender Profile`, select sender city/department, verify the static token and assign Company where applicable.
+- [ ] Populate Monobank, PrivatBank and LiqPay profile rows; verify Company/Bank Account ownership.
+- [ ] Populate TurboSMS Settings; do not rely on legacy fallback after the DocType exists.
+- [ ] Configure `Customer Identification Settings`; Telegram must have both a bot token and webhook secret.
+- [ ] If `erpnext_ua.ua_pos` is deployed, complete the separate PB POS migration in `docs/privat_pos_flow.md`.
+- [ ] Set `User.vitalpbx_extension` and rotate the VitalPBX webhook key.
+- [ ] Configure all required Prom.ua keys, including `prom_ua_company` and warehouse allowlist.
+- [ ] Keep sandbox callbacks and customer-identification test mode disabled in production.
+- [ ] Confirm new LiqPay checkout payloads use API v7; do not set `liqpay_api_version=3` except for a time-bounded rollback (old v3 callbacks remain verifiable automatically).
 
-### Sprint C
-1. Shop-Express full migration
-2. hardening + observability
-3. cutover checklist for production
+## Validate before schedulers
+
+- [ ] Complete every applicable item in `docs/PROVIDER_ACCEPTANCE.md`.
+- [ ] Inspect `UA Integration Operation` for stale `started`/`unknown` records.
+- [ ] Confirm duplicate legacy Prom orders were not present by `po_no`.
+- [ ] Confirm bank transaction counts for a known date range before and after import.
+- [ ] Confirm scheduler and worker queues are healthy with `bench doctor`.
+
+## Rollback
+
+Do not roll back only the source code after a migration. Stop traffic and workers, restore the pre-upgrade database and files backup, deploy the recorded previous app commit to every process, reinstall it, rebuild assets and restart. Verify `list-apps`, worker health and a read-only business report before reopening the site.

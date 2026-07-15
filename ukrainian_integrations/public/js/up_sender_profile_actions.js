@@ -1,6 +1,7 @@
 frappe.ui.form.on('UP Sender Profile', {
   refresh(frm) {
     frm.add_custom_button('Створити відправлення (довільно)', async () => {
+      const idempotencyKey = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : frappe.utils.get_random(32);
       const d = new frappe.ui.Dialog({
         title: 'УП відправлення із профілю',
         fields: [
@@ -17,7 +18,7 @@ frappe.ui.form.on('UP Sender Profile', {
           const recipient = {name:v.name, phone:v.phone, postcode:v.postcode, region:v.region, city:v.city, street:v.street, house:v.house};
           const r = await frappe.call({
             method: 'ukrainian_integrations.shipment.ukr_poshta.service.create_shipment_standalone',
-            args: {sender_profile: frm.doc.profile_name || frm.doc.name, recipient, parcel:{}}
+            args: {sender_profile: frm.doc.profile_name || frm.doc.name, recipient, parcel:{}, idempotency_key: idempotencyKey}
           });
           frappe.msgprint('Barcode: ' + ((r.message||{}).barcode || '-'));
           d.hide();

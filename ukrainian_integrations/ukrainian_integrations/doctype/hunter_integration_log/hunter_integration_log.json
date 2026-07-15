@@ -1,6 +1,6 @@
 {
  "actions": [],
- "allow_rename": 1,
+ "allow_rename": 0,
  "autoname": "autoincrement",
  "creation": "2026-03-08 00:00:00.000000",
  "doctype": "DocType",
@@ -17,17 +17,17 @@
   "error_trace"
  ],
  "fields": [
-  {"fieldname":"integration","fieldtype":"Data","label":"Integration","reqd":1},
+  {"fieldname":"integration","fieldtype":"Data","label":"Integration","reqd":1,"search_index":1},
   {"fieldname":"direction","fieldtype":"Select","label":"Direction","options":"in\nout"},
-  {"fieldname":"status","fieldtype":"Select","label":"Status","options":"queued\nsuccess\nerror","reqd":1},
+  {"fieldname":"status","fieldtype":"Select","label":"Status","options":"queued\nsuccess\nerror","reqd":1,"search_index":1},
   {"fieldname":"reference_doctype","fieldtype":"Link","label":"Reference DocType","options":"DocType"},
-  {"fieldname":"reference_name","fieldtype":"Dynamic Link","label":"Reference Name","options":"reference_doctype"},
+  {"fieldname":"reference_name","fieldtype":"Dynamic Link","label":"Reference Name","options":"reference_doctype","search_index":1},
   {"fieldname":"message","fieldtype":"Small Text","label":"Message"},
   {"fieldname":"request_payload","fieldtype":"Long Text","label":"Request Payload"},
   {"fieldname":"response_payload","fieldtype":"Long Text","label":"Response Payload"},
   {"fieldname":"error_trace","fieldtype":"Long Text","label":"Error Trace"}
  ],
- "index_web_pages_for_search": 1,
+ "index_web_pages_for_search": 0,
  "istable": 0,
  "links": [],
  "modified": "2026-03-08 00:00:00.000000",
@@ -36,7 +36,7 @@
  "name": "Hunter Integration Log",
  "owner": "Administrator",
  "permissions": [
-  {"create":1,"read":1,"write":1,"delete":1,"role":"System Manager"}
+  {"read":1,"role":"System Manager"}
  ],
  "sort_field": "modified",
  "sort_order": "DESC",

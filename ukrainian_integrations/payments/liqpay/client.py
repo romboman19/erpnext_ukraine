@@ -8,6 +8,8 @@ from typing import Any
 import requests
 
 LIQPAY_API = "https://www.liqpay.ua/api"
+LIQPAY_CHECKOUT_URL = "https://www.liqpay.ua/api/3/checkout"
+SUPPORTED_API_VERSIONS = {3, 7}
 
 
 class LiqPayClient:
@@ -21,13 +23,24 @@ class LiqPayClient:
         raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         return base64.b64encode(raw).decode("utf-8")
 
-    def make_signature(self, data_b64: str) -> str:
-        sign_str = f"{self.private_key}{data_b64}{self.private_key}".encode("utf-8")
-        return base64.b64encode(hashlib.sha1(sign_str).digest()).decode("utf-8")
+    def make_signature(self, data_b64: str, api_version: int = 7) -> str:
+        if int(api_version) not in SUPPORTED_API_VERSIONS:
+            raise ValueError("Unsupported LiqPay API version")
+        sign_str = f"{self.private_key}{data_b64}{self.private_key}".encode()
+        if int(api_version) == 7:
+            digest = hashlib.sha3_256(sign_str).digest()
+        else:
+            # Kept only to verify callbacks for v3 checkouts issued before an
+            # upgrade. SHA-1 here is protocol compatibility, not password hashing.
+            digest = hashlib.sha1(sign_str, usedforsecurity=False).digest()
+        return base64.b64encode(digest).decode("utf-8")
 
     def cnb_form_payload(self, payload: dict[str, Any]) -> dict[str, str]:
+        api_version = int(payload.get("version") or 0)
+        if api_version not in SUPPORTED_API_VERSIONS:
+            raise ValueError("Unsupported LiqPay API version")
         data_b64 = self._encode_data(payload)
-        return {"data": data_b64, "signature": self.make_signature(data_b64)}
+        return {"data": data_b64, "signature": self.make_signature(data_b64, api_version)}
 
     def api(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         signed = self.cnb_form_payload(payload)

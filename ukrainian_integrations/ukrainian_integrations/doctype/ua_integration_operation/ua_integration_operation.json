@@ -1,0 +1,29 @@
+{
+  "doctype": "DocType",
+  "name": "UA Integration Operation",
+  "module": "Ukrainian Integrations",
+  "autoname": "autoincrement",
+  "engine": "InnoDB",
+  "track_changes": 1,
+  "field_order": ["idempotency_key", "integration", "operation_type", "status", "reference_doctype", "reference_name", "external_id", "request_hash", "request_payload", "response_payload", "attempts", "last_error", "completed_at"],
+  "fields": [
+    {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key", "reqd": 1, "unique": 1, "no_copy": 1, "in_list_view": 1, "length": 240, "read_only": 1},
+    {"fieldname": "integration", "fieldtype": "Data", "label": "Integration", "reqd": 1, "search_index": 1, "in_list_view": 1, "read_only": 1},
+    {"fieldname": "operation_type", "fieldtype": "Data", "label": "Operation Type", "reqd": 1, "search_index": 1, "in_list_view": 1, "read_only": 1},
+    {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "started\nsucceeded\nfailed\nunknown\nverified\nreconciled", "reqd": 1, "search_index": 1, "in_list_view": 1, "read_only": 1},
+    {"fieldname": "reference_doctype", "fieldtype": "Link", "label": "Reference DocType", "options": "DocType", "read_only": 1},
+    {"fieldname": "reference_name", "fieldtype": "Dynamic Link", "label": "Reference Name", "options": "reference_doctype", "search_index": 1, "read_only": 1},
+    {"fieldname": "external_id", "fieldtype": "Data", "label": "External ID", "search_index": 1, "read_only": 1},
+    {"fieldname": "request_hash", "fieldtype": "Data", "label": "Request SHA-256", "read_only": 1},
+    {"fieldname": "request_payload", "fieldtype": "Long Text", "label": "Request Payload", "read_only": 1},
+    {"fieldname": "response_payload", "fieldtype": "Long Text", "label": "Response Payload", "read_only": 1},
+    {"fieldname": "attempts", "fieldtype": "Int", "label": "Attempts", "default": "1", "read_only": 1},
+    {"fieldname": "last_error", "fieldtype": "Long Text", "label": "Last Error", "read_only": 1},
+    {"fieldname": "completed_at", "fieldtype": "Datetime", "label": "Completed At", "read_only": 1}
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1},
+    {"role": "Accounts Manager", "read": 1},
+    {"role": "Sales Manager", "read": 1}
+  ]
+}

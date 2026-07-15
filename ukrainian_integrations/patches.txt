@@ -1,0 +1,1 @@
+# Data/schema upgrades are idempotent and run through the after_migrate hook.

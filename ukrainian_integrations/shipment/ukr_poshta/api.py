@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import requests
 
 UP_API_BASE_DEFAULT = "https://www.ukrposhta.ua/ecom/0.0.1"
@@ -20,12 +22,11 @@ class UkrPoshtaClient:
         if not self.ecom_token:
             raise ValueError("Ukrposhta ecom token is required")
 
-    def _headers(self, token_kind: str = "ecom") -> dict:
-        if token_kind == "tracking" and self.tracking_token:
-            token = self.tracking_token
-        else:
-            token = self.ecom_token
-        return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    def _headers(self, auth_mode: str = "ecom") -> dict:
+        selected_credential = (
+            self.tracking_token if auth_mode == "tracking" and self.tracking_token else self.ecom_token
+        )
+        return {"Authorization": f"Bearer {selected_credential}", "Content-Type": "application/json"}
 
     def request(
         self,
@@ -33,14 +34,14 @@ class UkrPoshtaClient:
         method: str = "GET",
         payload: dict | None = None,
         params: dict | None = None,
-        token_kind: str = "ecom",
+        auth_mode: str = "ecom",
     ) -> dict:
         url = f"{self.api_base}/{path.lstrip('/')}"
         is_body = method.upper() not in {"GET", "HEAD"}
         resp = requests.request(
             method.upper(),
             url,
-            headers=self._headers(token_kind),
+            headers=self._headers(auth_mode),
             params=params or {},
             json=(payload or {}) if is_body else None,
             timeout=40,
@@ -60,7 +61,7 @@ class UkrPoshtaClient:
 
     def create_address(self, payload: dict) -> dict:
         """POST /addresses → returns address dict with 'id'."""
-        return self.request("addresses", method="POST", payload=payload, token_kind="ecom")
+        return self.request("addresses", method="POST", payload=payload, auth_mode="ecom")
 
     # ── Client ───────────────────────────────────────────────────────────────
 
@@ -69,7 +70,7 @@ class UkrPoshtaClient:
         params = {}
         if self.counterparty_token:
             params["token"] = self.counterparty_token
-        return self.request("clients", method="POST", payload=payload, params=params, token_kind="ecom")
+        return self.request("clients", method="POST", payload=payload, params=params, auth_mode="ecom")
 
     # ── Shipment ─────────────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ class UkrPoshtaClient:
         params = {}
         if self.counterparty_token:
             params["token"] = self.counterparty_token
-        return self.request("shipments", method="POST", payload=payload, params=params, token_kind="ecom")
+        return self.request("shipments", method="POST", payload=payload, params=params, auth_mode="ecom")
 
     # ── Tracking ─────────────────────────────────────────────────────────────
 
@@ -88,10 +89,10 @@ class UkrPoshtaClient:
         if self.tracking_token:
             params["token"] = self.tracking_token
         return self.request(
-            f"shipments/barcode/{barcode}",
+            f"shipments/barcode/{quote(str(barcode), safe='')}",
             method="GET",
             params=params,
-            token_kind="tracking",
+            auth_mode="tracking",
         )
 
     # ── Label ────────────────────────────────────────────────────────────────
@@ -102,8 +103,8 @@ class UkrPoshtaClient:
         if self.counterparty_token:
             params["token"] = self.counterparty_token
         return self.request(
-            f"shipments/{shipment_id}/{form_type}",
+            f"shipments/{quote(str(shipment_id), safe='')}/{quote(str(form_type), safe='')}",
             method="GET",
             params=params,
-            token_kind="ecom",
+            auth_mode="ecom",
         )

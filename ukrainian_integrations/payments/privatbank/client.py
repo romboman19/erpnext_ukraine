@@ -59,8 +59,7 @@ class PrivatbankClient:
             if group_id:
                 hdr["id"] = group_id
             r = requests.get(url, params=params, headers=hdr, timeout=45)
-            txt = (r.text or "")[:800]
-            attempts.append((f"GET {url}", r.status_code, txt))
+            attempts.append((f"GET {url}", r.status_code))
             if r.ok:
                 return r.json() if (r.text or "").strip() else {}
 
@@ -70,11 +69,11 @@ class PrivatbankClient:
                 params2 = dict(params)
                 params2.pop('id', None)
                 r2 = requests.get(url, params=params2, headers=hdr2, timeout=45)
-                attempts.append((f"GET {url} (no-id-retry)", r2.status_code, (r2.text or "")[:800]))
+                attempts.append((f"GET {url} (no-id-retry)", r2.status_code))
                 if r2.ok:
                     return r2.json() if (r2.text or "").strip() else {}
 
-        detail = " | ".join([f"{m} -> {c}: {t}" for (m, c, t) in attempts])
+        detail = " | ".join([f"{m} -> HTTP {c}" for (m, c) in attempts])
         raise requests.HTTPError(f"PrivatBank statements failed: {detail}")
 
 
@@ -86,10 +85,10 @@ class PrivatbankClient:
             if group_id:
                 hdr["id"] = group_id
             r = requests.get(url, params=params, headers=hdr, timeout=45)
-            attempts.append((url, r.status_code, (r.text or '')[:800]))
+            attempts.append((url, r.status_code))
             if r.ok:
                 return r.json() if (r.text or "").strip() else {}
-        detail = ' | '.join([f"{u} -> {c}: {t}" for u,c,t in attempts])
+        detail = ' | '.join([f"{u} -> HTTP {c}" for u,c in attempts])
         raise requests.HTTPError(f"PrivatBank settings failed: {detail}")
 
 
@@ -111,7 +110,7 @@ class PrivatbankClient:
             if group_id:
                 hdr['id'] = group_id
             r = requests.get(url, params=params, headers=hdr, timeout=45)
-            attempts.append((f"GET {url}", r.status_code, (r.text or "")[:800]))
+            attempts.append((f"GET {url}", r.status_code))
             if r.ok:
                 return r.json() if (r.text or "").strip() else {}
 
@@ -120,9 +119,9 @@ class PrivatbankClient:
                 params2 = dict(params)
                 params2.pop('id', None)
                 r2 = requests.get(url, params=params2, headers=hdr2, timeout=45)
-                attempts.append((f"GET {url} (no-id-retry)", r2.status_code, (r2.text or "")[:800]))
+                attempts.append((f"GET {url} (no-id-retry)", r2.status_code))
                 if r2.ok:
                     return r2.json() if (r2.text or "").strip() else {}
 
-        detail = ' | '.join([f"{m} -> {c}: {t}" for (m,c,t) in attempts])
+        detail = ' | '.join([f"{m} -> HTTP {c}" for (m,c) in attempts])
         raise requests.HTTPError(f"PrivatBank balances failed: {detail}")

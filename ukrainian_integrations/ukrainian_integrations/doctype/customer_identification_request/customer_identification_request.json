@@ -1,0 +1,38 @@
+{
+ "doctype": "DocType",
+ "name": "Customer Identification Request",
+ "module": "Ukrainian Integrations",
+ "autoname": "CID-.YYYY.-.#####",
+ "title_field": "phone",
+ "search_fields": "phone,customer,request_token",
+ "field_order": [
+  "request_token", "channel", "phone", "status", "expires_at", "attempts", "customer",
+  "instructions", "code_hash", "external_reference", "telegram_user_id",
+  "initiated_by", "verified_at", "verified_by", "reference_doctype", "reference_name"
+ ],
+ "fields": [
+  {"fieldname": "request_token", "fieldtype": "Data", "label": "Request Token", "reqd": 1, "unique": 1, "read_only": 1},
+  {"fieldname": "channel", "fieldtype": "Select", "label": "Канал", "options": "SMS\nTelegram\nCall", "reqd": 1, "read_only": 1},
+  {"fieldname": "phone", "fieldtype": "Data", "label": "Телефон", "reqd": 1, "read_only": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Статус", "options": "Pending\nVerified\nExpired\nFailed\nCancelled", "default": "Pending", "reqd": 1, "read_only": 1},
+  {"fieldname": "expires_at", "fieldtype": "Datetime", "label": "Діє до", "reqd": 1, "read_only": 1},
+  {"fieldname": "attempts", "fieldtype": "Int", "label": "Спроби", "default": "0", "read_only": 1},
+  {"fieldname": "customer", "fieldtype": "Link", "label": "Покупець", "options": "Customer", "read_only": 1},
+  {"fieldname": "instructions", "fieldtype": "Small Text", "label": "Інструкція", "read_only": 1},
+  {"fieldname": "code_hash", "fieldtype": "Data", "label": "Code Hash", "hidden": 1, "read_only": 1},
+  {"fieldname": "external_reference", "fieldtype": "Small Text", "label": "External Reference", "read_only": 1},
+  {"fieldname": "telegram_user_id", "fieldtype": "Data", "label": "Telegram User ID", "read_only": 1},
+  {"fieldname": "initiated_by", "fieldtype": "Link", "label": "Ініціатор", "options": "User", "read_only": 1},
+  {"fieldname": "verified_at", "fieldtype": "Datetime", "label": "Підтверджено", "read_only": 1},
+  {"fieldname": "verified_by", "fieldtype": "Link", "label": "Підтвердив", "options": "User", "read_only": 1},
+  {"fieldname": "reference_doctype", "fieldtype": "Link", "label": "Reference Type", "options": "DocType", "read_only": 1},
+  {"fieldname": "reference_name", "fieldtype": "Dynamic Link", "label": "Reference", "options": "reference_doctype", "read_only": 1}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1},
+  {"role": "Sales Manager", "read": 1}
+ ],
+ "engine": "InnoDB",
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}
