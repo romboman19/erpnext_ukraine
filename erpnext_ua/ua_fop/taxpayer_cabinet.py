@@ -31,6 +31,17 @@ def _digits(value) -> str:
 	return "".join(ch for ch in str(value or "") if ch.isdigit())
 
 
+def _valid_signer_tax_ids(signer: dict) -> set[str]:
+	"""Return only structurally valid RNOKPP/EDRPOU values from signer metadata.
+
+	Some certificate parsers expose a missing DRFO extension as the placeholder
+	``0``. It is metadata absence, not a taxpayer identifier, and must not turn a
+	valid DPS authorization into a false mismatch.
+	"""
+	values = {_digits(signer.get(field)) for field in ("ipn", "edrpou")}
+	return {value for value in values if re.fullmatch(r"(?:\d{8}|\d{10})", value)}
+
+
 def _parse_date(value) -> str | None:
 	text = str(value or "").strip()
 	if not text:
@@ -334,8 +345,7 @@ def _authorization_signature(tax_id: str, kep_key: str) -> tuple[str, FiscalClie
 		},
 	)
 	signer = body.get("signer") if isinstance(body.get("signer"), dict) else {}
-	signer_tax_ids = {_digits(signer.get(field)) for field in ("ipn", "edrpou")}
-	signer_tax_ids.discard("")
+	signer_tax_ids = _valid_signer_tax_ids(signer)
 	if signer_tax_ids and tax_id not in signer_tax_ids:
 		frappe.throw(_("The KEP signer does not match the FOP taxpayer number"))
 	try:

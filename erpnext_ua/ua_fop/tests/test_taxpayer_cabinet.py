@@ -1,9 +1,16 @@
 from frappe.tests import IntegrationTestCase
 
-from erpnext_ua.ua_fop.taxpayer_cabinet import parse_taxpayer_card
+from erpnext_ua.ua_fop.taxpayer_cabinet import _valid_signer_tax_ids, parse_taxpayer_card
 
 
 class TestTaxpayerCabinetParsing(IntegrationTestCase):
+	def test_ignores_invalid_signer_tax_id_placeholder(self):
+		self.assertEqual(_valid_signer_tax_ids({"ipn": "0", "edrpou": None}), set())
+		self.assertEqual(
+			_valid_signer_tax_ids({"ipn": "3423612974", "edrpou": "12345678"}),
+			{"3423612974", "12345678"},
+		)
+
 	def test_maps_documented_payer_card_groups(self):
 		payload = [
 			{
