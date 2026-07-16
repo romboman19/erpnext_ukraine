@@ -116,6 +116,7 @@ async function apply_draft_result(frm, result) {
 		kveds.filter((item) => item.code !== main.code).forEach((item) => {
 			const row = frm.add_child("kveds");
 			row.kved = item.code;
+			row.title = item.title || item.code;
 		});
 		frm.refresh_field("kveds");
 	}
