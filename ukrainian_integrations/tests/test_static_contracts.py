@@ -101,6 +101,26 @@ class ProductionStaticContractsTest(unittest.TestCase):
         definition = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(definition.get("autoname"), "hash")
 
+    def test_modules_select_turbosms_senders_from_the_local_registry(self):
+        settings_path = (
+            PACKAGE
+            / "ukrainian_integrations"
+            / "doctype"
+            / "customer_identification_settings"
+            / "customer_identification_settings.json"
+        )
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        sms_sender = next(field for field in settings["fields"] if field["fieldname"] == "sms_sender")
+        self.assertEqual(sms_sender["fieldtype"], "Select")
+
+        controller = settings_path.with_suffix(".js").read_text(encoding="utf-8")
+        self.assertIn("get_sender_options", controller)
+        self.assertNotIn('fieldtype: "Data"', controller)
+
+        service = (PACKAGE / "pbx_sms" / "sms" / "turbosms.py").read_text(encoding="utf-8")
+        self.assertIn("resolve_configured_sender", service)
+        self.assertIn("Sender is not configured or inactive", service)
+
     def test_external_mutations_require_idempotency_keys(self):
         required = {
             "liqpay_initiate",

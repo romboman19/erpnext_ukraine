@@ -23,7 +23,7 @@
   {"fieldname": "test_code", "fieldtype": "Data", "label": "Довідка", "hidden": 1},
   {"fieldname": "sms_section", "fieldtype": "Section Break", "label": "SMS · TurboSMS"},
   {"fieldname": "sms_enabled", "fieldtype": "Check", "label": "Дозволити SMS", "default": "1"},
-  {"fieldname": "sms_sender", "fieldtype": "Data", "label": "Відправник SMS"},
+  {"fieldname": "sms_sender", "fieldtype": "Select", "label": "Відправник SMS", "description": "Активні відправники з TurboSMS Settings. Якщо не вибрано, використовується локальний відправник за замовчуванням."},
   {"fieldname": "sms_template", "fieldtype": "Small Text", "label": "Шаблон SMS", "default": "Код підтвердження: {code}. Дійсний {minutes} хв."},
   {"fieldname": "telegram_section", "fieldtype": "Section Break", "label": "Telegram-бот"},
   {"fieldname": "telegram_enabled", "fieldtype": "Check", "label": "Дозволити Telegram", "default": "0"},

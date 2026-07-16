@@ -77,6 +77,41 @@ def _get_turbosms_settings() -> dict:
     }
 
 
+def configured_sender_names(cfg: dict | None = None) -> list[str]:
+    """Return the canonical local sender list shared by every ERPNext module."""
+    if cfg is None:
+        cfg = _get_turbosms_settings()
+    names: list[str] = []
+    seen: set[str] = set()
+    for row in cfg.get("senders") or []:
+        name = str(row.get("sender_name") or "").strip()
+        key = name.casefold()
+        if name and key not in seen:
+            names.append(name)
+            seen.add(key)
+
+    # Keep an existing installation working while it migrates from the legacy
+    # single sender field to the child table. It is still a locally configured
+    # value, never a free-form value supplied by another module.
+    legacy_default = str(cfg.get("sender") or "").strip()
+    if not names and legacy_default:
+        names.append(legacy_default)
+    return names
+
+
+def resolve_configured_sender(sender: str | None = None, cfg: dict | None = None) -> str:
+    """Resolve default sender and reject values outside TurboSMS Settings."""
+    if cfg is None:
+        cfg = _get_turbosms_settings()
+    names = configured_sender_names(cfg)
+    default_sender = str(cfg.get("sender") or "").strip()
+    resolved = str(sender or default_sender).strip()
+    by_key = {name.casefold(): name for name in names}
+    if not resolved or resolved.casefold() not in by_key:
+        raise ValueError("Sender is not configured or inactive")
+    return by_key[resolved.casefold()]
+
+
 
 
 def _write_turbosms_log(*, status: str, phone: str, sender: str, message_text: str, response_json=None, error_text: str = ""):
@@ -166,10 +201,10 @@ def _send_sms_internal(phone: str, text: str, idempotency_key: str, sender: str 
     if len(body) > max_text_length:
         frappe.throw(_("SMS text exceeds the configured maximum length ({0})").format(max_text_length))
 
-    sender_name = (sender or cfg.get("sender") or "HUNTER RV").strip()
-    allowed_senders = {x.get("sender_name") for x in cfg.get("senders", []) if x.get("sender_name")}
-    if allowed_senders and sender_name not in allowed_senders:
-        frappe.throw(_("Sender is not configured or inactive"), frappe.PermissionError)
+    try:
+        sender_name = resolve_configured_sender(sender, cfg)
+    except ValueError as exc:
+        frappe.throw(_(str(exc)), frappe.PermissionError)
     url = (cfg.get("base_url") or TURBOSMS_URL_DEFAULT).strip()
 
     reservation = reserve_operation(
@@ -248,8 +283,9 @@ def get_sender_options() -> dict:
     require_roles(*SALES_ROLES)
     cfg = _get_turbosms_settings()
     return {
-        "senders": [x.get("sender_name") for x in cfg.get("senders", []) if x.get("sender_name")],
-        "default_sender": cfg.get("sender") or "",
+        "enabled": cint(cfg.get("enabled")) == 1,
+        "senders": configured_sender_names(cfg),
+        "default_sender": resolve_configured_sender(cfg=cfg) if configured_sender_names(cfg) else "",
     }
 
 

@@ -32,7 +32,12 @@ from ukrainian_integrations.migrations import _merge_app_icons_into_layout
 from ukrainian_integrations.payments.liqpay.client import LiqPayClient
 from ukrainian_integrations.payments.monobank.client import MonobankClient
 from ukrainian_integrations.payments.privatbank.service import _normalize_amount, _pagination_state
-from ukrainian_integrations.pbx_sms.sms.turbosms import classify_send_response, successful_message_ids
+from ukrainian_integrations.pbx_sms.sms.turbosms import (
+    classify_send_response,
+    configured_sender_names,
+    resolve_configured_sender,
+    successful_message_ids,
+)
 from ukrainian_integrations.pbx_sms.vitalpbx.custom_fields import _preserve_upgrade_stable_fieldtypes
 from ukrainian_integrations.pbx_sms.vitalpbx.events import is_status_transition_allowed
 from ukrainian_integrations.pbx_sms.vitalpbx.service import PBXRejectedError, _assert_call_accepted
@@ -279,6 +284,27 @@ class PureLogicTest(unittest.TestCase):
         self.assertEqual(classify_send_response(rejected)[0], "failed")
         malformed = {**valid, "response_result": [{"message_id": "m-1"}]}
         self.assertEqual(classify_send_response(malformed)[0], "unknown")
+
+    def test_turbosms_sender_registry_is_shared_and_fail_closed(self):
+        cfg = {
+            "enabled": 1,
+            "sender": "Primary",
+            "senders": [
+                {"sender_name": "Primary", "is_active": 1},
+                {"sender_name": "Retail", "is_active": 1},
+                {"sender_name": "primary", "is_active": 1},
+            ],
+        }
+        self.assertEqual(configured_sender_names(cfg), ["Primary", "Retail"])
+        self.assertEqual(resolve_configured_sender(cfg=cfg), "Primary")
+        self.assertEqual(resolve_configured_sender("retail", cfg), "Retail")
+        with self.assertRaises(ValueError):
+            resolve_configured_sender("Free form sender", cfg)
+
+    def test_turbosms_legacy_default_remains_a_local_sender(self):
+        cfg = {"enabled": 1, "sender": "Legacy", "senders": []}
+        self.assertEqual(configured_sender_names(cfg), ["Legacy"])
+        self.assertEqual(resolve_configured_sender(cfg=cfg), "Legacy")
 
     def test_vitalpbx_statuses_do_not_regress(self):
         self.assertTrue(is_status_transition_allowed("ringing", "answered"))

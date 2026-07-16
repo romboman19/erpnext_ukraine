@@ -4,6 +4,12 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from ukrainian_integrations.pbx_sms.sms.turbosms import (
+    _get_turbosms_settings,
+    configured_sender_names,
+    resolve_configured_sender,
+)
+
 
 class CustomerIdentificationSettings(Document):
     def validate(self):
@@ -59,6 +65,16 @@ class CustomerIdentificationSettings(Document):
                 frappe.throw(
                     _("Шаблон SMS має містити {code} та {minutes}")
                 )
+            if not self.test_mode:
+                turbosms = _get_turbosms_settings()
+                if not int(turbosms.get("enabled") or 0):
+                    frappe.throw(_("TurboSMS integration must be enabled for SMS identification"))
+                if not configured_sender_names(turbosms):
+                    frappe.throw(_("Add at least one active sender in TurboSMS Settings"))
+                try:
+                    self.sms_sender = resolve_configured_sender(self.sms_sender or None, turbosms)
+                except ValueError as exc:
+                    frappe.throw(_(str(exc)))
 
         if self.telegram_enabled:
             if not str(self.telegram_bot_username or "").strip():
