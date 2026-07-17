@@ -24,6 +24,7 @@ before_migrate = [
 
 after_install = [
 	"erpnext_ua.install.ensure_app_modules",
+	"erpnext_ua.install.ensure_accounting_setup",
 	"erpnext_ua.install.ensure_pos_workspace",
     "erpnext_ua.install.ensure_tax_parameters",
     "erpnext_ua.install.ensure_pos_setup",
@@ -34,6 +35,7 @@ after_install = [
 
 after_migrate = [
 	"erpnext_ua.install.ensure_app_modules",
+	"erpnext_ua.install.ensure_accounting_setup",
 	"erpnext_ua.install.ensure_pos_workspace",
     "erpnext_ua.install.ensure_tax_parameters",
     "erpnext_ua.install.ensure_pos_setup",

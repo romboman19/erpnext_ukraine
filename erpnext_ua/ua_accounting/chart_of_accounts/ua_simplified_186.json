@@ -1,0 +1,464 @@
+{
+  "key": "simplified_186",
+  "title": "Україна — спрощений План рахунків № 186",
+  "legal_basis": [
+    {
+      "document": "Наказ Мінфіну № 186 — спрощений План рахунків",
+      "url": "https://zakon.rada.gov.ua/go/z0389-01",
+      "revision": "2025-12-23"
+    },
+    {
+      "document": "Інструкція до Плану № 291",
+      "url": "https://zakon.rada.gov.ua/go/z0893-99",
+      "revision": "2025-12-23"
+    }
+  ],
+  "groups": {
+    "1": {
+      "name": "Клас 1. Необоротні активи",
+      "root_type": "Asset"
+    },
+    "2": {
+      "name": "Клас 2. Запаси",
+      "root_type": "Asset"
+    },
+    "3": {
+      "name": "Клас 3. Кошти, розрахунки та інші активи",
+      "root_type": "Asset"
+    },
+    "4e": {
+      "name": "Клас 4. Власний капітал",
+      "root_type": "Equity"
+    },
+    "4l": {
+      "name": "Клас 4. Забезпечення та цільове фінансування",
+      "root_type": "Liability"
+    },
+    "5": {
+      "name": "Клас 5. Довгострокові зобов'язання",
+      "root_type": "Liability"
+    },
+    "6": {
+      "name": "Клас 6. Поточні зобов'язання",
+      "root_type": "Liability"
+    },
+    "7": {
+      "name": "Клас 7. Доходи і результати діяльності",
+      "root_type": "Income"
+    },
+    "8": {
+      "name": "Клас 8. Витрати за елементами",
+      "root_type": "Expense"
+    },
+    "9": {
+      "name": "Клас 9. Витрати діяльності",
+      "root_type": "Expense"
+    },
+    "0": {
+      "name": "Клас 0. Позабалансові рахунки",
+      "root_type": "Asset",
+      "off_balance": true
+    }
+  },
+  "accounts": [
+    {
+      "code": "10",
+      "name": "Основні засоби",
+      "group": "1",
+      "source": "official"
+    },
+    {
+      "code": "13",
+      "name": "Знос (амортизація) необоротних активів",
+      "group": "1",
+      "source": "official",
+      "account_type": "Accumulated Depreciation"
+    },
+    {
+      "code": "14",
+      "name": "Довгострокові фінансові інвестиції",
+      "group": "1",
+      "source": "official"
+    },
+    {
+      "code": "15",
+      "name": "Капітальні інвестиції",
+      "group": "1",
+      "source": "official",
+      "account_type": "Capital Work in Progress"
+    },
+    {
+      "code": "16",
+      "name": "Довгострокові біологічні активи",
+      "group": "1",
+      "source": "official"
+    },
+    {
+      "code": "18",
+      "name": "Інші необоротні активи",
+      "group": "1",
+      "source": "official"
+    },
+    {
+      "code": "20",
+      "name": "Виробничі запаси",
+      "group": "2",
+      "source": "official"
+    },
+    {
+      "code": "21",
+      "name": "Поточні біологічні активи",
+      "group": "2",
+      "source": "official"
+    },
+    {
+      "code": "23",
+      "name": "Виробництво",
+      "group": "2",
+      "source": "official"
+    },
+    {
+      "code": "26",
+      "name": "Готова продукція",
+      "group": "2",
+      "source": "official"
+    },
+    {
+      "code": "30",
+      "name": "Готівка",
+      "group": "3",
+      "source": "official"
+    },
+    {
+      "code": "31",
+      "name": "Рахунки в банках",
+      "group": "3",
+      "source": "official"
+    },
+    {
+      "code": "35",
+      "name": "Поточні фінансові інвестиції",
+      "group": "3",
+      "source": "official"
+    },
+    {
+      "code": "37",
+      "name": "Розрахунки з різними дебіторами",
+      "group": "3",
+      "source": "official"
+    },
+    {
+      "code": "39",
+      "name": "Витрати майбутніх періодів",
+      "group": "3",
+      "source": "official"
+    },
+    {
+      "code": "40",
+      "name": "Власний капітал",
+      "group": "4e",
+      "source": "official"
+    },
+    {
+      "code": "44",
+      "name": "Нерозподілені прибутки (непокриті збитки)",
+      "group": "4e",
+      "source": "official"
+    },
+    {
+      "code": "47",
+      "name": "Забезпечення майбутніх витрат і платежів",
+      "group": "4l",
+      "source": "official"
+    },
+    {
+      "code": "48",
+      "name": "Цільове фінансування і цільові надходження",
+      "group": "4l",
+      "source": "official"
+    },
+    {
+      "code": "55",
+      "name": "Інші довгострокові зобов'язання",
+      "group": "5",
+      "source": "official"
+    },
+    {
+      "code": "64",
+      "name": "Розрахунки за податками й платежами",
+      "group": "6",
+      "source": "official",
+      "account_type": "Tax"
+    },
+    {
+      "code": "66",
+      "name": "Розрахунки з оплати праці",
+      "group": "6",
+      "source": "official"
+    },
+    {
+      "code": "68",
+      "name": "Розрахунки за іншими операціями",
+      "group": "6",
+      "source": "official"
+    },
+    {
+      "code": "69",
+      "name": "Доходи майбутніх періодів",
+      "group": "6",
+      "source": "official"
+    },
+    {
+      "code": "70",
+      "name": "Доходи від реалізації",
+      "group": "7",
+      "source": "official"
+    },
+    {
+      "code": "74",
+      "name": "Інші доходи",
+      "group": "7",
+      "source": "official"
+    },
+    {
+      "code": "79",
+      "name": "Фінансові результати",
+      "group": "7",
+      "source": "official",
+      "account_type": "Temporary"
+    },
+    {
+      "code": "90",
+      "name": "Собівартість реалізації",
+      "group": "9",
+      "source": "official"
+    },
+    {
+      "code": "91",
+      "name": "Загальновиробничі витрати",
+      "group": "9",
+      "source": "official"
+    },
+    {
+      "code": "97",
+      "name": "Інші витрати",
+      "group": "9",
+      "source": "official"
+    },
+    {
+      "code": "01",
+      "name": "Орендовані необоротні активи",
+      "group": "0",
+      "source": "official"
+    },
+    {
+      "code": "02",
+      "name": "Активи на відповідальному зберіганні",
+      "group": "0",
+      "source": "official"
+    },
+    {
+      "code": "021",
+      "name": "Устаткування, прийняте для монтажу",
+      "parent": "02",
+      "source": "official"
+    },
+    {
+      "code": "022",
+      "name": "Матеріали, прийняті для переробки",
+      "parent": "02",
+      "source": "official"
+    },
+    {
+      "code": "023",
+      "name": "Матеріальні цінності на відповідальному зберіганні",
+      "parent": "02",
+      "source": "official"
+    },
+    {
+      "code": "024",
+      "name": "Товари, прийняті на комісію",
+      "parent": "02",
+      "source": "official"
+    },
+    {
+      "code": "025",
+      "name": "Матеріальні цінності довірителя",
+      "parent": "02",
+      "source": "official"
+    },
+    {
+      "code": "03",
+      "name": "Контрактні зобов'язання",
+      "group": "0",
+      "source": "official"
+    },
+    {
+      "code": "04",
+      "name": "Непередбачені активи й зобов'язання",
+      "group": "0",
+      "source": "official"
+    },
+    {
+      "code": "041",
+      "name": "Непередбачені активи",
+      "parent": "04",
+      "source": "official"
+    },
+    {
+      "code": "042",
+      "name": "Непередбачені зобов'язання",
+      "parent": "04",
+      "source": "official"
+    },
+    {
+      "code": "05",
+      "name": "Гарантії та забезпечення надані",
+      "group": "0",
+      "source": "official"
+    },
+    {
+      "code": "06",
+      "name": "Гарантії та забезпечення отримані",
+      "group": "0",
+      "source": "official"
+    },
+    {
+      "code": "07",
+      "name": "Списані активи",
+      "group": "0",
+      "source": "official"
+    },
+    {
+      "code": "071",
+      "name": "Списана дебіторська заборгованість",
+      "parent": "07",
+      "source": "official"
+    },
+    {
+      "code": "072",
+      "name": "Невідшкодовані нестачі і втрати від псування цінностей",
+      "parent": "07",
+      "source": "official"
+    },
+    {
+      "code": "08",
+      "name": "Бланки суворого обліку",
+      "group": "0",
+      "source": "official"
+    },
+    {
+      "code": "09",
+      "name": "Амортизаційні відрахування",
+      "group": "0",
+      "source": "official"
+    },
+    {
+      "code": "10.1",
+      "name": "Основні засоби (операційний рахунок ERPNext)",
+      "parent": "10",
+      "account_type": "Fixed Asset",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "26.1",
+      "name": "Товари та готова продукція",
+      "parent": "26",
+      "account_type": "Stock",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "30.1",
+      "name": "Готівка в національній валюті",
+      "parent": "30",
+      "account_type": "Cash",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "31.1",
+      "name": "Поточний рахунок у національній валюті",
+      "parent": "31",
+      "account_type": "Bank",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "37.1",
+      "name": "Розрахунки з покупцями",
+      "parent": "37",
+      "account_type": "Receivable",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "68.1",
+      "name": "Розрахунки з постачальниками",
+      "parent": "68",
+      "account_type": "Payable",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "68.2",
+      "name": "Запаси отримано, рахунок постачальника не отримано",
+      "parent": "68",
+      "account_type": "Stock Received But Not Billed",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "70.1",
+      "name": "Дохід від реалізації товарів, робіт і послуг",
+      "parent": "70",
+      "account_type": "Income Account",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "90.1",
+      "name": "Собівартість реалізованих товарів, робіт і послуг",
+      "parent": "90",
+      "account_type": "Cost of Goods Sold",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "97.1",
+      "name": "Коригування запасів",
+      "parent": "97",
+      "account_type": "Stock Adjustment",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "97.2",
+      "name": "Округлення",
+      "parent": "97",
+      "account_type": "Round Off",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "97.3",
+      "name": "Списання та інші витрати",
+      "parent": "97",
+      "account_type": "Expense Account",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "97.4",
+      "name": "Амортизаційні витрати",
+      "parent": "97",
+      "account_type": "Depreciation",
+      "source": "erpnext_extension"
+    }
+  ],
+  "defaults": {
+    "default_receivable_account": "37.1",
+    "default_payable_account": "68.1",
+    "default_cash_account": "30.1",
+    "default_bank_account": "31.1",
+    "default_income_account": "70.1",
+    "default_expense_account": "90.1",
+    "default_inventory_account": "26.1",
+    "stock_received_but_not_billed": "68.2",
+    "stock_adjustment_account": "97.1",
+    "round_off_account": "97.2",
+    "write_off_account": "97.3",
+    "accumulated_depreciation_account": "13",
+    "depreciation_expense_account": "97.4",
+    "disposal_account": "97.3"
+  }
+}
