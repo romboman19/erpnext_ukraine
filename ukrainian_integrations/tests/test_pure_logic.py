@@ -28,7 +28,7 @@ from ukrainian_integrations.customer_identification.telegram import (
 )
 from ukrainian_integrations.ecommerce.providers.prom_ua.api import PromUAClient
 from ukrainian_integrations.ecommerce.providers.prom_ua.service import _order_item_rows
-from ukrainian_integrations.migrations import _merge_app_icons_into_layout
+from ukrainian_integrations.migrations import _merge_app_icons_into_layout, remove_legacy_integration_artifacts
 from ukrainian_integrations.payments.liqpay.client import LiqPayClient
 from ukrainian_integrations.payments.monobank.client import MonobankClient
 from ukrainian_integrations.payments.privatbank.service import _normalize_amount, _pagination_state
@@ -122,6 +122,45 @@ class PureLogicTest(unittest.TestCase):
         merged_again, added_again = _merge_app_icons_into_layout(merged, app_icons)
         self.assertEqual(added_again, 0)
         self.assertEqual(merged_again, merged)
+
+    def test_legacy_integration_cleanup_migrates_turbosms_sender_before_deletion(self):
+        legacy_doctypes = {
+            "NP Integration Settings",
+            "UP Integration Settings",
+            "TurboSMS Settings",
+        }
+        database = Mock()
+        database.exists.side_effect = lambda doctype, name: (
+            doctype == "DocType" and name in legacy_doctypes
+        )
+        database.get_single_value.return_value = "HUNTER RV"
+        database.get_value.return_value = 0
+        settings = Mock()
+        settings.get.return_value = []
+
+        with (
+            patch.object(frappe, "db", database),
+            patch.object(frappe, "get_single", return_value=settings, create=True),
+            patch.object(frappe, "delete_doc", create=True) as delete_doc,
+            patch.object(frappe, "clear_cache", create=True),
+        ):
+            result = remove_legacy_integration_artifacts()
+
+        self.assertEqual(
+            result["removed_doctypes"],
+            ["NP Integration Settings", "UP Integration Settings"],
+        )
+        self.assertTrue(result["migrated_turbosms_sender"])
+        settings.append.assert_called_once_with(
+            "senders",
+            {"sender_name": "HUNTER RV", "is_active": 1, "is_default": 1},
+        )
+        settings.save.assert_called_once_with(ignore_permissions=True)
+        self.assertEqual(delete_doc.call_count, 2)
+        database.delete.assert_called_once_with(
+            "Singles",
+            {"doctype": "TurboSMS Settings", "field": "sender"},
+        )
 
     def test_legacy_sender_profile_fieldtype_is_not_coerced(self):
         custom_fields = {

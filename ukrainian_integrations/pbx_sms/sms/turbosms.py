@@ -65,8 +65,6 @@ def _get_turbosms_settings() -> dict:
         if senders:
             default_row = next((x for x in senders if x.get("is_default") == 1), None)
             sender = (default_row or senders[0]).get("sender_name") or ""
-        else:
-            sender = (s.get("sender") or "").strip()
 
     return {
         "enabled": 1,

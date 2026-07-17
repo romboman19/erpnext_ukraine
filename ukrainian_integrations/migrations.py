@@ -16,6 +16,7 @@ def after_migrate() -> None:
     ensure_integration_custom_fields()
     ensure_identification_channel_defaults()
     backfill_integration_keys()
+    remove_legacy_integration_artifacts()
     refresh_desk_navigation()
 
 
@@ -38,6 +39,46 @@ _DESK_APP_ICON_FIELDS = (
     "icon_image",
 )
 _CUSTOM_DESK_APPS = ("ukrainian_integrations", "erpnext_ua", "print_designer")
+_LEGACY_INTEGRATION_DOCTYPES = ("NP Integration Settings", "UP Integration Settings")
+
+
+def remove_legacy_integration_artifacts() -> dict[str, object]:
+    """Remove settings superseded by sender profiles and the TurboSMS sender table."""
+    removed_doctypes = []
+    for doctype in _LEGACY_INTEGRATION_DOCTYPES:
+        if not frappe.db.exists("DocType", doctype):
+            continue
+        frappe.delete_doc("DocType", doctype, force=True, ignore_permissions=True)
+        removed_doctypes.append(doctype)
+
+    removed_turbosms_field = False
+    migrated_turbosms_sender = False
+    if frappe.db.exists("DocType", "TurboSMS Settings"):
+        legacy_sender = (frappe.db.get_single_value("TurboSMS Settings", "sender") or "").strip()
+        settings = frappe.get_single("TurboSMS Settings")
+        if legacy_sender and not settings.get("senders"):
+            settings.append(
+                "senders",
+                {"sender_name": legacy_sender, "is_active": 1, "is_default": 1},
+            )
+            settings.save(ignore_permissions=True)
+            migrated_turbosms_sender = True
+        frappe.db.delete("Singles", {"doctype": "TurboSMS Settings", "field": "sender"})
+        if frappe.db.get_value("DocType", "TurboSMS Settings", "custom"):
+            settings_meta = frappe.get_doc("DocType", "TurboSMS Settings")
+            legacy_fields = [field for field in settings_meta.fields if field.fieldname == "sender"]
+            for field in legacy_fields:
+                settings_meta.remove(field)
+            if legacy_fields:
+                settings_meta.save(ignore_permissions=True)
+                removed_turbosms_field = True
+        frappe.clear_cache(doctype="TurboSMS Settings")
+
+    return {
+        "removed_doctypes": removed_doctypes,
+        "removed_turbosms_field": removed_turbosms_field,
+        "migrated_turbosms_sender": migrated_turbosms_sender,
+    }
 
 
 def ensure_identification_channel_defaults() -> dict[str, str]:

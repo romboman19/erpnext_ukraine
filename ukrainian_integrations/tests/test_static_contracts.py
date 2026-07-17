@@ -121,6 +121,29 @@ class ProductionStaticContractsTest(unittest.TestCase):
         self.assertIn("resolve_configured_sender", service)
         self.assertIn("Sender is not configured or inactive", service)
 
+    def test_legacy_shipping_settings_and_turbosms_sender_field_are_removed(self):
+        settings_path = (
+            PACKAGE
+            / "ukrainian_integrations"
+            / "doctype"
+            / "turbosms_settings"
+            / "turbosms_settings.json"
+        )
+        definition = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertNotIn("sender", {field["fieldname"] for field in definition["fields"]})
+
+        service = (PACKAGE / "pbx_sms" / "sms" / "turbosms.py").read_text(encoding="utf-8")
+        self.assertNotIn('s.get("sender")', service)
+
+        migrations = (PACKAGE / "migrations.py").read_text(encoding="utf-8")
+        self.assertIn('("NP Integration Settings", "UP Integration Settings")', migrations)
+        self.assertIn('frappe.delete_doc("DocType", doctype', migrations)
+
+        translations = (PACKAGE / "translations" / "uk.csv").read_text(encoding="utf-8")
+        self.assertNotIn('"Legacy Default Sender",', translations)
+        self.assertNotIn('"NP Integration Settings",', translations)
+        self.assertNotIn('"UP Integration Settings",', translations)
+
     def test_external_mutations_require_idempotency_keys(self):
         required = {
             "liqpay_initiate",

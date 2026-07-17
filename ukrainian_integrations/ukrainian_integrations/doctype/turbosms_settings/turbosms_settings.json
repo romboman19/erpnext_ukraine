@@ -8,7 +8,6 @@
     {"fieldname": "enabled", "fieldtype": "Check", "label": "Enabled", "default": "0"},
     {"fieldname": "token", "fieldtype": "Password", "label": "Token", "reqd": 1},
     {"fieldname": "base_url", "fieldtype": "Data", "label": "API URL", "default": "https://api.turbosms.ua/message/send.json", "reqd": 1},
-    {"fieldname": "sender", "fieldtype": "Data", "label": "Legacy Default Sender"},
     {"fieldname": "senders", "fieldtype": "Table", "label": "Senders", "options": "TurboSMS Sender"}
   ],
   "permissions": [
