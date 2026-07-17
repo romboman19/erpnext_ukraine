@@ -16,6 +16,13 @@ from ukrainian_integrations.utils.operations import (
 from ukrainian_integrations.utils.security import SALES_MANAGER_ROLES, SALES_ROLES, permitted_doc, require_roles
 
 TURBOSMS_URL_DEFAULT = "https://api.turbosms.ua/message/send.json"
+_SUCCESS_RESPONSE_STATUSES = {
+    0: "OK",
+    800: "SUCCESS_MESSAGE_ACCEPTED",
+    801: "SUCCESS_MESSAGE_SENT",
+    802: "SUCCESS_MESSAGE_PARTIAL_ACCEPTED",
+    803: "SUCCESS_MESSAGE_PARTIAL_SENT",
+}
 
 
 def _cfg(key: str, default=None):
@@ -146,16 +153,15 @@ def classify_send_response(data) -> tuple[str, list[str]]:
     if not isinstance(data, dict):
         return "unknown", []
     try:
-        top_level_ok = int(data.get("response_code", -1)) == 0
+        response_code = int(data.get("response_code", -1))
     except (TypeError, ValueError):
         return "unknown", []
     response_status = str(data.get("response_status") or "").upper()
-    if not top_level_ok:
+    expected_status = _SUCCESS_RESPONSE_STATUSES.get(response_code)
+    if expected_status is None:
         return "failed", []
-    if not response_status:
+    if response_status != expected_status:
         return "unknown", []
-    if response_status != "OK":
-        return "failed", []
     rows = data.get("response_result")
     if isinstance(rows, dict):
         rows = [rows]
@@ -169,6 +175,8 @@ def classify_send_response(data) -> tuple[str, list[str]]:
         return "unknown", []
     if not row_ok:
         return "failed", []
+    if str(rows[0].get("response_status") or "").upper() != "OK":
+        return "unknown", []
     message_id = rows[0].get("message_id")
     return ("succeeded", [str(message_id)]) if message_id else ("unknown", [])
 

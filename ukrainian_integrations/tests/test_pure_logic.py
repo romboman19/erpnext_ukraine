@@ -318,7 +318,9 @@ class PureLogicTest(unittest.TestCase):
         valid = {
             "response_code": 0,
             "response_status": "OK",
-            "response_result": [{"response_code": 0, "message_id": "m-1"}],
+            "response_result": [
+                {"response_code": 0, "response_status": "OK", "message_id": "m-1"}
+            ],
         }
         self.assertEqual(successful_message_ids(valid), ["m-1"])
         self.assertEqual(successful_message_ids({**valid, "response_code": 103}), [])
@@ -327,6 +329,55 @@ class PureLogicTest(unittest.TestCase):
         self.assertEqual(classify_send_response(rejected)[0], "failed")
         malformed = {**valid, "response_result": [{"message_id": "m-1"}]}
         self.assertEqual(classify_send_response(malformed)[0], "unknown")
+
+    def test_turbosms_accepts_documented_message_success_codes(self):
+        recipient = {
+            "response_code": 0,
+            "response_status": "OK",
+            "message_id": "m-801",
+        }
+        statuses = {
+            800: "SUCCESS_MESSAGE_ACCEPTED",
+            801: "SUCCESS_MESSAGE_SENT",
+            802: "SUCCESS_MESSAGE_PARTIAL_ACCEPTED",
+            803: "SUCCESS_MESSAGE_PARTIAL_SENT",
+        }
+        for response_code, response_status in statuses.items():
+            with self.subTest(response_code=response_code):
+                data = {
+                    "response_code": response_code,
+                    "response_status": response_status,
+                    "response_result": [recipient],
+                }
+                self.assertEqual(classify_send_response(data), ("succeeded", ["m-801"]))
+
+    def test_turbosms_success_code_still_requires_matching_status_and_recipient_success(self):
+        valid = {
+            "response_code": 801,
+            "response_status": "SUCCESS_MESSAGE_SENT",
+            "response_result": [
+                {"response_code": 0, "response_status": "OK", "message_id": "m-1"}
+            ],
+        }
+        self.assertEqual(
+            classify_send_response({**valid, "response_status": "OK"})[0],
+            "unknown",
+        )
+        self.assertEqual(
+            classify_send_response(
+                {
+                    **valid,
+                    "response_result": [
+                        {
+                            "response_code": 503,
+                            "response_status": "FAILED_SMS_SEND",
+                            "message_id": None,
+                        }
+                    ],
+                }
+            )[0],
+            "failed",
+        )
 
     def test_turbosms_sender_registry_is_shared_and_fail_closed(self):
         cfg = {
