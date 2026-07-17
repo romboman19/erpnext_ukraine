@@ -39,6 +39,15 @@ class TestPOSIntegrationContracts(unittest.TestCase):
         self.assertIn("config.allow_pos_channel_selection", source)
         self.assertNotIn('identificationApi("begin",', source)
 
+    def test_pos_login_has_no_test_cashier_and_uses_a_dark_heading(self):
+        source = (APP / "ua_pos" / "page" / "ua_pos" / "ua_pos.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("POS-TEST-CASHIER", source)
+        self.assertNotIn("Тестовий касир", source)
+        self.assertIn(".ua-pos-login-card h1{font-size:27px;margin:32px 0 6px;color:var(--ink)}", source)
+
     def test_pos_workspace_is_visible_and_opens_the_cashier_page(self):
         workspace = json.loads(
             (
