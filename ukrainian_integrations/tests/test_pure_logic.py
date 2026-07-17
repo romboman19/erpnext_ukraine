@@ -133,9 +133,8 @@ class PureLogicTest(unittest.TestCase):
         database.exists.side_effect = lambda doctype, name: (
             doctype == "DocType" and name in legacy_doctypes
         )
-        database.get_value.side_effect = lambda doctype, *args, **kwargs: (
-            "HUNTER RV" if doctype == "Singles" else 0
-        )
+        database.sql.return_value = [("HUNTER RV",)]
+        database.get_value.return_value = 0
         settings = Mock()
         settings.get.return_value = []
 
@@ -162,10 +161,9 @@ class PureLogicTest(unittest.TestCase):
             "Singles",
             {"doctype": "TurboSMS Settings", "field": "sender"},
         )
-        database.get_value.assert_any_call(
-            "Singles",
-            {"doctype": "TurboSMS Settings", "field": "sender"},
-            "value",
+        database.sql.assert_called_once_with(
+            unittest.mock.ANY,
+            ("TurboSMS Settings", "sender"),
         )
 
     def test_legacy_sender_profile_fieldtype_is_not_coerced(self):

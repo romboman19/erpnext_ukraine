@@ -57,14 +57,16 @@ def remove_legacy_integration_artifacts() -> dict[str, object]:
         # Schema sync removes the standard DocField before after_migrate runs,
         # while the legacy value can still be present in tabSingles. Reading
         # through get_single_value() would therefore fail metadata validation.
-        legacy_sender = (
-            frappe.db.get_value(
-                "Singles",
-                {"doctype": "TurboSMS Settings", "field": "sender"},
-                "value",
-            )
-            or ""
-        ).strip()
+        legacy_rows = frappe.db.sql(
+            """
+            SELECT `value`
+            FROM `tabSingles`
+            WHERE `doctype` = %s AND `field` = %s
+            LIMIT 1
+            """,
+            ("TurboSMS Settings", "sender"),
+        )
+        legacy_sender = (legacy_rows[0][0] if legacy_rows else "").strip()
         settings = frappe.get_single("TurboSMS Settings")
         if legacy_sender and not settings.get("senders"):
             settings.append(
