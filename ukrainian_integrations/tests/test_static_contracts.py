@@ -409,6 +409,16 @@ class ProductionStaticContractsTest(unittest.TestCase):
         )
         self.assertIn("payment_key =", order_intake)
         self.assertIn("'channel_order_id': order.channel_order_id", order_intake)
+        self.assertIn("_converge_sales_order_invoice_payment", order_intake)
+        self.assertIn("_find_matching_payment_entry", order_intake)
+        self.assertIn("retry_failed=True", order_intake)
+        self.assertIn("continue to\n        # Payment Entry reconciliation", order_intake)
+
+        catalog = (
+            PACKAGE / "ecommerce" / "providers" / "ocstore" / "catalog.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Sum(bin_row.actual_qty)", catalog)
+        self.assertNotIn('"sum(actual_qty) as actual_qty"', catalog)
         patches = (PACKAGE / "patches.txt").read_text(encoding="utf-8")
         self.assertIn("create_ocstore_defaults_and_migrate_channels", patches)
 

@@ -175,6 +175,8 @@ def _prices(settings, item_names: list[str]) -> dict[str, float]:
 
 
 def _quantities(settings, item_names: list[str]) -> dict[str, float]:
+    from frappe.query_builder.functions import Sum
+
     warehouses = [
         row.warehouse
         for row in (settings.get("warehouses") or [])
@@ -182,13 +184,17 @@ def _quantities(settings, item_names: list[str]) -> dict[str, float]:
     ]
     if not warehouses:
         return {}
-    rows = frappe.get_all(
-        "Bin",
-        filters={"item_code": ["in", item_names], "warehouse": ["in", warehouses]},
-        fields=["item_code", "sum(actual_qty) as actual_qty", "sum(reserved_qty) as reserved_qty"],
-        group_by="item_code",
-        limit_page_length=MAX_CATALOG_ITEMS,
-    )
+    bin_row = frappe.qb.DocType("Bin")
+    rows = (
+        frappe.qb.from_(bin_row)
+        .select(
+            bin_row.item_code,
+            Sum(bin_row.actual_qty).as_("actual_qty"),
+            Sum(bin_row.reserved_qty).as_("reserved_qty"),
+        )
+        .where(bin_row.item_code.isin(item_names) & bin_row.warehouse.isin(warehouses))
+        .groupby(bin_row.item_code)
+    ).run(as_dict=True)
     return {
         row.item_code: max(0, float(row.actual_qty or 0) - float(row.reserved_qty or 0))
         for row in rows

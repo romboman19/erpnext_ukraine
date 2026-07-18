@@ -543,6 +543,7 @@ class EcommerceBaseTest(unittest.TestCase):
         reservation = types.SimpleNamespace(doc=types.SimpleNamespace(), created=False)
         with (
             patch.object(orders.frappe, "db", database),
+            patch.object(orders, "_find_matching_payment_entry", return_value=None),
             patch.object(orders, "reserve_operation", return_value=reservation) as reserve,
             patch.object(
                 orders,
@@ -566,6 +567,137 @@ class EcommerceBaseTest(unittest.TestCase):
         keys = [call.kwargs["idempotency_key"] for call in reserve.call_args_list]
         self.assertEqual(keys[0], keys[1])
         self.assertEqual(reserve.call_args.kwargs["integration"], "ecommerce_payment")
+        self.assertTrue(reserve.call_args.kwargs["retry_failed"])
+
+    def test_paid_retry_with_existing_so_and_si_reconciles_missing_payment(self):
+        channel = {
+            "doctype": "OcStore Settings",
+            "name": "hunter.rv.ua",
+            "company": "HUNTER",
+            "currency": "UAH",
+        }
+        order = orders.normalize_order(
+            {
+                "channel_order_id": "OC-PAID-RACE-1",
+                "channel_status": "paid",
+                "customer": {"phone": "0501234567"},
+                "payment": {
+                    "type": "online",
+                    "amount": 100,
+                    "currency": "UAH",
+                    "paid": True,
+                },
+                "items": [{"external_id": "SKU-1", "quantity": 1, "price": 100}],
+            }
+        )
+        action = {"erp_action": "Create SO+SI+Payment"}
+        sales_order = types.SimpleNamespace(name="SO-1", docstatus=1)
+        sales_invoice = types.SimpleNamespace(name="SINV-1", docstatus=1, grand_total=100)
+
+        def get_doc(doctype, name):
+            return sales_order if doctype == "Sales Order" else sales_invoice
+
+        with (
+            patch.object(
+                orders,
+                "_existing_documents",
+                return_value={"sales_order": "SO-1", "sales_invoice": "SINV-1"},
+            ),
+            patch.object(orders.frappe, "get_doc", side_effect=get_doc, create=True),
+            patch.object(orders, "_create_payment", return_value="ACC-PAY-1") as payment,
+            patch.object(orders, "_resolve_items") as resolve_items,
+            patch.object(orders, "_resolve_customer") as resolve_customer,
+        ):
+            result = orders._intake_order(
+                channel,
+                "OcStore Settings:hunter.rv.ua",
+                order,
+                "ecom:o:paid-race-1",
+                action,
+            )
+
+        self.assertEqual(result["outcome"], "reconciled")
+        self.assertEqual(result["payment_entry"], "ACC-PAY-1")
+        payment.assert_called_once_with(
+            channel,
+            "OcStore Settings:hunter.rv.ua",
+            order,
+            sales_invoice,
+        )
+        resolve_items.assert_not_called()
+        resolve_customer.assert_not_called()
+
+    def test_paid_retry_with_only_so_builds_invoice_then_payment(self):
+        channel = {
+            "doctype": "OcStore Settings",
+            "name": "hunter.rv.ua",
+            "company": "HUNTER",
+            "currency": "UAH",
+        }
+        order = orders.normalize_order(
+            {
+                "channel_order_id": "OC-PAID-RACE-2",
+                "channel_status": "paid",
+                "customer": {"phone": "0501234567"},
+                "payment": {
+                    "type": "online",
+                    "amount": 100,
+                    "currency": "UAH",
+                    "paid": True,
+                },
+                "items": [{"external_id": "SKU-1", "quantity": 1, "price": 100}],
+            }
+        )
+        sales_order = types.SimpleNamespace(name="SO-2", docstatus=1)
+        sales_invoice = types.SimpleNamespace(name="SINV-2", docstatus=1, grand_total=100)
+        with (
+            patch.object(orders, "_existing_documents", return_value={"sales_order": "SO-2"}),
+            patch.object(orders.frappe, "get_doc", return_value=sales_order, create=True),
+            patch.object(
+                orders,
+                "_create_invoice_from_order",
+                return_value=sales_invoice,
+            ) as create_invoice,
+            patch.object(orders, "_create_payment", return_value="ACC-PAY-2") as payment,
+        ):
+            result = orders._intake_order(
+                channel,
+                "OcStore Settings:hunter.rv.ua",
+                order,
+                "ecom:o:paid-race-2",
+                {"erp_action": "Create SO+SI+Payment"},
+            )
+
+        self.assertEqual(result["outcome"], "reconciled")
+        create_invoice.assert_called_once_with(
+            sales_order,
+            "ecom:o:paid-race-2",
+            "OcStore Settings:hunter.rv.ua",
+            order,
+        )
+        payment.assert_called_once()
+
+    def test_existing_matching_payment_is_reused_from_invoice_references(self):
+        reference = types.SimpleNamespace(parent="ACC-PAY-3", allocated_amount=100)
+        payment = types.SimpleNamespace(
+            name="ACC-PAY-3",
+            docstatus=1,
+            mode_of_payment="Online",
+            paid_to="Online Payments - H",
+        )
+        database = Mock()
+        database.get_value.return_value = payment
+        with (
+            patch.object(orders.frappe, "db", database),
+            patch.object(orders.frappe, "get_all", return_value=[reference], create=True),
+        ):
+            result = orders._find_matching_payment_entry(
+                "SINV-3",
+                amount=100,
+                mode_of_payment="Online",
+                paid_to_account="Online Payments - H",
+            )
+        self.assertEqual(result, "ACC-PAY-3")
 
     def test_success_log_is_a_second_order_idempotency_guard(self):
         database = Mock()

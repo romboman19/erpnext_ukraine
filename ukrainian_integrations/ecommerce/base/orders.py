@@ -198,8 +198,6 @@ def _intake_order(
     if existing and action == "Update Status":
         _update_existing_status(existing, order.channel_status)
         return {"ok": True, "outcome": "updated", **existing}
-    if existing:
-        return {"ok": True, "outcome": "found", **existing}
     if action == "Ignore":
         return {"ok": True, "outcome": "ignored"}
     if action == "Update Status":
@@ -208,6 +206,22 @@ def _intake_order(
     expected_currency = str(_value(channel, "currency", "UAH") or "UAH").strip().upper()
     if order.currency != expected_currency or order.payment.currency != expected_currency:
         raise ValueError("Order/payment currency does not match the channel currency")
+
+    # This action is intentionally convergent. A retry may observe only the SO
+    # or SO+SI left by another committed workflow. It must finish the chain and
+    # reconcile the Payment Entry instead of returning `found` too early.
+    if action == "Create SO+SI+Payment":
+        return _converge_sales_order_invoice_payment(
+            channel,
+            channel_key,
+            order,
+            idempotency_key,
+            action_row,
+            existing,
+        )
+    if existing:
+        return {"ok": True, "outcome": "found", **existing}
+
     item_rows = _resolve_items(channel_key, channel, order.items)
     customer = _resolve_customer(channel, order.customer)
     if action == "Create Sales Order":
@@ -231,7 +245,37 @@ def _intake_order(
             idempotency_key,
         )
         return {"ok": True, "outcome": "created", "sales_invoice": sales_invoice.name}
-    if action == "Create SO+SI+Payment":
+    raise ValueError(f"Unsupported ecommerce ERP action: {action}")
+
+
+def _converge_sales_order_invoice_payment(
+    channel: Any,
+    channel_key: str,
+    order: NormalizedOrder,
+    idempotency_key: str,
+    action_row: Any,
+    existing: dict,
+) -> dict:
+    if existing.get("sync_log") and not (
+        existing.get("sales_order") or existing.get("sales_invoice")
+    ):
+        raise ValueError("Successful ecommerce log exists but its ERP documents are missing")
+
+    had_documents = bool(existing.get("sales_order") or existing.get("sales_invoice"))
+    sales_order = (
+        frappe.get_doc("Sales Order", existing["sales_order"])
+        if existing.get("sales_order")
+        else None
+    )
+    sales_invoice = (
+        frappe.get_doc("Sales Invoice", existing["sales_invoice"])
+        if existing.get("sales_invoice")
+        else None
+    )
+
+    if sales_order is None:
+        item_rows = _resolve_items(channel_key, channel, order.items)
+        customer = _resolve_customer(channel, order.customer)
         sales_order = _create_sales_order(
             channel,
             channel_key,
@@ -242,16 +286,32 @@ def _intake_order(
             action_row,
             force_submit=True,
         )
-        sales_invoice = _create_invoice_from_order(sales_order, idempotency_key, channel_key, order)
-        payment_entry = _create_payment(channel, channel_key, order, sales_invoice)
-        return {
-            "ok": True,
-            "outcome": "created",
-            "sales_order": sales_order.name,
-            "sales_invoice": sales_invoice.name,
-            "payment_entry": payment_entry,
-        }
-    raise ValueError(f"Unsupported ecommerce ERP action: {action}")
+    _ensure_submitted(sales_order, "Sales Order")
+
+    if sales_invoice is None:
+        sales_invoice = _create_invoice_from_order(
+            sales_order,
+            idempotency_key,
+            channel_key,
+            order,
+        )
+    _ensure_submitted(sales_invoice, "Sales Invoice")
+    payment_entry = _create_payment(channel, channel_key, order, sales_invoice)
+    return {
+        "ok": True,
+        "outcome": "reconciled" if had_documents else "created",
+        "sales_order": sales_order.name,
+        "sales_invoice": sales_invoice.name,
+        "payment_entry": payment_entry,
+    }
+
+
+def _ensure_submitted(doc, label: str) -> None:
+    docstatus = int(doc.docstatus or 0)
+    if docstatus == 2:
+        raise ValueError(f"Existing ecommerce {label} is cancelled: {doc.name}")
+    if docstatus == 0:
+        doc.submit()
 
 
 def _existing_documents(idempotency_key: str) -> dict:
@@ -479,8 +539,21 @@ def _create_invoice_from_order(sales_order, idempotency_key: str, channel_key: s
     doc.ua_external_order_id = order.channel_order_id
     doc.ua_ecommerce_status = order.channel_status
     doc.remarks = _order_remarks(order)
-    doc.insert(ignore_permissions=True)
-    doc.submit()
+    try:
+        doc.insert(ignore_permissions=True)
+        doc.submit()
+    except frappe.DuplicateEntryError:
+        # Another worker may have won the unique external-order-key race after
+        # both workers observed the same SO. Reuse its invoice and continue to
+        # Payment Entry reconciliation.
+        existing = frappe.db.get_value(
+            "Sales Invoice",
+            {"ua_external_order_key": idempotency_key},
+            "name",
+        )
+        if existing:
+            return frappe.get_doc("Sales Invoice", existing)
+        raise
     return doc
 
 
@@ -521,6 +594,12 @@ def _create_payment(channel: Any, channel_key: str, order: NormalizedOrder, sale
         "paid_to_account": account,
     }
     payment_key = f"ecom:p:{canonical_hash({'channel': channel_key, 'channel_order_id': order.channel_order_id})}"
+    existing_payment = _find_matching_payment_entry(
+        sales_invoice.name,
+        amount=order.payment.amount,
+        mode_of_payment=_value(route, "mode_of_payment"),
+        paid_to_account=account,
+    )
     reservation = reserve_operation(
         idempotency_key=payment_key,
         integration="ecommerce_payment",
@@ -528,11 +607,31 @@ def _create_payment(channel: Any, channel_key: str, order: NormalizedOrder, sale
         request_payload=request_payload,
         reference_doctype="Sales Invoice",
         reference_name=sales_invoice.name,
+        retry_failed=True,
         durable=False,
     )
-    cached = require_new_or_return_success(reservation)
-    if cached is not None:
-        return str(cached.get("payment_entry") or "")
+    if not reservation.created:
+        if existing_payment:
+            mark_operation(
+                reservation.doc,
+                "reconciled",
+                external_id=existing_payment,
+                response_payload={"payment_entry": existing_payment},
+                durable=False,
+            )
+            return existing_payment
+        cached = require_new_or_return_success(reservation)
+        if cached is not None:
+            return str(cached.get("payment_entry") or "")
+    elif existing_payment:
+        mark_operation(
+            reservation.doc,
+            "reconciled",
+            external_id=existing_payment,
+            response_payload={"payment_entry": existing_payment},
+            durable=False,
+        )
+        return existing_payment
     try:
         from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 
@@ -558,6 +657,48 @@ def _create_payment(channel: Any, channel_key: str, order: NormalizedOrder, sale
         durable=False,
     )
     return str(load_response(reservation.doc).get("payment_entry") or payment.name)
+
+
+def _find_matching_payment_entry(
+    sales_invoice: str,
+    *,
+    amount: float,
+    mode_of_payment: str,
+    paid_to_account: str,
+) -> str | None:
+    references = frappe.get_all(
+        "Payment Entry Reference",
+        filters={
+            "parenttype": "Payment Entry",
+            "reference_doctype": "Sales Invoice",
+            "reference_name": sales_invoice,
+        },
+        fields=["parent", "allocated_amount"],
+        limit_page_length=20,
+    )
+    submitted = []
+    for reference in references:
+        payment = frappe.db.get_value(
+            "Payment Entry",
+            reference.parent,
+            ["name", "docstatus", "mode_of_payment", "paid_to"],
+            as_dict=True,
+        )
+        if not payment or int(payment.docstatus or 0) != 1:
+            continue
+        submitted.append(payment.name)
+        if (
+            abs(float(reference.allocated_amount or 0) - float(amount)) <= 0.01
+            and str(payment.mode_of_payment or "") == str(mode_of_payment or "")
+            and str(payment.paid_to or "") == str(paid_to_account or "")
+        ):
+            return str(payment.name)
+    if submitted:
+        raise ValueError(
+            "Sales Invoice already has submitted Payment Entry references that do not match "
+            "the ecommerce payment route or amount"
+        )
+    return None
 
 
 def _order_remarks(order: NormalizedOrder) -> str:
