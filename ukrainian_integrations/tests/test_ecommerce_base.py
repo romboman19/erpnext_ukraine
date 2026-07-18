@@ -45,6 +45,8 @@ from ukrainian_integrations.ecommerce.base.transport.http import (
 from ukrainian_integrations.ecommerce.doctype.ecommerce_file_field.ecommerce_file_field import (
     EcommerceFileField,
 )
+from ukrainian_integrations.ecommerce.providers.ocstore import service as ocstore_service
+from ukrainian_integrations.ecommerce.providers.ocstore.xml_orders import parse_order_file
 from ukrainian_integrations.patches.v0_5 import (
     backfill_ecommerce_item_mapping,
     convert_ecommerce_channel_custom_field_to_data,
@@ -172,6 +174,31 @@ class EcommerceBaseTest(unittest.TestCase):
         self.assertEqual(baseline, ignored_change)
         self.assertNotEqual(baseline, exported_change)
 
+    def test_ocstore_keeps_exact_payload_hashes_separate_per_entity(self):
+        records = [{"item": "ITEM-1", "item_code": "SKU-1", "price": 10}]
+        product_layout = _layout("XML")
+        price_layout = {
+            **_layout("XML"),
+            "root_element": "prices",
+            "fields": [_layout("XML")["fields"][1]],
+        }
+        configs = [
+            types.SimpleNamespace(entity="Products"),
+            types.SimpleNamespace(entity="Prices"),
+        ]
+        hashes = ocstore_service._record_entity_hashes(
+            records,
+            configs,
+            {"Products": product_layout, "Prices": price_layout},
+        )["ITEM-1"]
+        expected_product = record_export_hash(get_serializer("XML"), product_layout, records[0])
+        expected_price = record_export_hash(get_serializer("XML"), price_layout, records[0])
+        self.assertEqual(hashes, {"Products": expected_product, "Prices": expected_price})
+        self.assertEqual(
+            ocstore_service._combined_hash(hashes),
+            ocstore_service._combined_hash(dict(reversed(list(hashes.items())))),
+        )
+
     def test_custom_transforms_are_code_registered_and_fail_closed(self):
         self.assertEqual(
             apply_export_transform(
@@ -261,6 +288,169 @@ class EcommerceBaseTest(unittest.TestCase):
         self.assertTrue(transport.delete("catalog.xml")["deleted"])
         self.assertFalse(transport.delete("catalog.xml")["deleted"])
 
+    def test_replaceable_feed_keeps_each_operation_key_immutable(self):
+        endpoint = {
+            "protocol": "FTP",
+            "host": "ftp.example.test",
+            "port": 21,
+            "username": "erpnext",
+            "password": "secret",
+            "base_path": "/exchange",
+            "passive_mode": 1,
+        }
+        connection = _FTPConnection()
+
+        @contextmanager
+        def connected():
+            yield connection
+
+        with patch.object(frappe, "conf", {"ecommerce_allowed_ftp_hosts": ["ftp.example.test"]}):
+            transport = FileDeliveryTransport(endpoint)
+        transport._connection = connected
+        first = transport.publish("products.xml", b"one", idempotency_key="catalog:1")
+        repeated = transport.publish("products.xml", b"one", idempotency_key="catalog:1")
+        replaced = transport.publish("products.xml", b"two", idempotency_key="catalog:2")
+        self.assertFalse(first["idempotent"])
+        self.assertTrue(repeated["idempotent"])
+        self.assertFalse(replaced["idempotent"])
+        self.assertEqual(connection.files["/exchange/products.xml"], b"two")
+        with self.assertRaisesRegex(ValueError, "different published content"):
+            transport.publish("products.xml", b"changed", idempotency_key="catalog:2")
+
+    def test_ocstore_nested_order_xml_uses_layout_and_product_model(self):
+        layout = {
+            "format": "XML",
+            "encoding": "UTF-8",
+            "root_element": "orders",
+            "item_element": "order",
+            "fields": [
+                {
+                    "erp_fieldname": "channel_order_id",
+                    "external_column": "order_id",
+                    "transform": "none",
+                    "required": 1,
+                },
+                {
+                    "erp_fieldname": "channel_status",
+                    "external_column": "status",
+                    "transform": "none",
+                    "required": 1,
+                },
+                {
+                    "erp_fieldname": "customer.phone",
+                    "external_column": "telephone",
+                    "transform": "none",
+                    "required": 1,
+                },
+            ],
+        }
+        payload = b"""<?xml version="1.0" encoding="UTF-8"?>
+        <orders><order><order_id>501</order_id><status>new</status>
+        <telephone>0501234567</telephone><currency_code>UAH</currency_code>
+        <products><product><product_id>77</product_id><model>SKU-77</model>
+        <quantity>2</quantity><price>19.5</price></product></products>
+        </order></orders>"""
+        parsed = parse_order_file(payload, layout)
+        self.assertEqual(parsed[0]["channel_order_id"], "501")
+        self.assertEqual(parsed[0]["customer"]["phone"], "0501234567")
+        self.assertEqual(parsed[0]["items"][0]["external_id"], "SKU-77")
+        self.assertEqual(parsed[0]["items"][0]["variant_sku"], "SKU-77")
+
+    def test_ocstore_order_file_commits_all_orders_before_delete(self):
+        events = []
+
+        class Database:
+            def set_value(self, *args, **kwargs):
+                del args, kwargs
+
+            def commit(self):
+                events.append("commit")
+
+            def rollback(self):
+                events.append("rollback")
+
+        class Transport:
+            def download(self, name):
+                del name
+                return b"orders"
+
+            def delete(self, name):
+                del name
+                events.append("delete")
+                self.assert_committed = events[-2] == "commit"
+                return {"deleted": True}
+
+        settings = types.SimpleNamespace(name="hunter.rv.ua")
+        config = types.SimpleNamespace(name="ROW-1")
+        transport = Transport()
+        rows = [{"channel_order_id": "1"}, {"channel_order_id": "2"}]
+        outcomes = [
+            {"outcome": "created", "sales_order": "SO-1"},
+            {"outcome": "found", "sales_order": "SO-2"},
+        ]
+        with (
+            patch.object(ocstore_service.frappe, "db", Database()),
+            patch.object(
+                ocstore_service.frappe,
+                "utils",
+                types.SimpleNamespace(now_datetime=lambda: "now"),
+            ),
+            patch.object(ocstore_service, "parse_order_file", return_value=rows),
+            patch.object(ocstore_service.orders, "intake", side_effect=outcomes),
+            patch.object(ocstore_service, "append_sync_log"),
+        ):
+            result = ocstore_service._process_order_file(
+                settings, config, {}, transport, "orders-1.xml"
+            )
+        self.assertTrue(result["ok"])
+        self.assertTrue(transport.assert_committed)
+        self.assertEqual(events, ["commit", "delete", "commit"])
+
+    def test_ocstore_partial_order_failure_rolls_back_and_keeps_file(self):
+        events = []
+
+        class Database:
+            def set_value(self, *args, **kwargs):
+                del args, kwargs
+
+            def commit(self):
+                events.append("commit")
+
+            def rollback(self):
+                events.append("rollback")
+
+        transport = Mock()
+        transport.download.return_value = b"orders"
+        settings = types.SimpleNamespace(name="hunter.rv.ua")
+        config = types.SimpleNamespace(name="ROW-1")
+        logger = Mock()
+        with (
+            patch.object(ocstore_service.frappe, "db", Database()),
+            patch.object(
+                ocstore_service.frappe,
+                "utils",
+                types.SimpleNamespace(now_datetime=lambda: "now"),
+            ),
+            patch.object(
+                ocstore_service,
+                "parse_order_file",
+                return_value=[{"channel_order_id": "1"}, {"channel_order_id": "2"}],
+            ),
+            patch.object(
+                ocstore_service.orders,
+                "intake",
+                side_effect=[{"outcome": "created"}, ValueError("bad second order")],
+            ),
+            patch.object(ocstore_service, "append_sync_log", logger),
+        ):
+            result = ocstore_service._process_order_file(
+                settings, config, {}, transport, "orders-2.xml"
+            )
+        self.assertFalse(result["ok"])
+        transport.delete.assert_not_called()
+        self.assertEqual(events, ["rollback", "commit"])
+        self.assertEqual(logger.call_args.kwargs["status"], "Failed")
+
     def test_order_intake_uses_channel_and_order_id_without_duplicate_so(self):
         class Database:
             sales_order = None
@@ -315,6 +505,67 @@ class EcommerceBaseTest(unittest.TestCase):
             logger.call_args_list[0].kwargs["idempotency_key"],
             logger.call_args_list[1].kwargs["idempotency_key"],
         )
+
+    def test_payment_entry_ledger_key_is_channel_and_order_idempotent(self):
+        channel = {
+            "doctype": "OcStore Settings",
+            "name": "hunter.rv.ua",
+            "company": "HUNTER",
+            "payment_routes": [
+                {
+                    "channel_payment_type": "online",
+                    "mode_of_payment": "Online",
+                    "paid_to_account": "Online Payments - H",
+                }
+            ],
+        }
+        order = orders.normalize_order(
+            {
+                "channel_order_id": "OC-PAID-1",
+                "channel_status": "paid",
+                "customer": {"phone": "0501234567"},
+                "payment": {
+                    "type": "online",
+                    "amount": 100,
+                    "currency": "UAH",
+                    "paid": True,
+                },
+                "items": [{"external_id": "SKU-1", "quantity": 1, "price": 100}],
+            }
+        )
+        invoice = types.SimpleNamespace(name="SINV-1", grand_total=100)
+        database = Mock()
+        database.get_value.return_value = types.SimpleNamespace(
+            company="HUNTER",
+            account_currency="UAH",
+            is_group=0,
+        )
+        reservation = types.SimpleNamespace(doc=types.SimpleNamespace(), created=False)
+        with (
+            patch.object(orders.frappe, "db", database),
+            patch.object(orders, "reserve_operation", return_value=reservation) as reserve,
+            patch.object(
+                orders,
+                "require_new_or_return_success",
+                return_value={"payment_entry": "ACC-PAY-1"},
+            ),
+        ):
+            first = orders._create_payment(
+                channel,
+                "OcStore Settings:hunter.rv.ua",
+                order,
+                invoice,
+            )
+            second = orders._create_payment(
+                channel,
+                "OcStore Settings:hunter.rv.ua",
+                order,
+                invoice,
+            )
+        self.assertEqual((first, second), ("ACC-PAY-1", "ACC-PAY-1"))
+        keys = [call.kwargs["idempotency_key"] for call in reserve.call_args_list]
+        self.assertEqual(keys[0], keys[1])
+        self.assertEqual(reserve.call_args.kwargs["integration"], "ecommerce_payment")
 
     def test_success_log_is_a_second_order_idempotency_guard(self):
         database = Mock()

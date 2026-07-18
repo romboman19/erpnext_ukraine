@@ -47,6 +47,7 @@ scheduler_events = {
     "cron": {
         "* * * * *": [
             "ukrainian_integrations.monitoring.system_health.update_scheduler_heartbeat",
+            "ukrainian_integrations.ecommerce.scheduler.dispatch",
         ],
         "*/30 * * * *": [
             "ukrainian_integrations.shipment.nova_poshta.scheduler.sync_ttn_statuses",

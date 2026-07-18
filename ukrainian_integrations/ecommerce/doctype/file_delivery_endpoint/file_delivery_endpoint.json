@@ -14,7 +14,7 @@
   {"fieldname": "credentials_section", "fieldtype": "Section Break", "label": "Credentials"},
   {"fieldname": "username", "fieldtype": "Data", "label": "Username", "reqd": 1},
   {"fieldname": "password", "fieldtype": "Password", "label": "Password"},
-  {"fieldname": "ssh_key", "fieldtype": "Password", "label": "SSH Private Key", "depends_on": "eval:doc.protocol=='SFTP'"},
+  {"fieldname": "ssh_key", "fieldtype": "Password", "label": "SSH Private Key", "depends_on": "eval:doc.protocol=='SFTP'", "description": "Client private key only. The expected server host key must already exist in the runtime user's system known_hosts file; unknown keys are rejected."},
   {"fieldname": "path_section", "fieldtype": "Section Break", "label": "Remote Path"},
   {"fieldname": "base_path", "fieldtype": "Data", "label": "Base Path", "default": "/", "reqd": 1},
   {"fieldname": "passive_mode", "fieldtype": "Check", "label": "Passive Mode", "default": "1", "depends_on": "eval:doc.protocol!='SFTP'"}

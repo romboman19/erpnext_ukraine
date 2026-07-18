@@ -8,10 +8,11 @@
 - [ ] Stop schedulers/workers or put the site in maintenance mode.
 - [ ] Export current `site_config.json` securely; never commit it.
 - [ ] For 0.5.0, export the existing ecommerce channel/mapping records for reconciliation and do not delete legacy DocTypes manually.
+- [ ] For 0.6.0, record every legacy ocStore channel and mapping count; after migrate reconcile them with the disabled multi-record `OcStore Settings` copies before enabling FTP jobs.
 
 ## Deploy
 
-- [ ] Deploy the same 0.3.0 commit to backend, scheduler and every queue worker.
+- [ ] Deploy the same immutable app commit to backend, scheduler and every queue worker.
 - [ ] Run `./env/bin/pip install -e apps/erpnext_ukraine_integrations`.
 - [ ] Confirm `./env/bin/python -c "import requests; print(requests.__version__)"` reports 2.33.0 or newer.
 - [ ] Run `bench --site <site> migrate` once.

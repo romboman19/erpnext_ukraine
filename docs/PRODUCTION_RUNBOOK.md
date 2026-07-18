@@ -20,6 +20,13 @@ their data into ordinary multi-record Settings, and only a later patch may
 remove the old schema. Run `migrate` with scheduler and workers stopped; do not
 mix 0.4.x and 0.5.x code across Frappe processes.
 
+For 0.6.0, keep the same backup boundary. The idempotent ocStore patch creates
+disabled multi-record Settings and rewrites legacy ocStore mapping/order channel
+keys only after the target DocType exists. After migration, review the copied
+record, configure allowlisted File Delivery Endpoints, install SFTP host keys in
+the runtime user's `known_hosts` on every backend/scheduler/worker, and run Test
+FTP Connections before enabling the scheduler.
+
 ## Prom.ua site configuration
 
 Prom.ua is intentionally configured by the site administrator:

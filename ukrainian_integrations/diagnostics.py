@@ -27,6 +27,7 @@ REQUIRED_DOCTYPES = (
     "Monobank Settings",
     "NP Sender Branch Row",
     "NP Sender Profile",
+    "OcStore Settings",
     "PrivatBank Profile",
     "PrivatBank Settings",
     "RZ Delivery Sender Profile",

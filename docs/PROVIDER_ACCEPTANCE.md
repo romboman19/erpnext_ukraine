@@ -86,3 +86,15 @@ Complete only the sections used by the deployment. Record date, operator, enviro
 - [ ] An order containing one mapped and one unmapped Item creates no partial Sales Order.
 - [ ] Stock uses `/products/edit_by_external_id`, and every sent row appears in `processed_ids` with no errors.
 - [ ] Only configured warehouses contribute stock, including the zero/not-available case.
+
+## ocStore 3.0.3.7 (File/XML)
+
+- [ ] Create a separate non-Single `OcStore Settings` record for every shop and verify its Company, currency, selling price list, warehouses and customer defaults.
+- [ ] Allowlist each FTP/SFTP hostname; for SFTP install and verify the expected host key in `known_hosts` on backend, scheduler and every worker. Unknown keys must be rejected.
+- [ ] Run Test FTP Connections for the exchange and photo endpoints without exposing credentials in logs.
+- [ ] Export controlled Products, Prices, Stock and Photos files; reconcile counts and confirm attached Item photos are byte-identical after upload.
+- [ ] Change a field excluded by all active layouts and confirm no scheduled export; then change price, quantity, description or photo included in a layout and confirm export occurs.
+- [ ] Import one XML file containing at least two valid orders twice; the second pass creates no duplicate Sales Order, Sales Invoice or Payment Entry.
+- [ ] Put one invalid order after one valid order in the same file; confirm the complete file transaction rolls back, the FTP file remains and `Ecommerce Sync Log.status` is `Failed`.
+- [ ] Import a fully valid multi-order file; confirm its ERP documents and per-order Success logs are committed before the FTP file disappears.
+- [ ] Simulate ambiguous FTP deletion after commit; confirm the operation is `Unknown`, documents are not duplicated on reconciliation and no blind external retry occurs.

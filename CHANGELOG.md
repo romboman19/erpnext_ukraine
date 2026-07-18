@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- Add ordinary multi-record `OcStore Settings` records linked to Company, with per-entity File/XML schedules and separate exchange/photo endpoints.
+- Export configurable products, prices, stock and photo manifests to stable atomically replaced XML feeds; upload attached Item photos unchanged and auto-create missing Item mappings from Item Code.
+- Import nested ocStore order XML through the shared idempotent ERP intake and delete each FTP file only after the complete file transaction and per-order logs commit successfully.
+- Keep a failed or partially invalid order file on FTP, roll back all new ERP documents from that file and persist an append-only `Failed` sync log.
+- Migrate legacy ocStore channels, mapping keys and existing external-order references to provider-instance keys through an idempotent post-model patch while retaining the legacy DocTypes.
+
 ## 0.5.0
 
 - Start the provider-specific ecommerce architecture with reusable entity routes, configurable file layouts, exact payload hashing, append-only sync logs and FTP/FTPS/SFTP endpoints.

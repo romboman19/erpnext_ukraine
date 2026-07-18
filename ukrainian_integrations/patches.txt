@@ -7,3 +7,4 @@ ukrainian_integrations.patches.v0_5.convert_ecommerce_channel_custom_field_to_da
 
 [post_model_sync]
 ukrainian_integrations.patches.v0_5.backfill_ecommerce_item_mapping
+ukrainian_integrations.patches.v0_6.create_ocstore_defaults_and_migrate_channels

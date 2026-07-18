@@ -92,6 +92,7 @@ class ProductionStaticContractsTest(unittest.TestCase):
             "File Delivery Endpoint",
             "NP Sender Profile",
             "NP Sender Branch Row",
+            "OcStore Settings",
             "UP Sender Profile",
             "TurboSMS Settings",
             "TurboSMS Sender",
@@ -370,6 +371,46 @@ class ProductionStaticContractsTest(unittest.TestCase):
         hooks = (PACKAGE / "hooks.py").read_text(encoding="utf-8")
         self.assertNotIn("ecommerce.core.scheduler", hooks)
         self.assertIn("backfill_ecommerce_item_mapping", (PACKAGE / "patches.txt").read_text())
+
+    def test_ocstore_file_cycle_is_multi_record_and_all_or_keep(self):
+        settings = json.loads(
+            (
+                PACKAGE
+                / "ecommerce"
+                / "doctype"
+                / "ocstore_settings"
+                / "ocstore_settings.json"
+            ).read_text(encoding="utf-8")
+        )
+        fields = {field["fieldname"]: field for field in settings["fields"]}
+        self.assertFalse(settings.get("issingle", False))
+        self.assertEqual(fields["company"].get("options"), "Company")
+        self.assertEqual(fields["sync_entities"].get("options"), "Ecommerce Sync Entity Config")
+
+        service = (
+            PACKAGE / "ecommerce" / "providers" / "ocstore" / "service.py"
+        ).read_text(encoding="utf-8")
+        transaction_commit = service.index("# Acceptance invariant")
+        delete_call = service.index("deletion = transport.delete(remote_name)")
+        self.assertLess(transaction_commit, delete_call)
+        self.assertIn("frappe.db.rollback()", service)
+        self.assertIn('status="Failed"', service)
+        self.assertIn("deliberately keep the FTP file", service)
+
+        ftp = (PACKAGE / "ecommerce" / "base" / "transport" / "ftp.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("paramiko.RejectPolicy()", ftp)
+        self.assertIn("load_system_host_keys()", ftp)
+        self.assertNotIn("AutoAddPolicy", ftp)
+
+        order_intake = (PACKAGE / "ecommerce" / "base" / "orders.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("payment_key =", order_intake)
+        self.assertIn("'channel_order_id': order.channel_order_id", order_intake)
+        patches = (PACKAGE / "patches.txt").read_text(encoding="utf-8")
+        self.assertIn("create_ocstore_defaults_and_migrate_channels", patches)
 
     def test_secret_debugging_never_returns_key_prefixes(self):
         source = (PACKAGE / "shipment" / "nova_poshta" / "service.py").read_text(encoding="utf-8")

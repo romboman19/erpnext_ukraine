@@ -124,6 +124,67 @@ class FileDeliveryTransport:
             raise AmbiguousTransportError("File upload outcome is unknown") from exc
         return {"ok": True, "idempotent": False, "sha256": digest, "remote_name": name}
 
+    def publish(self, remote_name: str, content: bytes, *, idempotency_key: str) -> dict:
+        """Atomically publish a replaceable named feed.
+
+        ``upload`` is immutable and is used for versioned assets such as photos.
+        A catalog feed normally has a stable filename, so a new immutable
+        operation key may replace an older version. Reusing the *same* key with
+        different content remains forbidden.
+        """
+        key = str(idempotency_key or "").strip()
+        if not key:
+            raise ValueError("File publish requires an idempotency key")
+        payload = bytes(content)
+        if len(payload) > MAX_FILE_BYTES:
+            raise ValueError("Ecommerce publish file is too large")
+        name = _validate_filename(remote_name)
+        digest = hashlib.sha256(payload).hexdigest()
+        metadata_values = {"idempotency_key": key, "sha256": digest, "size": len(payload)}
+        metadata = json.dumps(metadata_values, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        final_path = self._path(name)
+        meta_path = self._path(f".{name}.meta.json")
+        temp_suffix = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+        temp_path = self._path(f".{name}.{temp_suffix}.part")
+        temp_meta_path = f"{temp_path}.meta"
+        try:
+            with self._connection() as connection:
+                existing_meta = self._read_optional(connection, meta_path)
+                if existing_meta is not None:
+                    saved = self._load_metadata(existing_meta)
+                    if saved.get("idempotency_key") == key:
+                        if saved != metadata_values:
+                            raise ValueError(
+                                "Idempotency key was already used for different published content"
+                            )
+                        if not self._exists(connection, final_path):
+                            raise AmbiguousTransportError(
+                                "Publish metadata exists but the data file is missing"
+                            )
+                        return {
+                            "ok": True,
+                            "idempotent": True,
+                            "sha256": digest,
+                            "remote_name": name,
+                        }
+                self._delete_optional(connection, temp_path)
+                self._delete_optional(connection, temp_meta_path)
+                self._write(connection, temp_path, payload)
+                self._write(connection, temp_meta_path, metadata)
+                self._replace_pair(
+                    connection,
+                    data_temp=temp_path,
+                    data_final=final_path,
+                    meta_temp=temp_meta_path,
+                    meta_final=meta_path,
+                    suffix=temp_suffix,
+                )
+        except (AmbiguousTransportError, ValueError):
+            raise
+        except (ftplib.Error, OSError) as exc:
+            raise AmbiguousTransportError("File publish outcome is unknown") from exc
+        return {"ok": True, "idempotent": False, "sha256": digest, "remote_name": name}
+
     def delete(self, remote_name: str) -> dict:
         """Idempotently remove a fully processed inbound file and its sidecar."""
         name = _validate_filename(remote_name)
@@ -223,6 +284,45 @@ class FileDeliveryTransport:
     def _rename(self, connection, source: str, target: str) -> None:
         connection.rename(source, target)
 
+    def _replace_pair(
+        self,
+        connection,
+        *,
+        data_temp: str,
+        data_final: str,
+        meta_temp: str,
+        meta_final: str,
+        suffix: str,
+    ) -> None:
+        if self.protocol == "SFTP" and callable(getattr(connection, "posix_rename", None)):
+            connection.posix_rename(data_temp, data_final)
+            connection.posix_rename(meta_temp, meta_final)
+            return
+
+        data_backup = f"{data_temp}.{suffix}.bak"
+        meta_backup = f"{meta_temp}.{suffix}.bak"
+        self._delete_optional(connection, data_backup)
+        self._delete_optional(connection, meta_backup)
+        data_had_previous = self._exists(connection, data_final)
+        meta_had_previous = self._exists(connection, meta_final)
+        if data_had_previous:
+            self._rename(connection, data_final, data_backup)
+        if meta_had_previous:
+            self._rename(connection, meta_final, meta_backup)
+        try:
+            self._rename(connection, data_temp, data_final)
+            self._rename(connection, meta_temp, meta_final)
+        except (ftplib.Error, OSError):
+            self._delete_optional(connection, data_final)
+            self._delete_optional(connection, meta_final)
+            if data_had_previous and self._exists(connection, data_backup):
+                self._rename(connection, data_backup, data_final)
+            if meta_had_previous and self._exists(connection, meta_backup):
+                self._rename(connection, meta_backup, meta_final)
+            raise
+        self._delete_optional(connection, data_backup)
+        self._delete_optional(connection, meta_backup)
+
     def _delete_optional(self, connection, path: str) -> bool:
         if not self._exists(connection, path):
             return False
@@ -231,12 +331,19 @@ class FileDeliveryTransport:
 
     @staticmethod
     def _assert_same_upload(metadata: bytes, key: str, digest: str, size: int) -> None:
+        saved = FileDeliveryTransport._load_metadata(metadata)
+        if saved != {"idempotency_key": key, "sha256": digest, "size": size}:
+            raise ValueError("Idempotency key was already used for a different file upload")
+
+    @staticmethod
+    def _load_metadata(metadata: bytes) -> dict:
         try:
             saved = json.loads(metadata.decode("utf-8"))
         except (UnicodeDecodeError, ValueError) as exc:
             raise AmbiguousTransportError("Remote upload metadata is invalid") from exc
-        if saved != {"idempotency_key": key, "sha256": digest, "size": size}:
-            raise ValueError("Idempotency key was already used for a different file upload")
+        if not isinstance(saved, dict):
+            raise AmbiguousTransportError("Remote upload metadata has an unexpected shape")
+        return saved
 
 
 def _value(source: Any, key: str, default=None):

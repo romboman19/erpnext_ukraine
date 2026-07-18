@@ -1,14 +1,14 @@
-# E-commerce Base (0.5.0)
+# E-commerce Base and ocStore File/XML (0.6.0)
 
 Version 0.5.0 introduces the shared ERPNext-side foundation for provider-specific
 channels. It deliberately does not expose or schedule the rejected universal
-`Ecommerce Channel` runtime. `OcStore Settings`, `Shop Express Settings` and
-`Prom Settings` are delivered in their provider stages and must be ordinary,
-multi-record DocTypes linked to `Company`.
+`Ecommerce Channel` runtime. Provider Settings are ordinary multi-record
+DocTypes linked to `Company`; `OcStore Settings` is delivered in 0.6.0, while
+Shop Express and Prom move in their later provider stages.
 
-Do not deploy the Base branch by itself as a completed ocStore or Shop Express
-integration. It is the reviewed migration boundary before those providers are
-implemented.
+The 0.6.0 ocStore stage implements the ERPNext side of the XML/FTP cycle. The
+ocStore site must still have an import/export module configured for the XML
+filenames and field contract selected in ERPNext.
 
 ## Shared DocTypes
 
@@ -70,13 +70,51 @@ A provider file importer must process every order independently and write a
 terminal log. It may delete the inbound FTP file only after every order in that
 file was created, found or deliberately ignored and successfully logged. Any
 failed row keeps the whole file on FTP with a `Failed` log for manual handling.
-This all-or-keep file policy is implemented in the ocStore provider stage.
+The ocStore importer implements this all-or-keep policy. It commits every ERP
+document and per-order Success log in the file as one transaction, then deletes
+the FTP file. Any parsing, mapping, customer, accounting or document error rolls
+back the complete file, persists a file-level `Failed` log in a new transaction
+and deliberately leaves the remote file untouched.
+
+## ocStore Settings and files
+
+Create one `OcStore Settings` document per shop, for example `hunter.rv.ua` and
+`top-trig.store`. Each record has its own Company, price list, customer defaults,
+warehouses, payment/status routing, scheduler intervals and endpoints. It is not
+a Single DocType.
+
+The migration supplies five editable XML layouts: Products, Prices, Stock,
+Photos and Orders. Enabled export entities are published as stable filenames
+`<export_file_prefix>-<entity>.xml`. The hash stored on each Item mapping is a
+SHA-256 aggregate of the per-entity payload hashes that were actually published;
+the hidden state keeps those entity hashes separate so every scheduler interval
+works independently. Every component hash is calculated from exactly that
+Item's serialized row under the active layout. Changes outside those layouts do
+not trigger an export.
+
+When `Export All Enabled Items` is active, the exporter bulk-creates missing
+`Ecommerce Item Mapping` rows with `external_id` and `variant_sku` equal to the
+ERPNext Item Code. A mapping explicitly marked Disabled is excluded. This avoids
+manual one-product-at-a-time setup while retaining an override point for shops
+whose external identifier differs.
+
+Photos attached to Item are uploaded unchanged to `Photo FTP Profile`. The
+generated public URLs use `Photo URL Prefix`; no remote image URL is fetched by
+ERPNext. Catalog feeds use a replaceable atomic publish operation, while every
+operation key remains immutable.
+
+The default Orders layout expects `<orders><order>...` with top-level
+`order_id`, `status`, `telephone` and nested
+`<products><product><external_id|model|product_id>...`. Top-level element names
+are configurable in the Orders layout. The clean site-side export should return
+the ERP `external_id` or Item model/SKU so the shared Item mapping resolves it
+without using ocStore's internal numeric ID.
 
 Stock reservation and accounting remain standard ERPNext behavior. The Base
 only creates/submits configured Sales Orders, Sales Invoices and Payment Entries;
 it does not replace ERPNext stock reservation, delivery or ledger logic.
 
-## 0.5.0 migration boundary
+## 0.5.0 / 0.6.0 migration boundary
 
 Before any 0.5.0 production migration, follow `docs/PRODUCTION_RUNBOOK.md` and
 take an off-host database and files backup. The Base patch moves
@@ -84,10 +122,17 @@ take an off-host database and files backup. The Base patch moves
 composite unique key idempotently. A pre-model patch also converts the legacy
 `Sales Order.ua_ecommerce_channel` custom field from `Link` to `Data`; both use
 the same database column, so existing channel names are preserved for the later
-provider Settings migration.
+provider Settings patches.
 
-Legacy channel DocTypes remain installed in the Base stage as migration sources
-but are removed from Desk navigation and scheduler dispatch. Provider stages
-must first copy each old channel into the matching multi-record Settings
-DocType through an idempotent `patches.txt` patch. Only a later patch may remove
-the old DocTypes after successful data migration.
+The 0.6.0 post-model patch creates default layouts, copies every legacy ocStore
+channel to a disabled `OcStore Settings` document, migrates its Item mapping
+channel keys and recalculates existing SO/SI external-order keys. The new record
+remains disabled because legacy channels did not contain `File Delivery Endpoint`
+credentials. Configure and test the endpoints before enabling entity rows or the
+Settings record.
+
+Legacy channel DocTypes remain installed as migration sources but are removed
+from Desk navigation and scheduler dispatch. ocStore records are now copied;
+later provider stages must do the same through idempotent `patches.txt` patches.
+Only a later patch may remove the old DocTypes after every provider migration is
+verified.
