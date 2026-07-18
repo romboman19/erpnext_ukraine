@@ -41,7 +41,7 @@
   {"hidden": 0, "is_query_report": 0, "label": "Integration Operations", "link_count": 0, "link_to": "UA Integration Operation", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Integration Log", "link_count": 0, "link_to": "Hunter Integration Log", "link_type": "DocType", "onboard": 0, "type": "Link"}
  ],
- "modified": "2026-07-15 13:30:00.000000",
+ "modified": "2026-07-18 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Ukrainian Integrations",
  "name": "Ukrainian Integrations",

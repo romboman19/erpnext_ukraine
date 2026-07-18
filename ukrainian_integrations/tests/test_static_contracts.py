@@ -239,6 +239,26 @@ class ProductionStaticContractsTest(unittest.TestCase):
         self.assertEqual(workspace["module"], "Ukrainian Integrations")
         self.assertTrue(workspace["public"])
         self.assertFalse(workspace["is_hidden"])
+        workspace_links = {
+            (link.get("label"), link.get("link_to")) for link in workspace["links"]
+        }
+        self.assertIn(("E-commerce", None), workspace_links)
+        self.assertIn(("Ecommerce Channels", "Ecommerce Channel"), workspace_links)
+        self.assertIn(
+            ("Ecommerce File Exchange", "Ecommerce File Exchange"), workspace_links
+        )
+
+        sidebar = json.loads(
+            (PACKAGE / "workspace_sidebar" / "ukrainian_integrations.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        sidebar_links = {
+            (item.get("label"), item.get("link_to")) for item in sidebar["items"]
+        }
+        self.assertIn(("E-commerce", None), sidebar_links)
+        self.assertIn(("Channels", "Ecommerce Channel"), sidebar_links)
+        self.assertIn(("File Exchange", "Ecommerce File Exchange"), sidebar_links)
 
         translations = PACKAGE / "translations" / "uk.csv"
         with translations.open(encoding="utf-8", newline="") as handle:

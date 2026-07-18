@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- Force-sync the Ukrainian Integrations Workspace and sidebar so E-commerce channels, mappings and file exchange appear in Desk after upgrading.
+
 ## 0.4.0
 
 - Add first-class `Ecommerce Channel` configuration for Shop-Express and ocStore without Torgsoft compatibility or storefront core changes.
