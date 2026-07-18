@@ -49,7 +49,8 @@ class ShopExpressClient:
             self.authenticate()
         data = self._authorized_post(path, payload or {})
         if data.get("status") == "UNAUTHORIZED":
-            self.token = ""
+            # Deliberately clear an expired runtime token before authenticating again.
+            self.token = ""  # nosec B105
             self.authenticate()
             data = self._authorized_post(path, payload or {})
         status = data.get("status")

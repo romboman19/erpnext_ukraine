@@ -55,18 +55,11 @@ scheduler_events = {
             "ukrainian_integrations.payments.core.bank_import_scheduler.run_all_bank_imports",
         ],
         "*/10 * * * *": [
-            "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_orders",
-            "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_order_statuses",
+            "ukrainian_integrations.ecommerce.providers.prom_ua.service.pull_orders",
             "ukrainian_integrations.customer_identification.service.expire_pending",
         ],
         "*/20 * * * *": [
-            "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_stock",
-        ],
-        "7 * * * *": [
-            "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_customers",
-        ],
-        "15 2 * * *": [
-            "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_catalog",
+            "ukrainian_integrations.ecommerce.providers.prom_ua.service.push_stock",
         ],
     },
     "daily": [

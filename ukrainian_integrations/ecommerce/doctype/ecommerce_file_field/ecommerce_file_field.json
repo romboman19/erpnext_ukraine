@@ -1,0 +1,16 @@
+{
+ "doctype": "DocType",
+ "name": "Ecommerce File Field",
+ "module": "Ecommerce",
+ "istable": 1,
+ "editable_grid": 1,
+ "field_order": ["erp_fieldname", "external_column", "transform", "custom_transform_method", "required"],
+ "fields": [
+  {"fieldname": "erp_fieldname", "fieldtype": "Data", "label": "ERP Field", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "external_column", "fieldtype": "Data", "label": "External Field", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "transform", "fieldtype": "Select", "label": "Transform", "options": "none\nhtml_strip\nnumber_2dp\ncustom-method-path", "default": "none", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "custom_transform_method", "fieldtype": "Data", "label": "Registered Transform", "depends_on": "eval:doc.transform=='custom-method-path'", "mandatory_depends_on": "eval:doc.transform=='custom-method-path'"},
+  {"fieldname": "required", "fieldtype": "Check", "label": "Required", "default": "0", "in_list_view": 1}
+ ],
+ "permissions": [{"role": "System Manager", "read": 1, "write": 1}]
+}

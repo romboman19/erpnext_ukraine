@@ -78,10 +78,18 @@ class ProductionStaticContractsTest(unittest.TestCase):
             "Customer Identification Settings",
             "Ecommerce Channel",
             "Ecommerce Customer Mapping",
+            "Ecommerce File Field",
             "Ecommerce File Exchange",
+            "Ecommerce File Layout",
             "Ecommerce Item Mapping",
+            "Ecommerce Order Status Map",
+            "Ecommerce Payment Route",
             "Ecommerce Status Mapping",
+            "Ecommerce Sync Entity Config",
+            "Ecommerce Sync Log",
+            "Ecommerce Warehouse Sync",
             "Ecommerce Warehouse Mapping",
+            "File Delivery Endpoint",
             "NP Sender Profile",
             "NP Sender Branch Row",
             "UP Sender Profile",
@@ -92,7 +100,7 @@ class ProductionStaticContractsTest(unittest.TestCase):
             "UA Integration Operation",
         }
         found = set()
-        for path in (PACKAGE / "ukrainian_integrations" / "doctype").glob("*/*.json"):
+        for path in PACKAGE.glob("*/doctype/*/*.json"):
             found.add(json.loads(path.read_text(encoding="utf-8"))["name"])
         self.assertTrue(required.issubset(found), required - found)
 
@@ -243,10 +251,10 @@ class ProductionStaticContractsTest(unittest.TestCase):
             (link.get("label"), link.get("link_to")) for link in workspace["links"]
         }
         self.assertIn(("E-commerce", None), workspace_links)
-        self.assertIn(("Ecommerce Channels", "Ecommerce Channel"), workspace_links)
-        self.assertIn(
-            ("Ecommerce File Exchange", "Ecommerce File Exchange"), workspace_links
-        )
+        self.assertIn(("Ecommerce File Layouts", "Ecommerce File Layout"), workspace_links)
+        self.assertIn(("Ecommerce Sync Logs", "Ecommerce Sync Log"), workspace_links)
+        self.assertNotIn(("Ecommerce Channels", "Ecommerce Channel"), workspace_links)
+        self.assertNotIn(("Ecommerce File Exchange", "Ecommerce File Exchange"), workspace_links)
 
         sidebar = json.loads(
             (PACKAGE / "workspace_sidebar" / "ukrainian_integrations.json").read_text(
@@ -257,8 +265,10 @@ class ProductionStaticContractsTest(unittest.TestCase):
             (item.get("label"), item.get("link_to")) for item in sidebar["items"]
         }
         self.assertIn(("E-commerce", None), sidebar_links)
-        self.assertIn(("Channels", "Ecommerce Channel"), sidebar_links)
-        self.assertIn(("File Exchange", "Ecommerce File Exchange"), sidebar_links)
+        self.assertIn(("File Layouts", "Ecommerce File Layout"), sidebar_links)
+        self.assertIn(("Sync Logs", "Ecommerce Sync Log"), sidebar_links)
+        self.assertNotIn(("Channels", "Ecommerce Channel"), sidebar_links)
+        self.assertNotIn(("File Exchange", "Ecommerce File Exchange"), sidebar_links)
 
         translations = PACKAGE / "translations" / "uk.csv"
         with translations.open(encoding="utf-8", newline="") as handle:
@@ -314,41 +324,52 @@ class ProductionStaticContractsTest(unittest.TestCase):
         self.assertIn('"last_id"', client)
         self.assertNotIn('"page": int(page)', client)
 
-    def test_ecommerce_channels_are_api_and_clean_file_exchange_only(self):
-        doctype_path = (
-            PACKAGE
-            / "ukrainian_integrations"
-            / "doctype"
-            / "ecommerce_channel"
-            / "ecommerce_channel.json"
+    def test_ecommerce_base_replaces_the_universal_channel_runtime(self):
+        endpoint = json.loads(
+            (
+                PACKAGE
+                / "ecommerce"
+                / "doctype"
+                / "file_delivery_endpoint"
+                / "file_delivery_endpoint.json"
+            ).read_text(encoding="utf-8")
         )
-        channel = json.loads(doctype_path.read_text(encoding="utf-8"))
-        fields = {field["fieldname"]: field for field in channel["fields"]}
-        self.assertEqual(fields["provider"]["options"], "Shop-Express\nocStore")
-        self.assertEqual(fields["export_only_mapped_items"]["default"], "1")
-        self.assertNotIn("Torgsoft", fields["catalog_xml_profile"]["options"])
-        self.assertEqual(fields["api_password"]["fieldtype"], "Password")
+        endpoint_fields = {field["fieldname"]: field for field in endpoint["fields"]}
+        self.assertFalse(endpoint.get("issingle", False))
+        self.assertEqual(endpoint_fields["password"]["fieldtype"], "Password")
+        self.assertEqual(endpoint_fields["ssh_key"]["fieldtype"], "Password")
 
-        client = (
-            PACKAGE / "ecommerce" / "providers" / "shop_express" / "api.py"
-        ).read_text(encoding="utf-8")
-        service = (
-            PACKAGE / "ecommerce" / "providers" / "shop_express" / "service.py"
-        ).read_text(encoding="utf-8")
-        exchange = (PACKAGE / "ecommerce" / "core" / "exchange.py").read_text(
-            encoding="utf-8"
+        mapping = json.loads(
+            (
+                PACKAGE
+                / "ecommerce"
+                / "doctype"
+                / "ecommerce_item_mapping"
+                / "ecommerce_item_mapping.json"
+            ).read_text(encoding="utf-8")
         )
-        self.assertIn('"api/catalog/importResidues"', client)
-        self.assertIn('"api/orders/export"', client)
-        self.assertIn('"api/users/export"', client)
-        self.assertIn('"api/orders/update"', client)
-        self.assertIn("allow_redirects=False", client)
-        self.assertIn("shop_express_allowed_api_hosts", service)
-        self.assertIn("DTD and XML entities are not allowed", exchange)
+        mapping_fields = {field["fieldname"]: field for field in mapping["fields"]}
+        self.assertEqual(mapping_fields["channel"]["fieldtype"], "Data")
+        self.assertIn("last_export_hash", mapping_fields)
+
+        transform_source = (
+            PACKAGE / "ecommerce" / "base" / "serializers" / "transforms.py"
+        ).read_text(encoding="utf-8")
+        field_controller = (
+            PACKAGE
+            / "ecommerce"
+            / "doctype"
+            / "ecommerce_file_field"
+            / "ecommerce_file_field.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("_CUSTOM_TRANSFORMS", transform_source)
+        self.assertIn("is_registered_custom_transform", field_controller)
+        self.assertNotIn("frappe.get_attr", transform_source)
+        self.assertNotIn("importlib", transform_source)
 
         hooks = (PACKAGE / "hooks.py").read_text(encoding="utf-8")
-        self.assertIn("cron_sync_customers", hooks)
-        self.assertIn("cron_sync_order_statuses", hooks)
+        self.assertNotIn("ecommerce.core.scheduler", hooks)
+        self.assertIn("backfill_ecommerce_item_mapping", (PACKAGE / "patches.txt").read_text())
 
     def test_secret_debugging_never_returns_key_prefixes(self):
         source = (PACKAGE / "shipment" / "nova_poshta" / "service.py").read_text(encoding="utf-8")

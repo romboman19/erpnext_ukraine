@@ -1,143 +1,93 @@
-# E-commerce channels
+# E-commerce Base (0.5.0)
 
-This app owns ERPNext-side exchange for Shop-Express and ocStore. It has no
-Torgsoft compatibility layer and does not install or modify code in ocStore.
+Version 0.5.0 introduces the shared ERPNext-side foundation for provider-specific
+channels. It deliberately does not expose or schedule the rejected universal
+`Ecommerce Channel` runtime. `OcStore Settings`, `Shop Express Settings` and
+`Prom Settings` are delivered in their provider stages and must be ordinary,
+multi-record DocTypes linked to `Company`.
 
-## Data ownership
+Do not deploy the Base branch by itself as a completed ocStore or Shop Express
+integration. It is the reviewed migration boundary before those providers are
+implemented.
 
-- ERPNext owns item codes, prices, available stock and outgoing order statuses.
-- Shop-Express and ocStore own checkout capture and the original external order ID.
-- An external order is created at most once. `Sales Order.ua_external_order_key`
-  is deterministic and unique, while the readable channel and provider order ID
-  are kept in `ua_ecommerce_channel` and `ua_external_order_id`.
-- Item and customer identifiers are kept in channel-specific mapping DocTypes.
+## Shared DocTypes
 
-Available stock is calculated as the sum of `Bin.actual_qty - Bin.reserved_qty`
-for the mapped warehouses, minus the configured safety stock. Negative results
-are exported as zero.
+- `File Delivery Endpoint`: reusable FTP, FTPS or SFTP profile. Hostnames must
+  be explicitly listed in `ecommerce_allowed_ftp_hosts`; credentials and SSH
+  keys use Frappe `Password` fields.
+- `Ecommerce File Layout` + `Ecommerce File Field`: ordered CSV/XML/YML field
+  layouts, encodings and transformations.
+- `Ecommerce Item Mapping`: ERP Item to provider-instance `external_id` and
+  optional `variant_sku`, with a unique `(channel, external_id)` business key.
+- `Ecommerce Sync Log`: append-only, redacted terminal/ambiguous run history.
+- Reusable child tables: `Ecommerce Sync Entity Config`, `Ecommerce Warehouse
+  Sync`, `Ecommerce Payment Route` and `Ecommerce Order Status Map`.
 
-## Shop-Express
+The provider-instance key is `<Settings DocType>:<document name>`, for example
+`OcStore Settings:hunter.rv.ua`. This keeps mappings and order keys isolated
+when one company has multiple stores.
 
-Recommended routes:
+## Data ownership and hashes
 
-| Entity | Transport |
-|---|---|
-| Full catalog | XML (`Shop-Express YML`) |
-| Prices and stock | API |
-| Orders | API |
-| Customers | API |
-| Order statuses | API, after status mappings are accepted |
+ERPNext `Item` is the product master. Channels receive products, prices, stock,
+descriptions and photos; they do not overwrite ERP product master data.
 
-Configure `shop_express_allowed_api_hosts` in `site_config.json` before enabling
-the channel. The API base URL must use HTTPS and contain no embedded credentials.
+`Ecommerce Item Mapping.last_export_hash` is calculated from the exact payload
+produced by the selected serializer and file layout. A change to an Item field
+that is absent from the outbound layout does not trigger an export, while a
+change to any serialized price, stock, description or photo field does.
 
-```json
-{
-  "shop_express_allowed_api_hosts": ["shop.example.ua"]
-}
-```
+`custom-method-path` never imports a dotted path from the database. A transform
+must first be registered in application code with
+`register_custom_transform(...)`; unregistered values fail validation and fail
+again at serialization time.
 
-The client authenticates through `/api/auth`, caches the ten-minute token for
-nine minutes and re-authenticates once after an explicit `UNAUTHORIZED`
-response. Network timeouts for mutating requests are not retried.
+## File transport
 
-The first order/customer pull uses `Initial Sync Days`. Later pulls overlap the
-previous watermark by `Orders Overlap (minutes)`. ERPNext advances a watermark
-only after all rows in the page range are handled successfully.
+Uploads are written to a temporary remote path and renamed into place. A hidden
+checksum sidecar binds the remote file to its immutable idempotency key. Reusing
+the key with different content is rejected; a timeout after a possible remote
+mutation is `unknown` and is not blindly retried.
 
-## ocStore 3.0.3.7
+SFTP uses strict host-key checking. Install the expected server key in the
+runtime user's `known_hosts` file on backend, scheduler and workers before
+testing the endpoint. A private key pasted into the Password field may use
+escaped `\\n` line endings.
 
-Use `XML` or `Disabled` for all routes. Generate catalog and price/stock files
-from the `Ecommerce Channel` form. Import an order file by creating an
-`Ecommerce File Exchange` with:
+## Order intake
 
-- Direction: `Import`
-- Entity: `Orders`
-- File Format: `XML`
-- Profile: `ERPNext Exchange XML v1`
+`ecommerce.base.orders.intake(channel, raw_order)` normalizes the customer,
+shipping, payment and item rows, resolves products through
+`Ecommerce Item Mapping`, deduplicates customers by normalized phone and uses
+the configured status action to create standard ERPNext documents.
 
-Attach the file exported by the ocStore import/export module and run
-`Process Import`. Configure that module's XML template to emit the clean schema
-below. No database access or ocStore core modification is required.
+The immutable order key is derived from `(provider settings instance,
+channel_order_id)`. Before creation, intake checks the unique Sales Order/Sales
+Invoice fields and a previous successful `Ecommerce Sync Log`. Product mapping
+never stores order IDs.
 
-## ERPNext Exchange XML v1
+A provider file importer must process every order independently and write a
+terminal log. It may delete the inbound FTP file only after every order in that
+file was created, found or deliberately ignored and successfully logged. Any
+failed row keeps the whole file on FTP with a `Failed` log for manual handling.
+This all-or-keep file policy is implemented in the ocStore provider stage.
 
-Catalog exports use this root:
+Stock reservation and accounting remain standard ERPNext behavior. The Base
+only creates/submits configured Sales Orders, Sales Invoices and Payment Entries;
+it does not replace ERPNext stock reservation, delivery or ledger logic.
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<ecommerce_exchange
-  schema="erpnext-ecommerce-v1"
-  entity="catalog"
-  channel="ocstore-main"
-  generated_at="2026-07-18T12:00:00+00:00">
-  <categories>
-    <category id="1" parent_id="" name="Одяг" />
-  </categories>
-  <products>
-    <product id="1001" sku="SKU-1001" available="1">
-      <name>Товар</name>
-      <category_id>1</category_id>
-      <price currency="UAH">499.00</price>
-      <quantity>8</quantity>
-      <pictures>
-        <picture>https://erp.example.ua/files/item.jpg</picture>
-      </pictures>
-    </product>
-  </products>
-</ecommerce_exchange>
-```
+## 0.5.0 migration boundary
 
-Order imports use one `order` element per order and one `item` per product row:
+Before any 0.5.0 production migration, follow `docs/PRODUCTION_RUNBOOK.md` and
+take an off-host database and files backup. The Base patch moves
+`Ecommerce Item Mapping` metadata, backfills the new fields and creates its
+composite unique key idempotently. A pre-model patch also converts the legacy
+`Sales Order.ua_ecommerce_channel` custom field from `Link` to `Data`; both use
+the same database column, so existing channel names are preserved for the later
+provider Settings migration.
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<ecommerce_exchange
-  schema="erpnext-ecommerce-v1"
-  entity="orders"
-  channel="ocstore-main">
-  <orders>
-    <order id="157" number="OC-157" created_at="2026-07-18 11:45:00"
-           currency="UAH" status="Processing" paid="0">
-      <customer id="42">
-        <name>Іван Петренко</name>
-        <phone>+380501234567</phone>
-        <email>customer@example.ua</email>
-      </customer>
-      <delivery>
-        <city>Рівне</city>
-        <address>Відділення 1</address>
-      </delivery>
-      <comment>Зателефонувати перед відправленням</comment>
-      <items>
-        <item sku="SKU-1001" quantity="2" price="499.00" />
-      </items>
-    </order>
-  </orders>
-</ecommerce_exchange>
-```
-
-The parser also accepts common ocStore aliases such as `order_id`,
-`order_number`, `telephone`, `model`, `qty`, `date_added`, `shipping_city` and
-`shipping_address`. DTDs and XML entities are rejected, the file size is
-bounded, and an order with an invalid or unmapped product is never partially
-created.
-
-## Production activation
-
-1. Create the channel disabled.
-2. Add the ERP warehouse rows and a selling price list.
-3. Add enabled `Ecommerce Item Mapping` rows. `Export Only Mapped Items` is on by
-   default and should remain on in production.
-4. Generate a catalog file and validate it in a staging store.
-5. For Shop-Express, test API authorization and run customer/order synchronization
-   manually with a short initial period.
-6. Verify customer reuse, item mappings, taxes, currency and delivery details in
-   draft Sales Orders.
-7. Enable stock synchronization.
-8. Add status mappings last, then enable outgoing status synchronization.
-
-Use `Ecommerce File Exchange` for file history and `Hunter Integration Log` for
-API/import diagnostics. A provider `WARNING`, incomplete status log, unknown SKU
-or currency mismatch fails the corresponding run instead of silently dropping
-data.
+Legacy channel DocTypes remain installed in the Base stage as migration sources
+but are removed from Desk navigation and scheduler dispatch. Provider stages
+must first copy each old channel into the matching multi-record Settings
+DocType through an idempotent `patches.txt` patch. Only a later patch may remove
+the old DocTypes after successful data migration.

@@ -1,0 +1,13 @@
+{
+ "doctype": "DocType",
+ "name": "Ecommerce Warehouse Sync",
+ "module": "Ecommerce",
+ "istable": 1,
+ "editable_grid": 1,
+ "field_order": ["warehouse", "enabled"],
+ "fields": [
+  {"fieldname": "warehouse", "fieldtype": "Link", "label": "Warehouse", "options": "Warehouse", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "enabled", "fieldtype": "Check", "label": "Enabled", "default": "1", "in_list_view": 1}
+ ],
+ "permissions": [{"role": "System Manager", "read": 1, "write": 1}]
+}

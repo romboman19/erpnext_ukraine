@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+- Start the provider-specific ecommerce architecture with reusable entity routes, configurable file layouts, exact payload hashing, append-only sync logs and FTP/FTPS/SFTP endpoints.
+- Add a fail-closed ecommerce channel contract, registered transform whitelist and durable HTTP/file idempotency primitives.
+- Add normalized, phone-deduplicated and order-key-idempotent ERP document intake on top of standard Sales Order reservation and accounting flows.
+- Keep legacy channel fields migration-safe until provider Settings migrations are delivered in their own stages.
+
 ## 0.4.1
 
 - Force-sync the Ukrainian Integrations Workspace and sidebar so E-commerce channels, mappings and file exchange appear in Desk after upgrading.

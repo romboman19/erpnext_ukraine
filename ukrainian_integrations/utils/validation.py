@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import re
 from urllib.parse import urlparse
 
 import frappe
 from frappe import _
+
+_BARE_HOSTNAME = re.compile(
+    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$"
+)
 
 
 def validate_profile_rows(rows, label: str) -> None:
@@ -41,6 +46,35 @@ def validate_allowed_host(
         frappe.throw(
             _("{0} host is not allowlisted. Configure {1} in site_config.json").format(label, config_key)
         )
+
+
+def validate_allowed_hostname(
+    hostname: str,
+    label: str,
+    *,
+    default_hosts: set[str] | None = None,
+    config_key: str,
+) -> str:
+    """Validate a bare transport hostname against an exact allowlist."""
+    normalized = str(hostname or "").strip().rstrip(".").lower()
+    if not _BARE_HOSTNAME.fullmatch(normalized):
+        frappe.throw(_("{0} must be a valid hostname without credentials or a port").format(label))
+    configured = frappe.conf.get(config_key, [])
+    if isinstance(configured, str):
+        configured = [item.strip() for item in configured.split(",") if item.strip()]
+    allowed = {str(host).strip().rstrip(".").lower() for host in (default_hosts or set())}
+    allowed.update(
+        str(host).strip().rstrip(".").lower()
+        for host in (configured or [])
+        if str(host).strip()
+    )
+    if normalized not in allowed:
+        frappe.throw(
+            _("{0} host is not allowlisted. Configure {1} in site_config.json").format(
+                label, config_key
+            )
+        )
+    return normalized
 
 
 def validate_erp_bank_account(bank_account: str, company: str) -> str:

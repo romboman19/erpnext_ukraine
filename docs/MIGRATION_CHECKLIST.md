@@ -1,4 +1,4 @@
-# Upgrade checklist: 0.1.x / 0.2.x → 0.3.0
+# Upgrade checklist
 
 ## Before maintenance
 
@@ -7,6 +7,7 @@
 - [ ] Confirm a tested restore path and maintenance window.
 - [ ] Stop schedulers/workers or put the site in maintenance mode.
 - [ ] Export current `site_config.json` securely; never commit it.
+- [ ] For 0.5.0, export the existing ecommerce channel/mapping records for reconciliation and do not delete legacy DocTypes manually.
 
 ## Deploy
 

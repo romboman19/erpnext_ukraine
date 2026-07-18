@@ -3,7 +3,11 @@ from __future__ import annotations
 import csv
 import io
 from datetime import datetime
-from xml.etree import ElementTree as ET
+
+# ElementTree only constructs trusted outbound XML; defusedxml parses inbound payloads.
+from xml.etree import ElementTree as ET  # nosec B405
+
+from defusedxml.ElementTree import fromstring as safe_xml_fromstring
 
 MAX_EXCHANGE_BYTES = 24 * 1024 * 1024
 
@@ -164,7 +168,7 @@ def parse_orders_xml(content: bytes | str) -> list[dict]:
     raw = content.encode("utf-8") if isinstance(content, str) else bytes(content)
     _validate_xml_input(raw)
     try:
-        root = ET.fromstring(raw)
+        root = safe_xml_fromstring(raw)
     except ET.ParseError as exc:
         raise ValueError("Order exchange file contains invalid XML") from exc
     if _local_name(root.tag) == "order":

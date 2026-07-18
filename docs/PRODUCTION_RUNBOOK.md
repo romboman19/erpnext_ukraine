@@ -10,6 +10,16 @@
 6. Restart backend, scheduler and all workers, then run `bench doctor`.
 7. Complete read-only smoke tests before enabling provider schedulers or live side effects.
 
+## Required backup boundary for 0.5.0
+
+Do not run the first 0.5.0 migration without a fresh off-host database and files
+backup. Record the pre-upgrade app commit and verify that the backup can be
+restored. The ecommerce migration is intentionally staged: Base preserves
+legacy channel DocTypes as read-only migration sources, provider patches copy
+their data into ordinary multi-record Settings, and only a later patch may
+remove the old schema. Run `migrate` with scheduler and workers stopped; do not
+mix 0.4.x and 0.5.x code across Frappe processes.
+
 ## Prom.ua site configuration
 
 Prom.ua is intentionally configured by the site administrator:
