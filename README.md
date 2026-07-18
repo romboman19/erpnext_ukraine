@@ -8,7 +8,7 @@ Production-oriented Frappe/ERPNext v16 application for Ukrainian shipping, payme
 - Python: 3.11+
 - MariaDB: 10.6+
 - Redis: 6+
-- App version: 0.3.0
+- App version: 0.4.0
 
 The repository is validated by static analysis, unit/contract tests, package build, JavaScript parsing, and a clean ERPNext v16 install/migrate job. A deployment is production-ready only after the provider acceptance checklist has passed with the organization's own sandbox or low-risk credentials; no repository can prove third-party credentials, tariffs, terminal firmware, network ACLs, or merchant-account settings in isolation.
 
@@ -22,6 +22,8 @@ The repository is validated by static analysis, unit/contract tests, package bui
 - VitalPBX: click-to-call, authenticated event webhook, extension-scoped call logs and realtime popups.
 - TurboSMS: sender allowlist, idempotent send API and delivery request logging.
 - Prom.ua: `last_id` order pagination and stock updates by product `external_id`.
+- Shop-Express: channel-based API sync for orders, customers, prices and stock; full catalog by API or YML/XML file.
+- ocStore 3.0.3.7: ERPNext-side XML catalog/stock export and XML order import without storefront core changes.
 - Customer identification: SMS, Telegram and inbound-call verification with rate limits, PII gating and birthday messaging.
 
 PrivatBank terminal checkout is owned by `erpnext_ua.ua_pos`; this app keeps only the migration guide and external connectors.
@@ -66,6 +68,7 @@ Prefer the Settings/Profile DocTypes in Desk. When those DocTypes contain config
 | TurboSMS | `TurboSMS Settings` with official API URL, token and active sender rows |
 | Customer identification | `Identification Channel Settings`; POS defaults to SMS through TurboSMS, while Telegram and VitalPBX remain optional |
 | Prom.ua | `site_config.json`; see the runbook for the complete key list |
+| Shop-Express / ocStore | `Ecommerce Channel`, item and warehouse mappings, plus `Ecommerce File Exchange` for XML/YML workflows |
 
 Custom non-production provider hosts must be explicitly allowlisted in `site_config.json`:
 
@@ -75,7 +78,8 @@ Custom non-production provider hosts must be explicitly allowlisted in `site_con
   "ukrposhta_allowed_api_hosts": ["sandbox.example.internal"],
   "rozetka_delivery_allowed_api_hosts": ["sandbox.example.internal"],
   "turbosms_allowed_api_hosts": ["sandbox.example.internal"],
-  "prom_ua_allowed_api_hosts": ["sandbox.example.internal"]
+  "prom_ua_allowed_api_hosts": ["sandbox.example.internal"],
+  "shop_express_allowed_api_hosts": ["shop.example.ua"]
 }
 ```
 
@@ -143,6 +147,7 @@ CI repeats these gates and installs/migrates the app on a clean ERPNext v16 site
 - Follow [Production runbook](docs/PRODUCTION_RUNBOOK.md) for backup, deployment, monitoring, reconciliation and rollback.
 - Follow [Provider acceptance](docs/PROVIDER_ACCEPTANCE.md) before enabling any scheduler or live side effect.
 - See [Rozetka Delivery setup](docs/ROZETKA_DELIVERY.md) for profile configuration, workflow and acceptance steps.
+- See [E-commerce channels](docs/ECOMMERCE_CHANNELS.md) for Shop-Express API/YML and ocStore XML setup.
 - See [Privat POS migration](docs/privat_pos_flow.md) for the move to `erpnext_ua.ua_pos`.
 - Security reporting and supported versions are in [SECURITY.md](SECURITY.md).
 - Release history is in [CHANGELOG.md](CHANGELOG.md).

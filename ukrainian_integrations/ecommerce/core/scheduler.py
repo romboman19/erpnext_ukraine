@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import frappe
 
-from ukrainian_integrations.ecommerce.core.orchestrator import sync_orders_all, sync_stock_all
+from ukrainian_integrations.ecommerce.core.orchestrator import (
+    sync_catalog_all,
+    sync_customers_all,
+    sync_order_statuses_all,
+    sync_orders_all,
+    sync_stock_all,
+)
 
 
 def cron_sync_orders():
@@ -20,4 +26,28 @@ def cron_sync_stock():
     if not result.get("ok"):
         frappe.db.commit()
         raise RuntimeError("One or more ecommerce stock sync providers failed")
+    return result
+
+
+def cron_sync_customers():
+    result = sync_customers_all()
+    if not result.get("ok"):
+        frappe.db.commit()
+        raise RuntimeError("One or more ecommerce customer sync providers failed")
+    return result
+
+
+def cron_sync_catalog():
+    result = sync_catalog_all()
+    if not result.get("ok"):
+        frappe.db.commit()
+        raise RuntimeError("One or more ecommerce catalog sync providers failed")
+    return result
+
+
+def cron_sync_order_statuses():
+    result = sync_order_statuses_all()
+    if not result.get("ok"):
+        frappe.db.commit()
+        raise RuntimeError("One or more ecommerce order status sync providers failed")
     return result

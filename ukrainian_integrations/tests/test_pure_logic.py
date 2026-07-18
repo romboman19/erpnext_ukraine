@@ -26,8 +26,16 @@ from ukrainian_integrations.customer_identification.telegram import (
     TelegramAPIError,
     _telegram,
 )
+from ukrainian_integrations.ecommerce.core.exchange import (
+    build_canonical_catalog,
+    build_yml_catalog,
+    parse_orders_csv,
+    parse_orders_xml,
+)
 from ukrainian_integrations.ecommerce.providers.prom_ua.api import PromUAClient
 from ukrainian_integrations.ecommerce.providers.prom_ua.service import _order_item_rows
+from ukrainian_integrations.ecommerce.providers.shop_express.api import ShopExpressClient
+from ukrainian_integrations.ecommerce.providers.shop_express.service import _batch_warnings, _category_path
 from ukrainian_integrations.migrations import _merge_app_icons_into_layout, remove_legacy_integration_artifacts
 from ukrainian_integrations.payments.liqpay.client import LiqPayClient
 from ukrainian_integrations.payments.monobank.client import MonobankClient
@@ -64,6 +72,147 @@ from ukrainian_integrations.utils.security import secrets_equal
 
 
 class PureLogicTest(unittest.TestCase):
+    def test_clean_yml_catalog_escapes_values_and_keeps_stable_skus(self):
+        content = build_yml_catalog(
+            channel_name="Магазин & сервіс",
+            company="HUNTER",
+            store_url="https://shop.example.ua",
+            currency="UAH",
+            categories=[{"id": "1", "name": "Одяг & взуття", "parent_id": ""}],
+            products=[
+                {
+                    "external_id": "SKU-1",
+                    "sku": "SKU-1",
+                    "name": "Товар <1>",
+                    "category_id": "1",
+                    "price": 125.5,
+                    "quantity": 3,
+                    "available": True,
+                    "currency": "UAH",
+                    "pictures": [],
+                }
+            ],
+        )
+        self.assertIn(b"<vendorCode>SKU-1</vendorCode>", content)
+        self.assertIn(b"125.50", content)
+        self.assertIn(b"\xd0\x9c\xd0\xb0\xd0\xb3\xd0\xb0\xd0\xb7\xd0\xb8\xd0\xbd &amp;", content)
+
+    def test_canonical_catalog_has_explicit_version_and_stock(self):
+        content = build_canonical_catalog(
+            channel_name="ocStore",
+            currency="UAH",
+            categories=[{"id": "1", "name": "All", "parent_id": ""}],
+            products=[
+                {
+                    "external_id": "42",
+                    "sku": "SKU-42",
+                    "name": "Item",
+                    "category_id": "1",
+                    "price": 10,
+                    "quantity": 2,
+                    "available": True,
+                    "currency": "UAH",
+                    "pictures": [],
+                }
+            ],
+        )
+        self.assertIn(b'schema="erpnext-ecommerce-v1"', content)
+        self.assertIn(b'<quantity>2</quantity>', content)
+
+    def test_order_xml_parser_accepts_clean_exchange_and_rejects_entities(self):
+        orders = parse_orders_xml(
+            """<?xml version="1.0" encoding="UTF-8"?>
+            <ecommerce_exchange schema="erpnext-ecommerce-v1" entity="orders">
+              <orders><order id="101" number="OC-101" currency="UAH">
+                <customer id="7"><name>Іван</name><phone>+380501234567</phone></customer>
+                <items><item sku="SKU-1" quantity="2" price="15.50" /></items>
+              </order></orders>
+            </ecommerce_exchange>"""
+        )
+        self.assertEqual(orders[0]["external_id"], "101")
+        self.assertEqual(orders[0]["customer"]["name"], "Іван")
+        self.assertEqual(orders[0]["items"][0]["sku"], "SKU-1")
+        with self.assertRaises(ValueError):
+            parse_orders_xml('<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><order id="1"/>')
+        with self.assertRaises(ValueError):
+            parse_orders_xml((" " * 5000) + '<!DOCTYPE foo><order id="1"/>')
+
+    def test_order_csv_parser_groups_product_rows_by_order(self):
+        orders = parse_orders_csv(
+            "order_id,order_number,customer_name,sku,quantity,price,currency\n"
+            "1,OC-1,Іван,SKU-1,1,10,UAH\n"
+            "1,OC-1,Іван,SKU-2,2,20,UAH\n"
+        )
+        self.assertEqual(len(orders), 1)
+        self.assertEqual(len(orders[0]["items"]), 2)
+
+    @patch("ukrainian_integrations.ecommerce.providers.shop_express.api.requests.post")
+    def test_shop_express_reauthenticates_once_after_expired_token(self, post):
+        def response(payload):
+            raw = __import__("json").dumps(payload).encode()
+            result = Mock(status_code=200, headers={"Content-Length": str(len(raw))})
+            result.iter_content.return_value = [raw]
+            return result
+
+        post.side_effect = [
+            response({"status": "OK", "response": {"token": "first"}}),
+            response({"status": "UNAUTHORIZED", "response": {}}),
+            response({"status": "OK", "response": {"token": "second"}}),
+            response({"status": "OK", "response": {"orders": []}}),
+        ]
+        stored = []
+        client = ShopExpressClient(
+            base_url="https://shop.example.ua",
+            login="api@example.ua",
+            password="secret",
+            token_callback=stored.append,
+        )
+        result = client.export_orders(limit=10)
+        self.assertEqual(result["status"], "OK")
+        self.assertEqual(post.call_count, 4)
+        self.assertEqual(stored, ["first", "second"])
+        self.assertEqual(post.call_args.kwargs["json"]["token"], "second")
+
+    @patch("ukrainian_integrations.ecommerce.providers.shop_express.api.requests.post")
+    def test_shop_express_does_not_retry_ambiguous_timeout(self, post):
+        post.side_effect = requests.Timeout("unknown outcome")
+        client = ShopExpressClient(
+            base_url="https://shop.example.ua",
+            login="api@example.ua",
+            password="secret",
+            token="cached",
+        )
+        with self.assertRaises(requests.Timeout):
+            client.update_residues([{"sku": "SKU-1", "residues": 1}])
+        self.assertEqual(post.call_count, 1)
+
+    def test_shop_express_batch_log_rejects_partial_or_failed_rows(self):
+        payload = [{"sku": "SKU-1"}, {"sku": "SKU-2"}]
+        response = {
+            "status": "OK",
+            "response": {"log": [{"status": "OK"}, {"status": "ERROR", "sku": "SKU-2"}]},
+        }
+        self.assertEqual(_batch_warnings(response, payload, "stock update")[0]["sku"], "SKU-2")
+        with self.assertRaises(RuntimeError):
+            _batch_warnings({"status": "OK", "response": {"log": []}}, payload, "stock update")
+
+    def test_shop_express_catalog_category_path_uses_stable_external_ids(self):
+        categories = {
+            "1": {"id": "1", "name_key": "All Item Groups", "name": "All", "parent_id": ""},
+            "2": {"id": "2", "name_key": "Clothes", "name": "Одяг", "parent_id": "1"},
+        }
+        self.assertEqual(
+            _category_path("2", categories),
+            [
+                {"external_id": "All Item Groups", "value": {"uk": "All"}},
+                {
+                    "external_id": "Clothes",
+                    "parent_external_id": "All Item Groups",
+                    "value": {"uk": "Одяг"},
+                },
+            ],
+        )
+
     def test_pos_identification_defaults_to_locked_turbosms_channel(self):
         settings = types.SimpleNamespace(
             default_channel="Telegram",
@@ -184,6 +333,26 @@ class PureLogicTest(unittest.TestCase):
         field = custom_fields["Sales Invoice"][0]
         self.assertEqual(field["fieldtype"], "Data")
         self.assertNotIn("options", field)
+
+    def test_legacy_sender_cleanup_accepts_null_single_value(self):
+        database = Mock()
+        database.exists.side_effect = lambda doctype, name: (
+            doctype == "DocType" and name == "TurboSMS Settings"
+        )
+        database.sql.return_value = [(None,)]
+        database.get_value.return_value = 0
+        settings = Mock()
+        settings.get.return_value = []
+
+        with (
+            patch.object(frappe, "db", database),
+            patch.object(frappe, "get_single", return_value=settings, create=True),
+            patch.object(frappe, "clear_cache", create=True),
+        ):
+            result = remove_legacy_integration_artifacts()
+
+        self.assertFalse(result["migrated_turbosms_sender"])
+        settings.append.assert_not_called()
 
     def test_payload_redaction_is_recursive(self):
         payload = {"token": "secret", "nested": [{"private_key": "private", "value": 4}]}

@@ -66,7 +66,7 @@ def remove_legacy_integration_artifacts() -> dict[str, object]:
             """,
             ("TurboSMS Settings", "sender"),
         )
-        legacy_sender = (legacy_rows[0][0] if legacy_rows else "").strip()
+        legacy_sender = ((legacy_rows[0][0] if legacy_rows else "") or "").strip()
         settings = frappe.get_single("TurboSMS Settings")
         if legacy_sender and not settings.get("senders"):
             settings.append(

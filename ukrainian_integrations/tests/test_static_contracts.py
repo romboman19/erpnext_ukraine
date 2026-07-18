@@ -76,6 +76,12 @@ class ProductionStaticContractsTest(unittest.TestCase):
             "Customer Birthday Greeting Log",
             "Customer Identification Request",
             "Customer Identification Settings",
+            "Ecommerce Channel",
+            "Ecommerce Customer Mapping",
+            "Ecommerce File Exchange",
+            "Ecommerce Item Mapping",
+            "Ecommerce Status Mapping",
+            "Ecommerce Warehouse Mapping",
             "NP Sender Profile",
             "NP Sender Branch Row",
             "UP Sender Profile",
@@ -204,6 +210,7 @@ class ProductionStaticContractsTest(unittest.TestCase):
             self.assertTrue((PACKAGE / filename).is_file(), filename)
         pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('"patches.txt"', pyproject)
+        self.assertIn('"**/*.js"', pyproject)
 
     def test_app_screen_workspace_and_ukrainian_translation_are_shipped(self):
         hooks = (PACKAGE / "hooks.py").read_text(encoding="utf-8")
@@ -286,6 +293,42 @@ class ProductionStaticContractsTest(unittest.TestCase):
         self.assertIn('"quantity_in_stock"', service)
         self.assertIn('"last_id"', client)
         self.assertNotIn('"page": int(page)', client)
+
+    def test_ecommerce_channels_are_api_and_clean_file_exchange_only(self):
+        doctype_path = (
+            PACKAGE
+            / "ukrainian_integrations"
+            / "doctype"
+            / "ecommerce_channel"
+            / "ecommerce_channel.json"
+        )
+        channel = json.loads(doctype_path.read_text(encoding="utf-8"))
+        fields = {field["fieldname"]: field for field in channel["fields"]}
+        self.assertEqual(fields["provider"]["options"], "Shop-Express\nocStore")
+        self.assertEqual(fields["export_only_mapped_items"]["default"], "1")
+        self.assertNotIn("Torgsoft", fields["catalog_xml_profile"]["options"])
+        self.assertEqual(fields["api_password"]["fieldtype"], "Password")
+
+        client = (
+            PACKAGE / "ecommerce" / "providers" / "shop_express" / "api.py"
+        ).read_text(encoding="utf-8")
+        service = (
+            PACKAGE / "ecommerce" / "providers" / "shop_express" / "service.py"
+        ).read_text(encoding="utf-8")
+        exchange = (PACKAGE / "ecommerce" / "core" / "exchange.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"api/catalog/importResidues"', client)
+        self.assertIn('"api/orders/export"', client)
+        self.assertIn('"api/users/export"', client)
+        self.assertIn('"api/orders/update"', client)
+        self.assertIn("allow_redirects=False", client)
+        self.assertIn("shop_express_allowed_api_hosts", service)
+        self.assertIn("DTD and XML entities are not allowed", exchange)
+
+        hooks = (PACKAGE / "hooks.py").read_text(encoding="utf-8")
+        self.assertIn("cron_sync_customers", hooks)
+        self.assertIn("cron_sync_order_statuses", hooks)
 
     def test_secret_debugging_never_returns_key_prefixes(self):
         source = (PACKAGE / "shipment" / "nova_poshta" / "service.py").read_text(encoding="utf-8")

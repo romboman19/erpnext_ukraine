@@ -1,0 +1,15 @@
+{
+ "doctype": "DocType",
+ "name": "Ecommerce Status Mapping",
+ "module": "Ukrainian Integrations",
+ "istable": 1,
+ "editable_grid": 1,
+ "field_order": ["external_status_id", "external_status", "erpnext_status", "push_to_channel"],
+ "fields": [
+  {"fieldname": "external_status_id", "fieldtype": "Data", "label": "External Status ID", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "external_status", "fieldtype": "Data", "label": "External Status", "in_list_view": 1},
+  {"fieldname": "erpnext_status", "fieldtype": "Select", "label": "ERPNext Status", "options": "Draft\nTo Deliver and Bill\nTo Bill\nTo Deliver\nCompleted\nCancelled\nOn Hold\nClosed", "in_list_view": 1},
+  {"fieldname": "push_to_channel", "fieldtype": "Check", "label": "Push to Channel", "default": "0", "in_list_view": 1}
+ ],
+ "permissions": [{"role": "System Manager", "read": 1, "write": 1}]
+}

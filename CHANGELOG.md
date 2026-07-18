@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Add first-class `Ecommerce Channel` configuration for Shop-Express and ocStore without Torgsoft compatibility or storefront core changes.
+- Add Shop-Express API authentication, bounded responses, token refresh, paginated customer/order import, catalog/stock updates and mapped outgoing order statuses.
+- Add clean Shop-Express YML and ERPNext Exchange XML v1 catalog/stock exports plus guarded XML order imports for ocStore 3.0.3.7.
+- Add per-channel item, customer, warehouse and status mappings, file-exchange history, schedulers, Ukrainian Desk navigation and production activation documentation.
+
 ## 0.3.4
 
 - Add an explicit identification-channel settings menu and administrator-controlled default/POS channel routing.

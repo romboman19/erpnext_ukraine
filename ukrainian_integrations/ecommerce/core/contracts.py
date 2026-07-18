@@ -17,3 +17,18 @@ class EcommerceProvider(ABC):
     @abstractmethod
     def sync_stock(self) -> dict:
         ...
+
+    @abstractmethod
+    def sync_customers(self) -> dict:
+        ...
+
+    @abstractmethod
+    def sync_catalog(self) -> dict:
+        ...
+
+    @abstractmethod
+    def sync_order_statuses(self) -> dict:
+        ...
+
+    def test_connection(self) -> dict:
+        return {"ok": True, "skipped": True, "reason": "connection test is not implemented"}

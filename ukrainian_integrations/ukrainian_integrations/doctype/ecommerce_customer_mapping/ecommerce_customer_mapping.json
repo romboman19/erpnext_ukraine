@@ -1,0 +1,23 @@
+{
+ "doctype": "DocType",
+ "name": "Ecommerce Customer Mapping",
+ "module": "Ukrainian Integrations",
+ "autoname": "hash",
+ "title_field": "customer",
+ "search_fields": "channel,customer,external_customer_id",
+ "field_order": ["channel", "customer", "external_customer_id", "identity_hash", "mapping_key"],
+ "fields": [
+  {"fieldname": "channel", "fieldtype": "Link", "label": "Ecommerce Channel", "options": "Ecommerce Channel", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "customer", "fieldtype": "Link", "label": "Customer", "options": "Customer", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "external_customer_id", "fieldtype": "Data", "label": "External Customer ID", "in_list_view": 1},
+  {"fieldname": "identity_hash", "fieldtype": "Data", "label": "Identity Hash", "read_only": 1, "no_copy": 1, "length": 64},
+  {"fieldname": "mapping_key", "fieldtype": "Data", "label": "Mapping Key", "reqd": 1, "unique": 1, "read_only": 1, "hidden": 1, "no_copy": 1, "length": 64}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Sales Manager", "read": 1, "write": 1, "create": 1}
+ ],
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
