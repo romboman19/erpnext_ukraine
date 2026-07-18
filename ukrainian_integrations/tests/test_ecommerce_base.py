@@ -52,6 +52,7 @@ from ukrainian_integrations.patches.v0_5 import (
     convert_ecommerce_channel_custom_field_to_data,
     move_ecommerce_item_mapping_to_module,
 )
+from ukrainian_integrations.patches.v0_6 import register_ecommerce_module_and_sync_mapping
 
 
 @register_custom_transform("ukrainian_integrations.tests.ecommerce.uppercase")
@@ -815,6 +816,84 @@ class EcommerceBaseTest(unittest.TestCase):
 
         self.assertEqual(database.module, "Ecommerce")
         self.assertEqual(database.writes, 1)
+
+    def test_ecommerce_module_registration_patch_is_idempotent(self):
+        state = {"owner": None, "doctype_exists": True, "module": "Ecommerce"}
+
+        class Database:
+            def get_value(self, doctype, name, fieldname):
+                if doctype == "Module Def":
+                    return state["owner"]
+                if doctype == "DocType":
+                    return state["module"]
+                return None
+
+            def exists(self, doctype, name):
+                return doctype == "DocType" and name == "Ecommerce Item Mapping"
+
+            def set_value(self, doctype, name, fieldname, value, **kwargs):
+                del name, fieldname, kwargs
+                if doctype == "DocType":
+                    state["module"] = value
+
+        class ModuleDef:
+            module_name = None
+            app_name = None
+
+            def insert(self, **kwargs):
+                del kwargs
+                state["owner"] = self.app_name
+
+        cache = types.SimpleNamespace(delete_value=Mock())
+        client_cache = types.SimpleNamespace(delete_value=Mock())
+        with (
+            patch.object(register_ecommerce_module_and_sync_mapping.frappe, "db", Database()),
+            patch.object(
+                register_ecommerce_module_and_sync_mapping.frappe,
+                "new_doc",
+                return_value=ModuleDef(),
+                create=True,
+            ) as new_doc,
+            patch.object(register_ecommerce_module_and_sync_mapping.frappe, "cache", cache, create=True),
+            patch.object(
+                register_ecommerce_module_and_sync_mapping.frappe,
+                "client_cache",
+                client_cache,
+                create=True,
+            ),
+            patch.object(
+                register_ecommerce_module_and_sync_mapping.frappe,
+                "setup_module_map",
+                create=True,
+            ) as setup_module_map,
+            patch.object(
+                register_ecommerce_module_and_sync_mapping.frappe,
+                "reload_doc",
+                create=True,
+            ) as reload_doc,
+            patch.object(
+                register_ecommerce_module_and_sync_mapping.frappe,
+                "clear_cache",
+                create=True,
+            ),
+        ):
+            register_ecommerce_module_and_sync_mapping.execute()
+            register_ecommerce_module_and_sync_mapping.execute()
+
+        self.assertEqual(state["owner"], "ukrainian_integrations")
+        new_doc.assert_called_once_with("Module Def")
+        self.assertEqual(setup_module_map.call_count, 2)
+        self.assertEqual(reload_doc.call_count, 2)
+        reload_doc.assert_called_with("ecommerce", "doctype", "ecommerce_item_mapping", force=True)
+
+    def test_ecommerce_module_registration_rejects_foreign_owner(self):
+        database = Mock()
+        database.get_value.return_value = "other_app"
+        with (
+            patch.object(register_ecommerce_module_and_sync_mapping.frappe, "db", database),
+            self.assertRaisesRegex(RuntimeError, "already owned by app other_app"),
+        ):
+            register_ecommerce_module_and_sync_mapping.execute()
 
     def test_legacy_channel_link_conversion_is_idempotent_and_preserves_values(self):
         state = types.SimpleNamespace(fieldtype="Link", options="Ecommerce Channel")
