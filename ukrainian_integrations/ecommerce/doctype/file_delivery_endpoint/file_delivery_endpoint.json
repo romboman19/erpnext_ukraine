@@ -9,7 +9,7 @@
  "fields": [
   {"fieldname": "endpoint_name", "fieldtype": "Data", "label": "Endpoint Name", "reqd": 1, "unique": 1, "in_list_view": 1},
   {"fieldname": "protocol", "fieldtype": "Select", "label": "Protocol", "options": "FTP\nFTPS\nSFTP", "reqd": 1, "in_list_view": 1},
-  {"fieldname": "host", "fieldtype": "Data", "label": "Host", "reqd": 1, "in_list_view": 1, "description": "Must be explicitly listed in ecommerce_allowed_ftp_hosts."},
+  {"fieldname": "host", "fieldtype": "Data", "label": "Host", "reqd": 1, "in_list_view": 1, "description": "Saving this administrator-managed endpoint authorizes ERPNext to connect to the exact host."},
   {"fieldname": "port", "fieldtype": "Int", "label": "Port", "reqd": 1, "in_list_view": 1},
   {"fieldname": "credentials_section", "fieldtype": "Section Break", "label": "Credentials"},
   {"fieldname": "username", "fieldtype": "Data", "label": "Username", "reqd": 1},

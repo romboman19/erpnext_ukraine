@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+
+- Treat a System Manager-created `File Delivery Endpoint` as explicit authorization for its exact FTP, FTPS or SFTP host, without duplicating the hostname in `site_config.json`.
+- Keep hostname, port, path and credential validation intact; SFTP continues to reject server keys missing from the runtime `known_hosts`, and HTTP/API host allowlists are unchanged.
+
 ## 0.6.0
 
 - Add ordinary multi-record `OcStore Settings` records linked to Company, with per-entity File/XML schedules and separate exchange/photo endpoints.

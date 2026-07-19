@@ -277,7 +277,7 @@ class EcommerceBaseTest(unittest.TestCase):
         def connected():
             yield connection
 
-        with patch.object(frappe, "conf", {"ecommerce_allowed_ftp_hosts": ["ftp.example.test"]}):
+        with patch.object(frappe, "conf", {}):
             transport = FileDeliveryTransport(endpoint)
         transport._connection = connected
         first = transport.upload("catalog.xml", b"one", idempotency_key="catalog:1")
@@ -288,6 +288,23 @@ class EcommerceBaseTest(unittest.TestCase):
             transport.upload("catalog.xml", b"two", idempotency_key="catalog:1")
         self.assertTrue(transport.delete("catalog.xml")["deleted"])
         self.assertFalse(transport.delete("catalog.xml")["deleted"])
+
+    def test_file_delivery_endpoint_authorizes_its_host_without_site_config(self):
+        endpoint = {
+            "protocol": "SFTP",
+            "host": "Files.Example.Test.",
+            "port": 22,
+            "username": "erpnext",
+            "password": "secret",
+            "base_path": "/exchange",
+        }
+        with patch.object(frappe, "conf", {}):
+            transport = FileDeliveryTransport(endpoint)
+        self.assertEqual(transport.host, "files.example.test")
+
+        endpoint["host"] = "files.example.test:22"
+        with self.assertRaisesRegex(Exception, "valid hostname"):
+            FileDeliveryTransport(endpoint)
 
     def test_replaceable_feed_keeps_each_operation_key_immutable(self):
         endpoint = {
@@ -305,7 +322,7 @@ class EcommerceBaseTest(unittest.TestCase):
         def connected():
             yield connection
 
-        with patch.object(frappe, "conf", {"ecommerce_allowed_ftp_hosts": ["ftp.example.test"]}):
+        with patch.object(frappe, "conf", {}):
             transport = FileDeliveryTransport(endpoint)
         transport._connection = connected
         first = transport.publish("products.xml", b"one", idempotency_key="catalog:1")

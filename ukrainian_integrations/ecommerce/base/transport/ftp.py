@@ -11,24 +11,23 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from ukrainian_integrations.ecommerce.base.transport.http import AmbiguousTransportError
-from ukrainian_integrations.utils.validation import validate_allowed_hostname
+from ukrainian_integrations.utils.validation import validate_hostname
 
 MAX_FILE_BYTES = 64 * 1024 * 1024
 MAX_LISTED_FILES = 10_000
 
 
 class FileDeliveryTransport:
-    """FTP/FTPS/SFTP transport with exact-host allowlisting and atomic uploads."""
+    """FTP/FTPS/SFTP transport for administrator-configured endpoints."""
 
     def __init__(self, endpoint: Any):
         self.endpoint = endpoint
         self.protocol = str(_value(endpoint, "protocol", "") or "").strip().upper()
         if self.protocol not in {"FTP", "FTPS", "SFTP"}:
             raise ValueError("File delivery protocol must be FTP, FTPS or SFTP")
-        self.host = validate_allowed_hostname(
+        self.host = validate_hostname(
             str(_value(endpoint, "host", "") or ""),
             "File Delivery Endpoint",
-            config_key="ecommerce_allowed_ftp_hosts",
         )
         self.port = int(_value(endpoint, "port", 0) or _default_port(self.protocol))
         if not 1 <= self.port <= 65535:
@@ -232,7 +231,7 @@ class FileDeliveryTransport:
         if self.protocol == "FTPS":  # noqa: SIM108
             connection = ftplib.FTP_TLS(timeout=30)
         else:
-            # Plain FTP is opt-in and exact-host allowlisted.
+            # Plain FTP is opt-in through an administrator-configured endpoint.
             connection = ftplib.FTP(timeout=30)  # nosec B321
         connection.connect(self.host, self.port)
         connection.login(self.username, self.password)

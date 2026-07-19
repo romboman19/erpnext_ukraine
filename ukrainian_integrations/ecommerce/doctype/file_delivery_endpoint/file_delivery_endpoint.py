@@ -8,18 +8,14 @@ from frappe.model.document import Document
 
 from ukrainian_integrations.ecommerce.base.transport import FileDeliveryTransport
 from ukrainian_integrations.utils.security import SYSTEM_ROLES, require_roles
-from ukrainian_integrations.utils.validation import validate_allowed_hostname
+from ukrainian_integrations.utils.validation import validate_hostname
 
 
 class FileDeliveryEndpoint(Document):
     def validate(self):
         self.endpoint_name = (self.endpoint_name or "").strip()
         self.protocol = (self.protocol or "").strip().upper()
-        self.host = validate_allowed_hostname(
-            self.host,
-            "File Delivery Endpoint",
-            config_key="ecommerce_allowed_ftp_hosts",
-        )
+        self.host = validate_hostname(self.host, "File Delivery Endpoint")
         if self.protocol not in {"FTP", "FTPS", "SFTP"}:
             frappe.throw(_("Protocol must be FTP, FTPS or SFTP"))
         default_port = 22 if self.protocol == "SFTP" else 21

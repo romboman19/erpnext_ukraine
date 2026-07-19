@@ -48,32 +48,11 @@ def validate_allowed_host(
         )
 
 
-def validate_allowed_hostname(
-    hostname: str,
-    label: str,
-    *,
-    default_hosts: set[str] | None = None,
-    config_key: str,
-) -> str:
-    """Validate a bare transport hostname against an exact allowlist."""
+def validate_hostname(hostname: str, label: str) -> str:
+    """Normalize and validate a bare hostname without authorizing a connection."""
     normalized = str(hostname or "").strip().rstrip(".").lower()
     if not _BARE_HOSTNAME.fullmatch(normalized):
         frappe.throw(_("{0} must be a valid hostname without credentials or a port").format(label))
-    configured = frappe.conf.get(config_key, [])
-    if isinstance(configured, str):
-        configured = [item.strip() for item in configured.split(",") if item.strip()]
-    allowed = {str(host).strip().rstrip(".").lower() for host in (default_hosts or set())}
-    allowed.update(
-        str(host).strip().rstrip(".").lower()
-        for host in (configured or [])
-        if str(host).strip()
-    )
-    if normalized not in allowed:
-        frappe.throw(
-            _("{0} host is not allowlisted. Configure {1} in site_config.json").format(
-                label, config_key
-            )
-        )
     return normalized
 
 
