@@ -200,6 +200,23 @@ class EcommerceBaseTest(unittest.TestCase):
             ocstore_service._combined_hash(dict(reversed(list(hashes.items())))),
         )
 
+    def test_ocstore_manual_actions_report_actionable_disabled_entity_errors(self):
+        settings = types.SimpleNamespace(
+            name="top-trig",
+            sync_entities=[
+                types.SimpleNamespace(entity="Products", enabled=0, method="File"),
+                types.SimpleNamespace(entity="Orders", enabled=0, method="File"),
+            ],
+        )
+        settings.get = lambda key, default=None: getattr(settings, key, default)
+        with (
+            patch.object(ocstore_service, "_settings", return_value=settings),
+            self.assertRaisesRegex(Exception, "Enable at least one ocStore export entity"),
+        ):
+            ocstore_service.export_bundle("top-trig", force=True)
+        with self.assertRaisesRegex(Exception, "Enable the ocStore Orders import entity"):
+            ocstore_service._active_order_config(settings)
+
     def test_custom_transforms_are_code_registered_and_fail_closed(self):
         self.assertEqual(
             apply_export_transform(

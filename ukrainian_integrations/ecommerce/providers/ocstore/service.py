@@ -4,6 +4,7 @@ import hashlib
 import json
 
 import frappe
+from frappe import _
 
 from ukrainian_integrations.ecommerce.base import orders
 from ukrainian_integrations.ecommerce.base.logging import append_sync_log
@@ -35,7 +36,12 @@ def export_bundle(
     all_configs = _active_configs(settings, EXPORT_ENTITIES)
     configs = [row for row in all_configs if row.entity in requested]
     if not configs:
-        raise ValueError("No ocStore export entities are enabled")
+        frappe.throw(
+            _(
+                "Enable at least one ocStore export entity (Products, Prices, Stock or Photos), "
+                "save the settings and try again."
+            )
+        )
     uploaded_files = []
     records = []
     mapping_by_item = {}
@@ -425,7 +431,12 @@ def _active_configs(settings, entities: set[str]) -> list:
 def _active_order_config(settings):
     rows = _active_configs(settings, {"Orders"})
     if len(rows) != 1:
-        raise ValueError("Exactly one enabled ocStore Orders / File configuration is required")
+        frappe.throw(
+            _(
+                "Enable the ocStore Orders import entity with the File method, "
+                "save the settings and try again."
+            )
+        )
     return rows[0]
 
 

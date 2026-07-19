@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2
+
+- Replace raw ocStore manual-action tracebacks with actionable configuration messages when no matching export or order-import entity is enabled.
+- Validate enabled entities in Desk and save changed ocStore settings before testing connections or starting a manual file exchange.
+
 ## 0.6.1
 
 - Treat a System Manager-created `File Delivery Endpoint` as explicit authorization for its exact FTP, FTPS or SFTP host, without duplicating the hostname in `site_config.json`.
