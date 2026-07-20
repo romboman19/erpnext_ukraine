@@ -1,0 +1,21 @@
+{
+ "app": "erpnext_ua",
+ "creation": "2026-07-20 12:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Workspace Sidebar",
+ "header_icon": "tag",
+ "idx": 0,
+ "items": [
+  {"child": 0, "collapsible": 1, "icon": "home", "indent": 0, "keep_closed": 0, "label": "Price Tags", "link_to": "Price Tags", "link_type": "Workspace", "show_arrow": 0, "type": "Link"},
+  {"child": 0, "collapsible": 1, "icon": "stock", "indent": 0, "keep_closed": 0, "label": "Stock and Price Tags", "link_to": "price-tag-stock", "link_type": "Page", "show_arrow": 0, "type": "Link"},
+  {"child": 0, "collapsible": 1, "icon": "list", "indent": 0, "keep_closed": 0, "label": "Price Tag Print Jobs", "link_to": "Price Tag Print Job", "link_type": "DocType", "show_arrow": 0, "type": "Link"},
+  {"child": 0, "collapsible": 1, "icon": "setting", "indent": 0, "keep_closed": 0, "label": "Price Tag Settings", "link_to": "Price Tag Settings", "link_type": "DocType", "show_arrow": 0, "type": "Link"}
+ ],
+ "modified": "2026-07-20 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "UA Price Tags",
+ "name": "Price Tags",
+ "owner": "Administrator",
+ "standard": 1,
+ "title": "Price Tags"
+}

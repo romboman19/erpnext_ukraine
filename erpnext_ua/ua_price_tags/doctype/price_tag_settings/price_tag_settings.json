@@ -1,0 +1,34 @@
+{
+ "doctype": "DocType",
+ "name": "Price Tag Settings",
+ "module": "UA Price Tags",
+ "issingle": 1,
+ "field_order": [
+  "pricing_section",
+  "default_company",
+  "default_price_list",
+  "promotional_price_list",
+  "layout_section",
+  "default_label_size",
+  "default_copies",
+  "standard_print_format",
+  "promotional_print_format",
+  "packaging_print_format"
+ ],
+ "fields": [
+  {"fieldname": "pricing_section", "fieldtype": "Section Break", "label": "Ціни"},
+  {"fieldname": "default_company", "fieldtype": "Link", "label": "Компанія за замовчуванням", "options": "Company"},
+  {"fieldname": "default_price_list", "fieldtype": "Link", "label": "Роздрібний прайс-лист", "options": "Price List", "reqd": 1},
+  {"fieldname": "promotional_price_list", "fieldtype": "Link", "label": "Акційний прайс-лист", "options": "Price List", "description": "Необов’язковий окремий прайс-лист простих акційних цін."},
+  {"fieldname": "layout_section", "fieldtype": "Section Break", "label": "Макети"},
+  {"fieldname": "default_label_size", "fieldtype": "Select", "label": "Розмір цінника", "options": "40×25 mm", "default": "40×25 mm", "reqd": 1},
+  {"fieldname": "default_copies", "fieldtype": "Int", "label": "Кількість копій", "default": "1", "reqd": 1},
+  {"fieldname": "standard_print_format", "fieldtype": "Link", "label": "Звичайний Print Format", "options": "Print Format", "default": "Цінник звичайний 40x25", "reqd": 1},
+  {"fieldname": "promotional_print_format", "fieldtype": "Link", "label": "Акційний Print Format", "options": "Print Format", "default": "Цінник акційний 40x25", "reqd": 1},
+  {"fieldname": "packaging_print_format", "fieldtype": "Link", "label": "Print Format на упаковку", "options": "Print Format", "default": "Етикетка на упаковку 40x25", "reqd": 1}
+ ],
+ "permissions": [
+  {"role": "Price Tag Manager", "read": 1, "write": 1},
+  {"role": "System Manager", "read": 1, "write": 1}
+ ]
+}

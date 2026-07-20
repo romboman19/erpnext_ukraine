@@ -2,3 +2,4 @@ UA FOP
 UA Fiscal
 UA POS
 UA Accounting
+UA Price Tags

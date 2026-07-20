@@ -1,0 +1,13 @@
+{
+ "doctype": "Page",
+ "name": "price-tag-stock",
+ "page_name": "price-tag-stock",
+ "module": "UA Price Tags",
+ "standard": "Yes",
+ "title": "Залишки та друк цінників",
+ "roles": [
+  {"role": "Price Tag User"},
+  {"role": "Price Tag Manager"},
+  {"role": "System Manager"}
+ ]
+}

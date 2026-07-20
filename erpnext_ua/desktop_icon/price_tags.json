@@ -1,0 +1,20 @@
+{
+ "app": "erpnext_ua",
+ "creation": "2026-07-20 12:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Desktop Icon",
+ "hidden": 0,
+ "icon": "tag",
+ "icon_type": "Link",
+ "idx": 2,
+ "label": "Price Tags",
+ "link_to": "Price Tags",
+ "link_type": "Workspace Sidebar",
+ "modified": "2026-07-20 12:00:00.000000",
+ "modified_by": "Administrator",
+ "name": "Price Tags",
+ "owner": "Administrator",
+ "parent_icon": "ERPNext Ukraine",
+ "roles": [],
+ "standard": 1
+}

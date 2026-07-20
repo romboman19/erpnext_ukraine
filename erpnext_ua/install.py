@@ -53,7 +53,55 @@ def ensure_tax_parameters():
 
 
 POS_ROLES = ["POS Cashier", "POS Senior Cashier", "POS Manager", "POS Administrator", "PRRO Operator"]
-APP_MODULES = ("UA FOP", "UA Fiscal", "UA POS", "UA Accounting")
+APP_MODULES = ("UA FOP", "UA Fiscal", "UA POS", "UA Accounting", "UA Price Tags")
+
+
+PRICE_TAG_ROLES = ("Price Tag User", "Price Tag Manager")
+
+
+def ensure_price_tag_setup():
+	"""Create non-destructive price-tag roles, defaults, and navigation."""
+	for role in PRICE_TAG_ROLES:
+		if not frappe.db.exists("Role", role):
+			frappe.get_doc({"doctype": "Role", "role_name": role}).insert(ignore_permissions=True)
+
+	if frappe.db.exists("DocType", "Price Tag Settings"):
+		settings = frappe.get_single("Price Tag Settings")
+		changed = False
+		defaults = {
+			"default_price_list": frappe.get_single_value("Selling Settings", "selling_price_list"),
+			"default_label_size": "40×25 mm",
+			"default_copies": 1,
+			"standard_print_format": "Цінник звичайний 40x25",
+			"promotional_print_format": "Цінник акційний 40x25",
+			"packaging_print_format": "Етикетка на упаковку 40x25",
+		}
+		legacy_defaults = {
+			"default_label_size": "58×40 mm",
+			"standard_print_format": "Цінник стандартний 58x40",
+			"promotional_print_format": "Цінник акційний 58x40",
+		}
+		for fieldname, value in defaults.items():
+			is_default = not settings.get(fieldname) or settings.get(fieldname) == legacy_defaults.get(
+				fieldname
+			)
+			if is_default and value:
+				settings.set(fieldname, value)
+				changed = True
+		if changed and settings.default_price_list:
+			settings.save(ignore_permissions=True)
+
+	if frappe.db.table_exists("Workspace"):
+		from frappe.modules.import_file import import_file_by_path
+
+		paths = (
+			frappe.get_app_path("erpnext_ua", "ua_price_tags", "workspace", "price_tags", "price_tags.json"),
+			frappe.get_app_path("erpnext_ua", "workspace_sidebar", "price_tags.json"),
+			frappe.get_app_path("erpnext_ua", "desktop_icon", "price_tags.json"),
+		)
+		for path in paths:
+			import_file_by_path(path, force=True)
+	frappe.db.commit()
 
 
 def ensure_app_modules():
