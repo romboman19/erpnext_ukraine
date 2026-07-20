@@ -6,10 +6,14 @@ app_email = "it@hunter.rv.ua"
 app_license = "MIT"
 required_apps = ["erpnext"]
 
-after_install = "erpnext_ua.install.ensure_tax_parameters"
+after_install = [
+    "erpnext_ua.install.ensure_tax_parameters",
+    "erpnext_ua.install.ensure_accounting_setup",
+]
 
 after_migrate = [
     "erpnext_ua.install.ensure_tax_parameters",
+    "erpnext_ua.install.ensure_accounting_setup",
 ]
 
 doctype_js = {

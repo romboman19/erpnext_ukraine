@@ -1,4 +1,5 @@
 import frappe
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 # Довідкові параметри 2026 (МЗП 8647 грн, ПМ для працездатних 3028 грн)
 TAX_PARAMETERS = [
@@ -44,4 +45,72 @@ def ensure_tax_parameters():
 		doc = frappe.new_doc("UA Tax Parameters")
 		doc.update(row)
 		doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+def ensure_accounting_setup():
+	"""Install non-destructive metadata for Ukrainian statutory charts.
+
+	The hook only adds fields. It never applies or replaces a company's chart;
+	that remains an explicit, confirmed action in UA Chart of Accounts Setup.
+	"""
+	create_custom_fields(
+		{
+			"Company": [
+				{
+					"fieldname": "ua_accounting_section",
+					"label": "Український план рахунків",
+					"fieldtype": "Section Break",
+					"insert_after": "default_currency",
+				},
+				{
+					"fieldname": "ua_chart_template",
+					"label": "Шаблон плану рахунків України",
+					"fieldtype": "Select",
+					"options": "\nfull_291\nsimplified_186",
+					"read_only": 1,
+					"insert_after": "ua_accounting_section",
+				},
+				{
+					"fieldname": "ua_chart_revision",
+					"label": "Редакція нормативної бази",
+					"fieldtype": "Data",
+					"read_only": 1,
+					"insert_after": "ua_chart_template",
+				},
+				{
+					"fieldname": "ua_chart_applied_on",
+					"label": "План застосовано",
+					"fieldtype": "Datetime",
+					"read_only": 1,
+					"insert_after": "ua_chart_revision",
+				},
+			],
+			"Account": [
+				{
+					"fieldname": "ua_chart_template",
+					"label": "Шаблон плану рахунків України",
+					"fieldtype": "Data",
+					"read_only": 1,
+					"insert_after": "account_number",
+				},
+				{
+					"fieldname": "ua_legal_source",
+					"label": "Джерело рахунку",
+					"fieldtype": "Select",
+					"options": "\nofficial\nerpnext_extension",
+					"read_only": 1,
+					"insert_after": "ua_chart_template",
+				},
+				{
+					"fieldname": "ua_off_balance",
+					"label": "Позабалансовий рахунок",
+					"fieldtype": "Check",
+					"read_only": 1,
+					"insert_after": "ua_legal_source",
+				},
+			],
+		},
+		update=True,
+	)
 	frappe.db.commit()

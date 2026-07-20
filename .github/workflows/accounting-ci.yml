@@ -1,0 +1,128 @@
+name: Accounting CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: accounting-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  static-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Validate source and metadata
+        run: |
+          python -m compileall -q erpnext_ua
+          find erpnext_ua -name '*.json' -print0 | xargs -0 -n1 jq -e . >/dev/null
+          find erpnext_ua -name '*.js' -print0 | xargs -0 -n1 node --check
+          git diff --check
+
+      - name: Run framework-independent accounting tests
+        run: |
+          python -m unittest \
+            erpnext_ua.tests.test_ua_chart_templates \
+            erpnext_ua.tests.test_ua_off_balance_rules
+
+      - name: Build and inspect distributable app
+        run: |
+          python -m pip install --disable-pip-version-check build
+          python -m build
+          python - <<'PY'
+          import glob
+          import zipfile
+
+          wheel = glob.glob("dist/*.whl")[0]
+          names = set(zipfile.ZipFile(wheel).namelist())
+          required_suffixes = {
+              "chart_of_accounts/ua_full_291.json",
+              "chart_of_accounts/ua_simplified_186.json",
+              "doctype/ua_off_balance_entry/ua_off_balance_entry.json",
+              "report/ua_off_balance_statement/ua_off_balance_statement.json",
+              "translations/uk.csv",
+          }
+          missing = sorted(suffix for suffix in required_suffixes if not any(name.endswith(suffix) for name in names))
+          if missing:
+              raise SystemExit(f"Wheel is missing package data: {missing}")
+          PY
+
+  frappe-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -proot"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install bench dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-server mariadb-client libmariadb-dev pkg-config
+          corepack enable
+          python -m pip install --disable-pip-version-check frappe-bench
+
+      - name: Create Frappe and ERPNext v16 bench
+        run: |
+          bench init --skip-assets --frappe-branch version-16 --python "$(which python)" "$HOME/frappe-bench"
+          cd "$HOME/frappe-bench"
+          bench get-app "https://github.com/frappe/erpnext" --branch version-16 --resolve-deps
+          bench get-app erpnext_ua "$GITHUB_WORKSPACE"
+          bench setup requirements --dev
+
+      - name: Create isolated test site
+        run: |
+          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
+          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
+          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "CREATE USER 'test_frappe'@'%' IDENTIFIED BY 'test_frappe'"
+          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "CREATE DATABASE test_frappe"
+          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "GRANT ALL PRIVILEGES ON test_frappe.* TO 'test_frappe'@'%'"
+          mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "FLUSH PRIVILEGES"
+          mkdir -p "$HOME/frappe-bench/sites/test_site"
+          cp "$GITHUB_WORKSPACE/.github/helper/site_config.json" "$HOME/frappe-bench/sites/test_site/site_config.json"
+          cd "$HOME/frappe-bench"
+          nohup bench start > /tmp/erpnext_ua_bench.log 2>&1 &
+          bench --site test_site reinstall --yes
+          bench --site test_site install-app erpnext_ua
+          bench --site test_site set-config allow_tests true
+
+      - name: Verify repeatable migration and accounting integration
+        run: |
+          cd "$HOME/frappe-bench"
+          bench --site test_site migrate
+          bench --site test_site migrate
+          bench --site test_site run-tests --module erpnext_ua.tests.test_ua_chart_setup
+          bench --site test_site run-tests --module erpnext_ua.tests.test_ua_off_balance_entry
+
+      - name: Show bench log on failure
+        if: failure()
+        run: tail -300 /tmp/erpnext_ua_bench.log || true

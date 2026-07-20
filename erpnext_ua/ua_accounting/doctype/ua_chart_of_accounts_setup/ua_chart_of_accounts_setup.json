@@ -1,0 +1,148 @@
+{
+ "actions": [],
+ "autoname": "field:company",
+ "creation": "2026-07-17 14:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "chart_template",
+  "column_break_main",
+  "status",
+  "template_revision",
+  "section_safety",
+  "safety_notice",
+  "confirm_company_name",
+  "section_result",
+  "last_check",
+  "applied_on",
+  "column_break_result",
+  "applied_by",
+  "result_log"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Компанія",
+   "options": "Company",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "chart_template",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Український план рахунків",
+   "options": "Повний — Наказ №291\nСпрощений — Наказ №186",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Стан",
+   "options": "Draft\nReady\nBlocked\nApplied",
+   "read_only": 1
+  },
+  {
+   "fieldname": "template_revision",
+   "fieldtype": "Data",
+   "label": "Редакція нормативної бази",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_safety",
+   "fieldtype": "Section Break",
+   "label": "Безпечне застосування"
+  },
+  {
+   "fieldname": "safety_notice",
+   "fieldtype": "HTML",
+   "options": "<div class=\"alert alert-warning\"><b>План замінює поточне дерево рахунків.</b> Дія доступна лише для компанії без будь-яких GL Entry та Stock Ledger Entry, включно зі скасованими. Для діючої компанії потрібна окрема міграція із перенесенням початкових залишків.</div>"
+  },
+  {
+   "description": "Перед застосуванням введіть точну назву компанії. Це не обхід перевірок історії обліку.",
+   "fieldname": "confirm_company_name",
+   "fieldtype": "Data",
+   "label": "Підтвердження назви компанії"
+  },
+  {
+   "fieldname": "section_result",
+   "fieldtype": "Section Break",
+   "label": "Результат перевірки"
+  },
+  {
+   "fieldname": "last_check",
+   "fieldtype": "Datetime",
+   "label": "Остання перевірка",
+   "read_only": 1
+  },
+  {
+   "fieldname": "applied_on",
+   "fieldtype": "Datetime",
+   "label": "Застосовано",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_result",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "applied_by",
+   "fieldtype": "Link",
+   "label": "Застосував",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "result_log",
+   "fieldtype": "Code",
+   "label": "Деталі",
+   "options": "JSON",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-17 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "UA Accounting",
+ "name": "UA Chart of Accounts Setup",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "company",
+ "track_changes": 1
+}
