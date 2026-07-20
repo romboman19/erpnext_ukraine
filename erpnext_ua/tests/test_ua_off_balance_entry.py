@@ -13,6 +13,8 @@ from erpnext_ua.install import ensure_accounting_setup
 class TestUAOffBalanceEntry(IntegrationTestCase):
 	def setUp(self):
 		ensure_accounting_setup()
+		if not frappe.db.exists("Warehouse Type", "Transit"):
+			frappe.get_doc({"doctype": "Warehouse Type", "name": "Transit"}).insert(ignore_permissions=True)
 		suffix = uuid4().hex[:5].upper()
 		self.company = frappe.get_doc(
 			{
