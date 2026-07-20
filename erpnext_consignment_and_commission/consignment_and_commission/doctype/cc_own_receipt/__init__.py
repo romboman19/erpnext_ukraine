@@ -1,0 +1,1 @@
+"""CC Own Receipt DocType."""

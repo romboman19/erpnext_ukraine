@@ -1,0 +1,1 @@
+"""CC Sale Allocation DocType."""

@@ -1,0 +1,52 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-07-14 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status", "adjustment_type", "settlement_report", "return_sales_invoice",
+  "posting_date", "party_section", "company", "supplier", "relationship_model",
+  "currency", "amount_section", "amount", "base_amount", "conversion_rate",
+  "applied_to_outstanding_amount", "credit_due_amount", "journal_entry",
+  "amended_from"
+ ],
+ "fields": [
+  {"default":"DRAFT","fieldname":"status","fieldtype":"Select","in_list_view":1,"in_standard_filter":1,"label":"Status","options":"DRAFT\nPOSTED\nCANCELLED","read_only":1,"reqd":1},
+  {"default":"RETURN_REVERSAL","fieldname":"adjustment_type","fieldtype":"Select","label":"Adjustment Type","options":"RETURN_REVERSAL","read_only":1,"reqd":1},
+  {"fieldname":"settlement_report","fieldtype":"Link","in_list_view":1,"in_standard_filter":1,"label":"CC Settlement Report","options":"CC Settlement Report","read_only":1,"reqd":1},
+  {"fieldname":"return_sales_invoice","fieldtype":"Link","in_list_view":1,"label":"Return Sales Invoice","options":"Sales Invoice","read_only":1,"reqd":1},
+  {"fieldname":"posting_date","fieldtype":"Date","in_standard_filter":1,"label":"Posting Date","read_only":1,"reqd":1},
+  {"fieldname":"party_section","fieldtype":"Section Break","label":"Partner Coordinates"},
+  {"fieldname":"company","fieldtype":"Link","in_standard_filter":1,"label":"Company","options":"Company","read_only":1,"reqd":1},
+  {"fieldname":"supplier","fieldtype":"Link","in_standard_filter":1,"label":"Supplier","options":"Supplier","read_only":1,"reqd":1},
+  {"fieldname":"relationship_model","fieldtype":"Select","label":"Relationship Model","options":"COMMISSION\nCONSIGNMENT","read_only":1,"reqd":1},
+  {"fieldname":"currency","fieldtype":"Link","label":"Currency","options":"Currency","read_only":1,"reqd":1},
+  {"fieldname":"amount_section","fieldtype":"Section Break","label":"Immutable Adjustment Snapshot"},
+  {"fieldname":"amount","fieldtype":"Currency","in_list_view":1,"label":"Adjustment Amount","options":"currency","read_only":1,"reqd":1},
+  {"fieldname":"base_amount","fieldtype":"Currency","label":"Base Adjustment Amount","read_only":1,"reqd":1},
+  {"fieldname":"conversion_rate","fieldtype":"Float","label":"Historical Exchange Rate","precision":"9","read_only":1,"reqd":1},
+  {"fieldname":"applied_to_outstanding_amount","fieldtype":"Currency","label":"Applied to Outstanding","options":"currency","read_only":1,"reqd":1},
+  {"fieldname":"credit_due_amount","fieldtype":"Currency","label":"Partner Credit Due","options":"currency","read_only":1},
+  {"fieldname":"journal_entry","fieldtype":"Link","label":"Adjustment Journal Entry","options":"Journal Entry","read_only":1},
+  {"fieldname":"amended_from","fieldtype":"Link","label":"Amended From","no_copy":1,"options":"CC Settlement Adjustment","print_hide":1,"read_only":1}
+ ],
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-07-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC Settlement Adjustment",
+ "owner": "Administrator",
+ "permissions": [
+  {"cancel":1,"create":1,"export":1,"print":1,"read":1,"report":1,"role":"System Manager","submit":1},
+  {"cancel":1,"create":1,"export":1,"print":1,"read":1,"report":1,"role":"Commission Trade Manager","submit":1},
+  {"read":1,"report":1,"role":"Commission Trade User"},
+  {"export":1,"read":1,"report":1,"role":"Commission Trade Auditor"}
+ ],
+ "show_name_in_global_search": 1,
+ "sort_field": "posting_date",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

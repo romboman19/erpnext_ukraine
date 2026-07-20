@@ -1,0 +1,1 @@
+"""Persistent POS checkout DocType."""

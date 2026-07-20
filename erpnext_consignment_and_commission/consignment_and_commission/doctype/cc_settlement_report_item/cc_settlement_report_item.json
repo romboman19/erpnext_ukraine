@@ -1,0 +1,36 @@
+{
+ "actions": [],
+ "creation": "2026-07-14 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "sale_allocation", "sales_invoice", "posting_date", "item_code", "stock_lot",
+  "source_method", "sold_qty", "returned_qty", "net_amount", "partner_amount",
+  "base_partner_amount"
+ ],
+ "fields": [
+  {"fieldname":"sale_allocation","fieldtype":"Link","in_list_view":1,"label":"CC Sale Allocation","options":"CC Sale Allocation","read_only":1,"reqd":1},
+  {"fieldname":"sales_invoice","fieldtype":"Link","label":"Sales Invoice","options":"Sales Invoice","read_only":1,"reqd":1},
+  {"fieldname":"posting_date","fieldtype":"Date","label":"Sale Date","read_only":1,"reqd":1},
+  {"fieldname":"item_code","fieldtype":"Link","in_list_view":1,"label":"Item","options":"Item","read_only":1,"reqd":1},
+  {"fieldname":"stock_lot","fieldtype":"Link","label":"CC Stock Lot","options":"CC Stock Lot","read_only":1,"reqd":1},
+  {"fieldname":"source_method","fieldtype":"Select","label":"Source Method","options":"COMMISSION\nCONSIGNMENT","read_only":1,"reqd":1},
+  {"fieldname":"sold_qty","fieldtype":"Float","label":"Sold Quantity","read_only":1,"reqd":1},
+  {"default":"0","fieldname":"returned_qty","fieldtype":"Float","label":"Returned Quantity","read_only":1},
+  {"fieldname":"net_amount","fieldtype":"Currency","label":"Net Sale Amount","options":"parent.currency","read_only":1,"reqd":1},
+  {"fieldname":"partner_amount","fieldtype":"Currency","in_list_view":1,"label":"Reportable Partner Amount","options":"parent.currency","read_only":1,"reqd":1},
+  {"fieldname":"base_partner_amount","fieldtype":"Currency","label":"Base Reportable Partner Amount","read_only":1,"reqd":1}
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC Settlement Report Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

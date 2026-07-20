@@ -1,0 +1,120 @@
+{
+ "actions": [],
+ "creation": "2026-07-13 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "feature_section",
+  "enabled",
+  "enable_buyout",
+  "enable_deferred_purchase",
+  "enable_commission",
+  "enable_consignment",
+  "defaults_section",
+  "default_company",
+  "default_location",
+  "allocation_section",
+  "reservation_ttl_minutes",
+  "allocation_retry_limit"
+ ],
+ "fields": [
+  {
+   "fieldname": "feature_section",
+   "fieldtype": "Section Break",
+   "label": "Feature Control"
+  },
+  {
+   "default": "0",
+   "description": "Enables controlled CC receipts, reservations, sales, settlements, returns and conversions.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_buyout",
+   "fieldtype": "Check",
+   "label": "Enable Buyout"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_deferred_purchase",
+   "fieldtype": "Check",
+   "label": "Enable Deferred Purchase"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_commission",
+   "fieldtype": "Check",
+   "label": "Enable Commission"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_consignment",
+   "fieldtype": "Check",
+   "label": "Enable Consignment"
+  },
+  {
+   "fieldname": "defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Defaults"
+  },
+  {
+   "fieldname": "default_company",
+   "fieldtype": "Link",
+   "label": "Default Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "default_location",
+   "fieldtype": "Link",
+   "label": "Default CC Location",
+   "options": "CC Location"
+  },
+  {
+   "fieldname": "allocation_section",
+   "fieldtype": "Section Break",
+   "label": "Allocation Safety"
+  },
+  {
+   "default": "15",
+   "description": "Minutes before an unconsumed allocation reservation expires.",
+   "fieldname": "reservation_ttl_minutes",
+   "fieldtype": "Int",
+   "label": "Reservation TTL (minutes)",
+   "reqd": 1
+  },
+  {
+   "default": "3",
+   "description": "Maximum controlled retries after concurrent allocation conflicts.",
+   "fieldname": "allocation_retry_limit",
+   "fieldtype": "Int",
+   "label": "Allocation Retry Limit",
+   "reqd": 1
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Commission Trade Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

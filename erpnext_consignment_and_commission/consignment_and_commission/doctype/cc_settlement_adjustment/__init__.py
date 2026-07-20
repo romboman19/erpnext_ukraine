@@ -1,0 +1,1 @@
+"""Settlement adjustment DocType."""

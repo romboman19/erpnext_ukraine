@@ -1,0 +1,148 @@
+{
+ "actions": [],
+ "creation": "2026-07-13 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item_code",
+  "item_name",
+  "description",
+  "qty",
+  "uom",
+  "conversion_factor",
+  "stock_qty",
+  "stock_uom",
+  "rate",
+  "amount",
+  "tracking_type",
+  "batch_no",
+  "serial_numbers",
+  "stock_lot",
+  "purchase_invoice_item"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Quantity",
+   "reqd": 1
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "UOM",
+   "options": "UOM",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "conversion_factor",
+   "fieldtype": "Float",
+   "label": "Conversion Factor",
+   "reqd": 1
+  },
+  {
+   "fieldname": "stock_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Stock Quantity",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_uom",
+   "fieldtype": "Link",
+   "label": "Stock UOM",
+   "options": "UOM",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Purchase Rate",
+   "options": "currency",
+   "reqd": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "default": "NONE",
+   "fieldname": "tracking_type",
+   "fieldtype": "Select",
+   "label": "Tracking Type",
+   "options": "NONE\nBATCH\nSERIAL",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.tracking_type == 'BATCH'",
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Existing Batch",
+   "options": "Batch"
+  },
+  {
+   "depends_on": "eval:doc.tracking_type == 'SERIAL'",
+   "description": "One new Serial No per line. Leave empty to use the Item serial number series.",
+   "fieldname": "serial_numbers",
+   "fieldtype": "Small Text",
+   "label": "Serial Numbers"
+  },
+  {
+   "fieldname": "stock_lot",
+   "fieldtype": "Link",
+   "label": "CC Stock Lot",
+   "no_copy": 1,
+   "options": "CC Stock Lot",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purchase_invoice_item",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Purchase Invoice Item Row",
+   "no_copy": 1,
+   "read_only": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC Own Receipt Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

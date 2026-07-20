@@ -1,0 +1,1 @@
+"""Persistent POS route DocType."""

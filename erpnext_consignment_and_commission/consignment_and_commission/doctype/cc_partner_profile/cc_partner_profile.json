@@ -1,0 +1,154 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "field:partner_name",
+ "creation": "2026-07-13 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "partner_name",
+  "supplier",
+  "disabled",
+  "trade_section",
+  "allowed_relationship_models",
+  "default_currency",
+  "settlement_section",
+  "default_settlement_deadline_days",
+  "contact",
+  "address",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "partner_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Partner Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "ERPNext Supplier remains the accounting party.",
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Supplier",
+   "options": "Supplier",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Disabled"
+  },
+  {
+   "fieldname": "trade_section",
+   "fieldtype": "Section Break",
+   "label": "Trade Defaults"
+  },
+  {
+   "default": "BOTH",
+   "fieldname": "allowed_relationship_models",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Allowed Relationship Models",
+   "options": "COMMISSION\nCONSIGNMENT\nBOTH",
+   "reqd": 1
+  },
+  {
+   "fieldname": "default_currency",
+   "fieldtype": "Link",
+   "label": "Default Contract Currency",
+   "options": "Currency",
+   "reqd": 1
+  },
+  {
+   "fieldname": "settlement_section",
+   "fieldtype": "Section Break",
+   "label": "Settlement Defaults"
+  },
+  {
+   "default": "7",
+   "fieldname": "default_settlement_deadline_days",
+   "fieldtype": "Int",
+   "label": "Settlement Deadline (days)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "contact",
+   "fieldtype": "Link",
+   "label": "Contact",
+   "options": "Contact"
+  },
+  {
+   "fieldname": "address",
+   "fieldtype": "Link",
+   "label": "Address",
+   "options": "Address"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "links": [
+  {
+   "link_doctype": "CC Contract",
+   "link_fieldname": "partner_profile"
+  }
+ ],
+ "modified": "2026-07-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC Partner Profile",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade User"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade Auditor"
+  }
+ ],
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "partner_name"
+}
