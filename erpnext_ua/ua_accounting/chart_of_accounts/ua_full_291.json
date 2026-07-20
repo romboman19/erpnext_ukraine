@@ -2205,6 +2205,13 @@
       "source": "erpnext_extension"
     },
     {
+      "code": "3711",
+      "name": "Аванси, видані постачальникам (операційний рахунок ERPNext)",
+      "parent": "371",
+      "account_type": "Receivable",
+      "source": "erpnext_extension"
+    },
+    {
       "code": "6311",
       "name": "Розрахунки з постачальниками (операційний рахунок ERPNext)",
       "parent": "631",
@@ -2216,6 +2223,27 @@
       "name": "Запаси отримано, рахунок постачальника не отримано",
       "parent": "631",
       "account_type": "Stock Received But Not Billed",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "6313",
+      "name": "Необоротні активи отримано, рахунок постачальника не отримано",
+      "parent": "631",
+      "account_type": "Asset Received But Not Billed",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "6314",
+      "name": "Послуги отримано, рахунок постачальника не отримано",
+      "parent": "631",
+      "account_type": "Service Received But Not Billed",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "6811",
+      "name": "Аванси, отримані від покупців (операційний рахунок ERPNext)",
+      "parent": "681",
+      "account_type": "Payable",
       "source": "erpnext_extension"
     },
     {
@@ -2231,6 +2259,13 @@
       "parent": "949",
       "account_type": "Expense Account",
       "source": "erpnext_extension"
+    },
+    {
+      "code": "9493",
+      "name": "Округлення початкових залишків",
+      "parent": "949",
+      "account_type": "Round Off for Opening",
+      "source": "erpnext_extension"
     }
   ],
   "defaults": {
@@ -2242,11 +2277,22 @@
     "default_expense_account": "902",
     "default_inventory_account": "281",
     "stock_received_but_not_billed": "6312",
+    "asset_received_but_not_billed": "6313",
+    "default_provisional_account": "6314",
     "stock_adjustment_account": "947",
     "round_off_account": "9491",
+    "round_off_for_opening": "9493",
     "write_off_account": "9492",
+    "default_discount_account": "704",
+    "default_deferred_revenue_account": "69",
+    "default_deferred_expense_account": "39",
+    "default_advance_paid_account": "3711",
+    "default_advance_received_account": "6811",
     "accumulated_depreciation_account": "131",
     "depreciation_expense_account": "831",
-    "disposal_account": "976"
+    "capital_work_in_progress_account": "151",
+    "disposal_account": "976",
+    "purchase_expense_account": "902",
+    "service_expense_account": "903"
   }
 }

@@ -389,6 +389,13 @@
       "source": "erpnext_extension"
     },
     {
+      "code": "37.2",
+      "name": "Аванси, видані постачальникам",
+      "parent": "37",
+      "account_type": "Receivable",
+      "source": "erpnext_extension"
+    },
+    {
       "code": "68.1",
       "name": "Розрахунки з постачальниками",
       "parent": "68",
@@ -403,8 +410,36 @@
       "source": "erpnext_extension"
     },
     {
+      "code": "68.3",
+      "name": "Необоротні активи отримано, рахунок постачальника не отримано",
+      "parent": "68",
+      "account_type": "Asset Received But Not Billed",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "68.4",
+      "name": "Послуги отримано, рахунок постачальника не отримано",
+      "parent": "68",
+      "account_type": "Service Received But Not Billed",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "68.5",
+      "name": "Аванси, отримані від покупців",
+      "parent": "68",
+      "account_type": "Payable",
+      "source": "erpnext_extension"
+    },
+    {
       "code": "70.1",
       "name": "Дохід від реалізації товарів, робіт і послуг",
+      "parent": "70",
+      "account_type": "Income Account",
+      "source": "erpnext_extension"
+    },
+    {
+      "code": "70.2",
+      "name": "Знижки та вирахування з доходу",
       "parent": "70",
       "account_type": "Income Account",
       "source": "erpnext_extension"
@@ -443,6 +478,13 @@
       "parent": "97",
       "account_type": "Depreciation",
       "source": "erpnext_extension"
+    },
+    {
+      "code": "97.5",
+      "name": "Округлення початкових залишків",
+      "parent": "97",
+      "account_type": "Round Off for Opening",
+      "source": "erpnext_extension"
     }
   ],
   "defaults": {
@@ -454,11 +496,22 @@
     "default_expense_account": "90.1",
     "default_inventory_account": "26.1",
     "stock_received_but_not_billed": "68.2",
+    "asset_received_but_not_billed": "68.3",
+    "default_provisional_account": "68.4",
     "stock_adjustment_account": "97.1",
     "round_off_account": "97.2",
+    "round_off_for_opening": "97.5",
     "write_off_account": "97.3",
+    "default_discount_account": "70.2",
+    "default_deferred_revenue_account": "69",
+    "default_deferred_expense_account": "39",
+    "default_advance_paid_account": "37.2",
+    "default_advance_received_account": "68.5",
     "accumulated_depreciation_account": "13",
     "depreciation_expense_account": "97.4",
-    "disposal_account": "97.3"
+    "capital_work_in_progress_account": "15",
+    "disposal_account": "97.3",
+    "purchase_expense_account": "90.1",
+    "service_expense_account": "90.1"
   }
 }

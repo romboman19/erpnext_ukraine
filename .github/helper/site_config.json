@@ -1,0 +1,11 @@
+{
+  "db_host": "127.0.0.1",
+  "db_port": 3306,
+  "db_name": "test_frappe",
+  "db_password": "test_frappe",
+  "use_mysqlclient": 1,
+  "admin_password": "admin",
+  "root_login": "root",
+  "root_password": "root",
+  "install_apps": ["erpnext"]
+}

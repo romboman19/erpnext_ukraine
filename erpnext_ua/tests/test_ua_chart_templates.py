@@ -1,4 +1,6 @@
+import json
 import unittest
+from pathlib import Path
 
 from erpnext_ua.ua_accounting.chart_of_accounts.templates import (
 	REQUIRED_ACCOUNT_TYPES,
@@ -34,15 +36,32 @@ def flatten_tree(tree):
 
 
 class TestUAChartTemplates(unittest.TestCase):
+	def test_public_workspace_has_matching_sidebar_and_off_balance_links(self):
+		app_path = Path(__file__).resolve().parents[1]
+		workspace = json.loads(
+			(app_path / "ua_accounting/workspace/ua_accounting/ua_accounting.json").read_text(encoding="utf-8")
+		)
+		sidebar = json.loads((app_path / "workspace_sidebar/ua_accounting.json").read_text(encoding="utf-8"))
+
+		self.assertTrue(workspace["public"])
+		self.assertEqual(sidebar["name"], workspace["name"])
+		self.assertEqual(sidebar["title"], workspace["title"])
+		self.assertEqual(sidebar["module"], workspace["module"])
+		workspace_targets = {row.get("link_to") for row in workspace["links"]}
+		sidebar_targets = {row.get("link_to") for row in sidebar["items"]}
+		for target in ("UA Off Balance Entry", "UA Off Balance Statement"):
+			self.assertIn(target, workspace_targets)
+			self.assertIn(target, sidebar_targets)
+
 	def test_full_plan_is_complete_and_current(self):
 		template = load_template("full_291")
 		summary = template_summary(template)
 		codes = {row["code"] for row in template["accounts"]}
 
 		self.assertEqual(summary["official_account_count"], 354)
-		self.assertEqual(summary["erpnext_extension_count"], 5)
+		self.assertEqual(summary["erpnext_extension_count"], 10)
 		self.assertTrue({"308", "335", "676", "686"}.issubset(codes))
-		self.assertTrue({"01", "09", "100", "976"}.issubset(codes))
+		self.assertTrue({"01", "09", "024", "100", "283", "685", "703", "976"}.issubset(codes))
 		self.assertFalse({"75", "85", "99"} & codes)
 		self.assertEqual(len(codes), len(template["accounts"]))
 
@@ -55,6 +74,8 @@ class TestUAChartTemplates(unittest.TestCase):
 		self.assertIn("48", official_synthetic)
 		self.assertFalse({"84", "85"} & official_synthetic)
 		self.assertTrue(all(any(row["code"] == f"0{i}" for row in official) for i in range(1, 10)))
+		self.assertTrue(any(row["code"] == "024" for row in official))
+		self.assertEqual(template_summary(template)["erpnext_extension_count"], 19)
 
 	def test_templates_supply_all_erpnext_account_types_and_defaults(self):
 		for key in TEMPLATE_FILES:

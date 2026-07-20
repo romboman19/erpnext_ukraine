@@ -104,6 +104,12 @@ FULL_EXTENSIONS = (
 		"account_type": "Receivable",
 	},
 	{
+		"code": "3711",
+		"name": "Аванси, видані постачальникам (операційний рахунок ERPNext)",
+		"parent": "371",
+		"account_type": "Receivable",
+	},
+	{
 		"code": "6311",
 		"name": "Розрахунки з постачальниками (операційний рахунок ERPNext)",
 		"parent": "631",
@@ -115,8 +121,27 @@ FULL_EXTENSIONS = (
 		"parent": "631",
 		"account_type": "Stock Received But Not Billed",
 	},
+	{
+		"code": "6313",
+		"name": "Необоротні активи отримано, рахунок постачальника не отримано",
+		"parent": "631",
+		"account_type": "Asset Received But Not Billed",
+	},
+	{
+		"code": "6314",
+		"name": "Послуги отримано, рахунок постачальника не отримано",
+		"parent": "631",
+		"account_type": "Service Received But Not Billed",
+	},
+	{
+		"code": "6811",
+		"name": "Аванси, отримані від покупців (операційний рахунок ERPNext)",
+		"parent": "681",
+		"account_type": "Payable",
+	},
 	{"code": "9491", "name": "Округлення", "parent": "949", "account_type": "Round Off"},
 	{"code": "9492", "name": "Списання та інші операційні витрати", "parent": "949", "account_type": "Expense Account"},
+	{"code": "9493", "name": "Округлення початкових залишків", "parent": "949", "account_type": "Round Off for Opening"},
 )
 
 SIMPLIFIED_EXTENSIONS = (
@@ -130,6 +155,7 @@ SIMPLIFIED_EXTENSIONS = (
 	{"code": "30.1", "name": "Готівка в національній валюті", "parent": "30", "account_type": "Cash"},
 	{"code": "31.1", "name": "Поточний рахунок у національній валюті", "parent": "31", "account_type": "Bank"},
 	{"code": "37.1", "name": "Розрахунки з покупцями", "parent": "37", "account_type": "Receivable"},
+	{"code": "37.2", "name": "Аванси, видані постачальникам", "parent": "37", "account_type": "Receivable"},
 	{"code": "68.1", "name": "Розрахунки з постачальниками", "parent": "68", "account_type": "Payable"},
 	{
 		"code": "68.2",
@@ -138,11 +164,25 @@ SIMPLIFIED_EXTENSIONS = (
 		"account_type": "Stock Received But Not Billed",
 	},
 	{
+		"code": "68.3",
+		"name": "Необоротні активи отримано, рахунок постачальника не отримано",
+		"parent": "68",
+		"account_type": "Asset Received But Not Billed",
+	},
+	{
+		"code": "68.4",
+		"name": "Послуги отримано, рахунок постачальника не отримано",
+		"parent": "68",
+		"account_type": "Service Received But Not Billed",
+	},
+	{"code": "68.5", "name": "Аванси, отримані від покупців", "parent": "68", "account_type": "Payable"},
+	{
 		"code": "70.1",
 		"name": "Дохід від реалізації товарів, робіт і послуг",
 		"parent": "70",
 		"account_type": "Income Account",
 	},
+	{"code": "70.2", "name": "Знижки та вирахування з доходу", "parent": "70", "account_type": "Income Account"},
 	{
 		"code": "90.1",
 		"name": "Собівартість реалізованих товарів, робіт і послуг",
@@ -153,6 +193,7 @@ SIMPLIFIED_EXTENSIONS = (
 	{"code": "97.2", "name": "Округлення", "parent": "97", "account_type": "Round Off"},
 	{"code": "97.3", "name": "Списання та інші витрати", "parent": "97", "account_type": "Expense Account"},
 	{"code": "97.4", "name": "Амортизаційні витрати", "parent": "97", "account_type": "Depreciation"},
+	{"code": "97.5", "name": "Округлення початкових залишків", "parent": "97", "account_type": "Round Off for Opening"},
 )
 
 
@@ -284,12 +325,23 @@ def _template(key: str, accounts: list[dict]) -> dict:
 				"default_expense_account": "902",
 				"default_inventory_account": "281",
 				"stock_received_but_not_billed": "6312",
+				"asset_received_but_not_billed": "6313",
+				"default_provisional_account": "6314",
 				"stock_adjustment_account": "947",
 				"round_off_account": "9491",
+				"round_off_for_opening": "9493",
 				"write_off_account": "9492",
+				"default_discount_account": "704",
+				"default_deferred_revenue_account": "69",
+				"default_deferred_expense_account": "39",
+				"default_advance_paid_account": "3711",
+				"default_advance_received_account": "6811",
 				"accumulated_depreciation_account": "131",
 				"depreciation_expense_account": "831",
+				"capital_work_in_progress_account": "151",
 				"disposal_account": "976",
+				"purchase_expense_account": "902",
+				"service_expense_account": "903",
 			},
 		}
 	return {
@@ -314,12 +366,23 @@ def _template(key: str, accounts: list[dict]) -> dict:
 			"default_expense_account": "90.1",
 			"default_inventory_account": "26.1",
 			"stock_received_but_not_billed": "68.2",
+			"asset_received_but_not_billed": "68.3",
+			"default_provisional_account": "68.4",
 			"stock_adjustment_account": "97.1",
 			"round_off_account": "97.2",
+			"round_off_for_opening": "97.5",
 			"write_off_account": "97.3",
+			"default_discount_account": "70.2",
+			"default_deferred_revenue_account": "69",
+			"default_deferred_expense_account": "39",
+			"default_advance_paid_account": "37.2",
+			"default_advance_received_account": "68.5",
 			"accumulated_depreciation_account": "13",
 			"depreciation_expense_account": "97.4",
+			"capital_work_in_progress_account": "15",
 			"disposal_account": "97.3",
+			"purchase_expense_account": "90.1",
+			"service_expense_account": "90.1",
 		},
 	}
 
