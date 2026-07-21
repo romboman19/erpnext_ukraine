@@ -97,6 +97,7 @@ class ProductionStaticContractsTest(unittest.TestCase):
             "TurboSMS Settings",
             "TurboSMS Sender",
             "TurboSMS Log",
+            "Telegram Bot Profile",
             "RZ Delivery Sender Profile",
             "UA Integration Operation",
         }
@@ -165,6 +166,8 @@ class ProductionStaticContractsTest(unittest.TestCase):
             "send_sms",
             "send_sms_from_settings",
             "send_sms_to_customer",
+            "enqueue_telegram_message",
+            "send_test_message",
             "click_to_call",
             "click_to_call_customer",
             "dialer_call",
@@ -483,6 +486,9 @@ class ProductionStaticContractsTest(unittest.TestCase):
         telegram = (PACKAGE / "customer_identification" / "telegram.py").read_text(
             encoding="utf-8"
         )
+        telegram_client = (
+            PACKAGE / "communication" / "telegram" / "client.py"
+        ).read_text(encoding="utf-8")
         birthday = (PACKAGE / "customer_identification" / "birthday.py").read_text(
             encoding="utf-8"
         )
@@ -495,7 +501,8 @@ class ProductionStaticContractsTest(unittest.TestCase):
         self.assertIn("SELECT name FROM `tabCustomer Identification Request`", service)
         self.assertIn("telegram_webhook_secret", telegram)
         self.assertIn("secrets_equal", telegram)
-        self.assertIn("allow_redirects=False", telegram)
+        self.assertIn('"allow_redirects": False', telegram_client)
+        self.assertIn('_ALLOWED_METHODS = frozenset({"sendDocument", "sendMessage"})', telegram_client)
         self.assertIn('log.status = "Unknown"', birthday)
         fields = {field["fieldname"]: field for field in settings["fields"]}
         self.assertEqual(fields["default_channel"]["default"], "SMS")
@@ -508,6 +515,36 @@ class ProductionStaticContractsTest(unittest.TestCase):
                 for link in workspace["links"]
             )
         )
+
+    def test_telegram_channel_uses_v16_notification_extension_and_no_guest_document_url(self):
+        hooks = (PACKAGE / "hooks.py").read_text(encoding="utf-8")
+        service = (PACKAGE / "communication" / "telegram" / "service.py").read_text(
+            encoding="utf-8"
+        )
+        profile_path = (
+            PACKAGE
+            / "ukrainian_integrations"
+            / "doctype"
+            / "telegram_bot_profile"
+            / "telegram_bot_profile.json"
+        )
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        token = next(field for field in profile["fields"] if field["fieldname"] == "bot_token")
+        permissions = {(row["role"], int(row.get("permlevel", 0))) for row in profile["permissions"]}
+
+        self.assertIn("extend_doctype_class", hooks)
+        self.assertIn("TelegramNotificationMixin", hooks)
+        self.assertEqual(token["fieldtype"], "Password")
+        self.assertEqual(token["permlevel"], 1)
+        self.assertEqual(token["no_copy"], 1)
+        self.assertIn(("System Manager", 1), permissions)
+        self.assertNotIn(("Sales Manager", 1), permissions)
+        self.assertNotIn(("Sales User", 1), permissions)
+        self.assertIn("enqueue_after_commit=True", service)
+        self.assertIn("validate_print_permission", service)
+        self.assertIn("client.send_document", service)
+        self.assertNotIn("allow_guest=True", service)
+        self.assertNotIn("get_url", service)
 
     def test_sensitive_logs_have_partition_or_manager_only_access(self):
         hooks = (PACKAGE / "hooks.py").read_text(encoding="utf-8")

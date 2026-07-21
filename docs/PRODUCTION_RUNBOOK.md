@@ -66,6 +66,7 @@ The scheduler polls non-terminal Sales Invoice tracks every 30 minutes. A provid
 - VitalPBX must send `X-Webhook-Key`; use a random 32+ byte secret and, where possible, an IP allowlist at the proxy.
 - Telegram must send `X-Telegram-Bot-Api-Secret-Token`; the endpoint rejects requests when the configured secret is absent.
 - Restrict outbound egress to official provider endpoints and explicitly approved gateway/sandbox hosts.
+- Telegram notification workers connect only to `api.telegram.org`; the host is not configurable and tokens must use a dedicated bot profile.
 - Allow Rozetka Delivery traffic only to `rz-delivery.rozetka.ua` unless a controlled sandbox host is explicitly listed in `rozetka_delivery_allowed_api_hosts`.
 - Keep `vitalpbx_allow_query_key`, `vitalpbx_allow_insecure_recording_url` and `vitalpbx_verify_ssl=0` disabled unless a documented private-network exception exists.
 
@@ -93,6 +94,7 @@ Alert on:
 - `unknown` operations older than 15 minutes;
 - queue backlog, failed jobs, scheduler inactivity and worker restarts;
 - repeated webhook 401/409/413 responses at the proxy;
+- Telegram `unknown` operations, disabled bot profiles and repeated provider 400/401/403 responses;
 - unexpected growth in integration/call/SMS logs.
 - Rozetka Delivery profiles approaching credential rotation or repeated 401 responses.
 
@@ -109,6 +111,7 @@ TurboSMS message bodies are redacted by default; `turbosms_store_message_text=1`
 6. Revoke the old credential and verify logs contain no secret material.
 
 Rotate the VitalPBX webhook key on both systems in one maintenance window. LiqPay private-key or API-version rotation requires keeping callbacks for already-issued checkouts in mind; finish or explicitly reconcile old checkout operations first.
+Rotate Telegram bot tokens in `Telegram Bot Profile`, restart no process, then send one controlled test message before revoking the old token. Never paste a token into a Notification template, log or ticket.
 
 ## Rollback
 

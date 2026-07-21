@@ -5,6 +5,7 @@ import re
 
 import frappe
 
+from ukrainian_integrations.communication.telegram.customizations import ensure_telegram_customizations
 from ukrainian_integrations.pbx_sms.vitalpbx.custom_fields import ensure_integration_custom_fields
 from ukrainian_integrations.utils.operations import canonical_hash
 
@@ -15,6 +16,7 @@ def after_migrate() -> None:
     """Apply idempotent schema/data upgrades required by the current release."""
     ensure_integration_custom_fields()
     ensure_identification_channel_defaults()
+    ensure_telegram_customizations()
     backfill_integration_keys()
     remove_legacy_integration_artifacts()
     refresh_desk_navigation()

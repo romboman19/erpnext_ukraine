@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.3
+
+- Added Telegram as a native Frappe v16 `Notification` channel without overriding or patching the core controller.
+- Added multiple `Telegram Bot Profile` records with encrypted `Password` tokens and manager-scoped permissions.
+- Added direct chat IDs plus User, Customer, Employee, Supplier, owner, assignee and role-based recipient resolution.
+- Moved Telegram delivery to deduplicated post-commit jobs with durable operation records, explicit failed/unknown classification and no blind retries.
+- Added direct in-memory PDF upload through `sendDocument`; no guest print endpoint or reusable document signature is created.
+- Added masked timeline entries, bounded provider responses, a fixed Telegram API host, payload redaction, diagnostics and provider acceptance gates.
+- Reused the hardened Bot API client for customer-identification messages while keeping its authenticated webhook isolated.
+
 ## 0.6.2
 
 - Replace raw ocStore manual-action tracebacks with actionable configuration messages when no matching export or order-import entity is enabled.

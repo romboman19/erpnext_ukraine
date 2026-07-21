@@ -34,6 +34,7 @@ REQUIRED_DOCTYPES = (
     "TurboSMS Settings",
     "TurboSMS Sender",
     "TurboSMS Log",
+    "Telegram Bot Profile",
     "UA Integration Operation",
     "UP Sender Profile",
     "VitalPBX Call Log",
@@ -42,7 +43,11 @@ REQUIRED_DOCTYPES = (
 
 REQUIRED_CUSTOM_FIELDS = {
     "Bank Transaction": ("ua_integration_key",),
-    "Customer": ("ua_external_customer_key",),
+    "Customer": ("ua_external_customer_key", "ua_telegram_chat_id"),
+    "Communication": ("ua_telegram_bot_profile",),
+    "Employee": ("ua_telegram_chat_id",),
+    "Notification": ("ua_telegram_bot_profile", "ua_telegram_disable_web_page_preview"),
+    "Notification Recipient": ("ua_telegram_chat_id",),
     "Sales Invoice": (
         "liqpay_status",
         "liqpay_transaction_id",
@@ -77,7 +82,8 @@ REQUIRED_CUSTOM_FIELDS = {
         "ua_ecommerce_status",
         "ua_ecommerce_reserve_until",
     ),
-    "User": ("vitalpbx_extension",),
+    "Supplier": ("ua_telegram_chat_id",),
+    "User": ("vitalpbx_extension", "ua_telegram_chat_id"),
 }
 
 SECRET_FIELDS = {
@@ -93,6 +99,7 @@ SECRET_FIELDS = {
     "PrivatBank Profile": ("token",),
     "RZ Delivery Sender Profile": ("api_token",),
     "TurboSMS Settings": ("token",),
+    "Telegram Bot Profile": ("bot_token",),
     "UP Sender Profile": ("ecom_token", "tracking_token", "counterparty_token"),
     "VitalPBX Settings": ("api_key", "webhook_key"),
 }

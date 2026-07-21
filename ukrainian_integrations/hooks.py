@@ -1,7 +1,7 @@
 app_name = "ukrainian_integrations"
 app_title = "Ukrainian Integrations"
 app_publisher = "HUNTER.rv"
-app_description = "External connectors for ERPNext Ukraine: delivery, banks, online payments, marketplaces, PBX and SMS"
+app_description = "External connectors for ERPNext Ukraine: delivery, banks, payments, marketplaces and communications"
 app_email = "it@hunter.rv.ua"
 app_license = "MIT"
 required_apps = ["erpnext"]
@@ -23,6 +23,7 @@ before_uninstall = "ukrainian_integrations.uninstall.before_uninstall"
 app_include_js = "/assets/ukrainian_integrations/js/vitalpbx_popup_listener.js"
 
 doctype_js = {
+    "Notification": "public/js/notification_telegram.js",
     "Sales Invoice": [
         "public/js/sales_invoice_shipment_actions.js",
         "public/js/sales_invoice_vitalpbx_actions.js",
@@ -35,6 +36,13 @@ doctype_js = {
     "Monobank Settings": "public/js/monobank_settings_actions.js",
     "PrivatBank Settings": "public/js/privatbank_settings_actions.js",
     "LiqPay Settings": "public/js/liqpay_settings_actions.js",
+    "Telegram Bot Profile": "public/js/telegram_bot_profile.js",
+}
+
+extend_doctype_class = {
+    "Notification": [
+        "ukrainian_integrations.communication.telegram.notification.TelegramNotificationMixin",
+    ],
 }
 
 override_doctype_class = {

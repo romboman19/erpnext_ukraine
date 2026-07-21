@@ -21,6 +21,7 @@ except ModuleNotFoundError:
     frappe.db = types.SimpleNamespace(exists=lambda *args, **kwargs: False)
     sys.modules["frappe"] = frappe
 
+from ukrainian_integrations.communication.telegram.client import TelegramClient, is_valid_chat_id
 from ukrainian_integrations.customer_identification.service import _select_channel
 from ukrainian_integrations.customer_identification.telegram import (
     TelegramAPIError,
@@ -365,12 +366,14 @@ class PureLogicTest(unittest.TestCase):
         raw = (
             "GET https://example.test/path?token=abc123&x=1 "
             "Authorization: Bearer secret-value "
-            "https://api.telegram.org/bot123456:telegram-secret/sendMessage"
+            "https://api.telegram.org/bot123456:telegram-secret/sendMessage "
+            "{'bot_token': 'another-secret'}"
         )
         sanitized = sanitize_text(raw)
         self.assertNotIn("abc123", sanitized)
         self.assertNotIn("secret-value", sanitized)
         self.assertNotIn("telegram-secret", sanitized)
+        self.assertNotIn("another-secret", sanitized)
 
     def test_canonical_hash_is_order_independent(self):
         self.assertEqual(canonical_hash({"a": 1, "b": 2}), canonical_hash({"b": 2, "a": 1}))
@@ -585,7 +588,7 @@ class PureLogicTest(unittest.TestCase):
     @patch("ukrainian_integrations.customer_identification.telegram._settings")
     @patch("ukrainian_integrations.customer_identification.telegram.requests.post")
     def test_telegram_client_rejects_redirects_and_bounds_requests(self, post, settings):
-        settings.return_value.get_password.return_value = "token"
+        settings.return_value.get_password.return_value = "123456:abcdefghijklmnopqrstuvwxyzABCDE_1234"
         raw = b'{"ok":true,"result":{"message_id":1}}'
         response = Mock(status_code=200, headers={"Content-Length": str(len(raw))})
         response.iter_content.return_value = [raw]
@@ -598,7 +601,7 @@ class PureLogicTest(unittest.TestCase):
     @patch("ukrainian_integrations.customer_identification.telegram._settings")
     @patch("ukrainian_integrations.customer_identification.telegram.requests.post")
     def test_telegram_server_error_is_ambiguous(self, post, settings):
-        settings.return_value.get_password.return_value = "token"
+        settings.return_value.get_password.return_value = "123456:abcdefghijklmnopqrstuvwxyzABCDE_1234"
         raw = b'{"ok":false}'
         response = Mock(status_code=503, headers={"Content-Length": str(len(raw))})
         response.iter_content.return_value = [raw]
@@ -606,6 +609,50 @@ class PureLogicTest(unittest.TestCase):
         with self.assertRaises(TelegramAPIError) as raised:
             _telegram("sendMessage", {"chat_id": "1", "text": "test"})
         self.assertFalse(raised.exception.definite)
+
+    def test_telegram_chat_ids_are_strictly_numeric(self):
+        self.assertTrue(is_valid_chat_id("123456"))
+        self.assertTrue(is_valid_chat_id("-1001234567890"))
+        self.assertFalse(is_valid_chat_id("@channel"))
+        self.assertFalse(is_valid_chat_id("12 34"))
+        self.assertFalse(is_valid_chat_id(""))
+
+    def test_telegram_pdf_is_uploaded_directly_without_a_public_url(self):
+        raw = b'{"ok":true,"result":{"message_id":7}}'
+        response = Mock(status_code=200, headers={"Content-Length": str(len(raw))})
+        response.iter_content.return_value = [raw]
+        post = Mock(return_value=response)
+
+        data = TelegramClient(
+            "123456:abcdefghijklmnopqrstuvwxyzABCDE_1234",
+            post=post,
+        ).send_document(
+            chat_id="-100123",
+            content=b"%PDF-test",
+            filename="invoice.pdf",
+            caption="Invoice",
+        )
+
+        self.assertTrue(data["ok"])
+        self.assertNotIn("json", post.call_args.kwargs)
+        self.assertEqual(post.call_args.kwargs["data"]["chat_id"], "-100123")
+        self.assertEqual(post.call_args.kwargs["files"]["document"][0], "invoice.pdf")
+
+    def test_telegram_client_rejects_unapproved_methods(self):
+        with self.assertRaises(ValueError):
+            TelegramClient("123456:abcdefghijklmnopqrstuvwxyzABCDE_1234").request("getFile", {})
+
+    def test_telegram_client_uses_provider_error_code_for_definite_rejection(self):
+        raw = b'{"ok":false,"error_code":400}'
+        response = Mock(status_code=200, headers={"Content-Length": str(len(raw))})
+        response.iter_content.return_value = [raw]
+        post = Mock(return_value=response)
+        client = TelegramClient("123456:abcdefghijklmnopqrstuvwxyzABCDE_1234", post=post)
+
+        with self.assertRaises(TelegramAPIError) as raised:
+            client.send_message(chat_id="123", text="test")
+
+        self.assertTrue(raised.exception.definite)
 
     def test_ukrposhta_ui_weight_is_converted_from_kg_to_grams(self):
         values = _shipment_parameters({"weight": 1.25}, default_declared_value=100)

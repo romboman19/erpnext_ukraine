@@ -72,6 +72,17 @@ Complete only the sections used by the deployment. Record date, operator, enviro
 - [ ] Provider HTTP 200 with non-zero `response_code` is recorded as failed.
 - [ ] Timeout remains unknown and the same key is blocked from blind resend.
 
+## Telegram notifications
+
+- [ ] Create a dedicated least-privilege bot profile and confirm its token is a `Password` field unavailable to Sales Manager users.
+- [ ] Send one controlled text notification to a private chat and one to an approved group/channel chat ID.
+- [ ] Resolve recipients through a document User/Customer/Employee/Supplier link and through a role; confirm no unintended recipients are included.
+- [ ] Send one approved print format as PDF and confirm Telegram receives an uploaded document without a public ERPNext URL.
+- [ ] Simulate HTTP 400, timeout and HTTP 503 outcomes; verify `failed`, `unknown` and `unknown` respectively, with no automatic retry.
+- [ ] Confirm the same idempotency key cannot send a second message and cannot be reused with different content.
+- [ ] Confirm a user without reference-document permission cannot call the manual send API or generate its print.
+- [ ] Inspect the related `Communication`, `Hunter Integration Log` and `UA Integration Operation`; confirm tokens, full chat IDs and raw Telegram payloads are absent.
+
 ## VitalPBX
 
 - [ ] Missing/wrong webhook key returns unauthorized.

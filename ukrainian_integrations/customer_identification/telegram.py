@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 import re
 
 import frappe
 import requests
 
+from ukrainian_integrations.communication.telegram.client import TelegramAPIError, TelegramClient
 from ukrainian_integrations.customer_identification.service import (
     _expire_if_needed,
     _lock_request,
@@ -15,39 +15,7 @@ from ukrainian_integrations.customer_identification.service import (
 )
 from ukrainian_integrations.utils.security import secrets_equal
 
-MAX_TELEGRAM_RESPONSE_BYTES = 1024 * 1024
-
-
-class TelegramAPIError(RuntimeError):
-    def __init__(self, message: str, *, definite: bool):
-        super().__init__(message)
-        self.definite = definite
-
-
-def _read_bounded(response) -> bytes:
-    content_length = response.headers.get("Content-Length")
-    if content_length:
-        try:
-            if int(content_length) > MAX_TELEGRAM_RESPONSE_BYTES:
-                raise TelegramAPIError(
-                    "Telegram API response is too large",
-                    definite=False,
-                )
-        except ValueError:
-            pass
-    chunks: list[bytes] = []
-    received = 0
-    for chunk in response.iter_content(chunk_size=64 * 1024):
-        if not chunk:
-            continue
-        received += len(chunk)
-        if received > MAX_TELEGRAM_RESPONSE_BYTES:
-            raise TelegramAPIError(
-                "Telegram API response is too large",
-                definite=False,
-            )
-        chunks.append(chunk)
-    return b"".join(chunks)
+__all__ = ["TelegramAPIError"]
 
 
 def _telegram(method: str, payload: dict):
@@ -59,46 +27,7 @@ def _telegram(method: str, payload: dict):
     ).strip()
     if not token:
         raise ValueError("Telegram bot token is not configured")
-    try:
-        response = requests.post(
-            f"https://api.telegram.org/bot{token}/{method}",
-            json=payload,
-            timeout=(10, 20),
-            allow_redirects=False,
-            stream=True,
-        )
-        try:
-            raw = _read_bounded(response)
-        finally:
-            response.close()
-    except requests.RequestException:
-        raise TelegramAPIError(
-            "Telegram API request outcome is unknown",
-            definite=False,
-        ) from None
-
-    try:
-        data = json.loads(raw.decode("utf-8")) if raw else {}
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        raise TelegramAPIError(
-            "Telegram API returned an invalid response",
-            definite=False,
-        ) from None
-    if not isinstance(data, dict):
-        raise TelegramAPIError(
-            "Telegram API returned an unexpected response",
-            definite=False,
-        )
-    if response.status_code >= 300 or data.get("ok") is not True:
-        definite = (
-            400 <= response.status_code < 500
-            and response.status_code not in {408, 429}
-        )
-        raise TelegramAPIError(
-            f"Telegram API rejected the request with HTTP {response.status_code}",
-            definite=definite,
-        )
-    return data
+    return TelegramClient(token, post=requests.post).request(method, payload)
 
 
 def _validate_secret() -> None:

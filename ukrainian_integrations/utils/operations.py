@@ -14,7 +14,16 @@ from ukrainian_integrations.utils.security import ACCOUNTS_MANAGER_ROLES, SALES_
 DOCTYPE = "UA Integration Operation"
 FINANCIAL_INTEGRATIONS = frozenset({"ecommerce_payment", "liqpay", "monobank", "privatbank"})
 SALES_INTEGRATIONS = frozenset(
-    {"ecommerce", "nova_poshta", "ukrposhta", "rozetka_delivery", "turbosms", "prom_ua", "vitalpbx"}
+    {
+        "ecommerce",
+        "nova_poshta",
+        "prom_ua",
+        "rozetka_delivery",
+        "telegram",
+        "turbosms",
+        "ukrposhta",
+        "vitalpbx",
+    }
 )
 
 

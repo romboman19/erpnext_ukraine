@@ -24,12 +24,16 @@ Migration 0.2.0 creates deterministic unique keys for bank transactions, custome
 
 Migration 0.3.0 adds `RZ Delivery Sender Profile` and unique Rozetka Delivery fields to Sales Invoice. Run migration before any shipment creation so a confirmed provider track can always be persisted locally.
 
+Migration 0.4.0 adds `Telegram Bot Profile`, Telegram recipient fields and the Telegram options on standard `Notification` and `Communication`. It does not copy plaintext credentials or guest endpoints from the legacy `erpnext_telegram` app.
+
 ## Reconfigure
 
 - [ ] Populate and enable explicit NP/UP sender profiles.
 - [ ] Populate `RZ Delivery Sender Profile`, select sender city/department, verify the static token and assign Company where applicable.
 - [ ] Populate Monobank, PrivatBank and LiqPay profile rows; verify Company/Bank Account ownership.
 - [ ] Populate TurboSMS Settings; do not rely on legacy fallback after the DocType exists.
+- [ ] Create a dedicated `Telegram Bot Profile`, migrate only a verified bot token into its Password field, and recreate legacy alerts as standard `Notification` records with channel `Telegram`.
+- [ ] Populate confirmed `ua_telegram_chat_id` values on User/Customer/Employee/Supplier records or direct recipient rows; do not bulk-copy unverified chat IDs.
 - [ ] Configure `Customer Identification Settings`; Telegram must have both a bot token and webhook secret.
 - [ ] If `erpnext_ua.ua_pos` is deployed, complete the separate PB POS migration in `docs/privat_pos_flow.md`.
 - [ ] Set `User.vitalpbx_extension` and rotate the VitalPBX webhook key.
