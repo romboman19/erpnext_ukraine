@@ -13,8 +13,9 @@ APP = Path(__file__).resolve().parents[1]
 class TestPriceTagContracts(unittest.TestCase):
 	def test_module_and_source_buttons_are_registered(self):
 		self.assertIn("UA Price Tags", (APP / "modules.txt").read_text(encoding="utf-8"))
-		for doctype in ("Purchase Receipt", "Stock Entry", "Delivery Note", "Item"):
+		for doctype in ("Stock Entry", "Delivery Note", "Item"):
 			self.assertEqual(hooks.doctype_js[doctype], "public/js/price_tag_source.js")
+		self.assertIn("public/js/price_tag_source.js", hooks.doctype_js["Purchase Receipt"])
 		self.assertIn("erpnext_ua.install.ensure_price_tag_setup", hooks.after_install)
 		self.assertIn("erpnext_ua.install.ensure_price_tag_setup", hooks.after_migrate)
 
@@ -71,6 +72,18 @@ class TestPriceTagContracts(unittest.TestCase):
 			settings_fields["packaging_print_format"]["default"],
 			"Етикетка на упаковку 40x25",
 		)
+
+	def test_created_jobs_open_the_print_view_directly(self):
+		javascript = (APP / "public" / "js" / "price_tag_source.js").read_text(encoding="utf-8")
+		list_javascript = (
+			APP
+			/ "ua_price_tags"
+			/ "doctype"
+			/ "price_tag_print_job"
+			/ "price_tag_print_job_list.js"
+		).read_text(encoding="utf-8")
+		self.assertIn('window.location.assign(print_view_url("Price Tag Print Job"', javascript)
+		self.assertIn('window.location.assign(`/printview?', list_javascript)
 
 
 if __name__ == "__main__":

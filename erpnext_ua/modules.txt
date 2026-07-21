@@ -3,3 +3,4 @@ UA Fiscal
 UA POS
 UA Accounting
 UA Price Tags
+UA Receiving

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_CEILING
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
+
+
+VAT_20_MULTIPLIER = Decimal("1.20")
 
 
 def resolve_receipt_warehouse(
@@ -31,3 +34,15 @@ def suggest_selling_price(
 	if step > 0:
 		value = (value / step).to_integral_value(rounding=ROUND_CEILING) * step
 	return float(value.quantize(Decimal("0.01")))
+
+
+def add_vat_20(
+	price_without_vat: float | int | Decimal | None,
+	precision: int = 2,
+) -> float | None:
+	"""Return a gross purchase price without creating a separate tax component."""
+	if price_without_vat is None:
+		return None
+	price = Decimal(str(price_without_vat))
+	quantum = Decimal("1").scaleb(-max(0, int(precision)))
+	return float((price * VAT_20_MULTIPLIER).quantize(quantum, rounding=ROUND_HALF_UP))

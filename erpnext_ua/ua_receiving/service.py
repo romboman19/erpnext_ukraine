@@ -232,6 +232,12 @@ def _create_purchase_invoice_draft(receipt):
 	invoice.bill_no = receipt.supplier_delivery_note
 	invoice.bill_date = receipt.ua_supplier_document_date
 	invoice.ua_source_purchase_receipt = receipt.name
+	invoice.ua_add_vat_20_to_prices = receipt.get("ua_add_vat_20_to_prices")
+	price_without_vat = {row.name: row.get("ua_price_without_vat") for row in receipt.items}
+	for row in invoice.items:
+		source_row = row.get("pr_detail")
+		if source_row in price_without_vat:
+			row.ua_price_without_vat = price_without_vat[source_row]
 	invoice.insert()
 	return invoice.name
 
@@ -318,4 +324,15 @@ def complete_receipt(
 		},
 		update_modified=False,
 	)
-	return {"purchase_invoice": invoice_name, "price_tag_jobs": jobs}
+	job_prints = [
+		{
+			"name": name,
+			"print_format": frappe.db.get_value("Price Tag Print Job", name, "print_format"),
+		}
+		for name in jobs
+	]
+	return {
+		"purchase_invoice": invoice_name,
+		"price_tag_jobs": jobs,
+		"price_tag_prints": job_prints,
+	}

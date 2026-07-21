@@ -54,7 +54,8 @@ doctype_js = {
 	"Sales Invoice": "ua_fiscal/doctype_js/sales_invoice_fiscal.js",
 	"PB POS Terminal": "ua_pos/public/js/pb_pos_terminal.js",
 	"PRRO Receipt": "ua_fiscal/doctype_js/prro_receipt.js",
-	"Purchase Receipt": "public/js/price_tag_source.js",
+	"Purchase Receipt": ["public/js/price_tag_source.js", "public/js/purchase_vat.js"],
+	"Purchase Invoice": "public/js/purchase_vat.js",
 	"Stock Entry": "public/js/price_tag_source.js",
 	"Delivery Note": "public/js/price_tag_source.js",
 	"Item": "public/js/price_tag_source.js",
@@ -65,7 +66,11 @@ doc_events = {
         "on_submit": "erpnext_ua.ua_fiscal.sales_invoice.on_submit",
     },
 	"Purchase Receipt": {
+		"before_validate": "erpnext_ua.ua_receiving.pricing.apply_supplier_price_vat",
 		"before_submit": "erpnext_ua.ua_receiving.service.validate_purchase_receipt",
+	},
+	"Purchase Invoice": {
+		"before_validate": "erpnext_ua.ua_receiving.pricing.apply_supplier_price_vat",
 	},
 }
 

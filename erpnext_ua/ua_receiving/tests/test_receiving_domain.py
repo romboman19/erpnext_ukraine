@@ -1,6 +1,6 @@
 import unittest
 
-from erpnext_ua.ua_receiving.domain import resolve_receipt_warehouse, suggest_selling_price
+from erpnext_ua.ua_receiving.domain import add_vat_20, resolve_receipt_warehouse, suggest_selling_price
 
 
 class TestReceivingDomain(unittest.TestCase):
@@ -17,6 +17,11 @@ class TestReceivingDomain(unittest.TestCase):
 	def test_missing_or_invalid_cost_has_no_suggestion(self):
 		self.assertIsNone(suggest_selling_price(None, 30, 1))
 		self.assertIsNone(suggest_selling_price(0, 30, 1))
+
+	def test_vat_is_added_to_the_price_itself(self):
+		self.assertEqual(add_vat_20(100), 120.0)
+		self.assertEqual(add_vat_20(199.99), 239.99)
+		self.assertEqual(add_vat_20(10.1234, precision=4), 12.1481)
 
 
 if __name__ == "__main__":

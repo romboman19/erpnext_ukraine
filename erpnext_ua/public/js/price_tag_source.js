@@ -1,5 +1,27 @@
 (() => {
 	const SOURCE_DOCTYPES = ["Purchase Receipt", "Stock Entry", "Delivery Note", "Item"];
+	const RECEIPT_PRINT_FORMAT = "Прибуткова накладна (UA)";
+
+	function print_view_url(doctype, name, format, noLetterhead = 1) {
+		const query = new URLSearchParams({
+			doctype,
+			name,
+			format,
+			no_letterhead: String(noLetterhead),
+		});
+		return `/printview?${query.toString()}`;
+	}
+
+	function open_job_print(jobName) {
+		frappe.db.get_value("Price Tag Print Job", jobName, "print_format").then((response) => {
+			const format = response.message && response.message.print_format;
+			if (!format) {
+				frappe.msgprint(__("Для пакета {0} не задано формат друку.", [jobName]));
+				return;
+			}
+			window.location.assign(print_view_url("Price Tag Print Job", jobName, format));
+		});
+	}
 
 	function preview_args(frm, dialog) {
 		return {
@@ -85,7 +107,7 @@
 						const jobs = response.message || [];
 						dialog.hide();
 						if (jobs.length > 1) frappe.show_alert(__("Створено пакетів: {0}", [jobs.length]));
-						if (jobs.length) frappe.set_route("Form", "Price Tag Print Job", jobs[0]);
+						if (jobs.length) open_job_print(jobs[0]);
 					},
 				});
 			},
@@ -121,8 +143,9 @@
 		if (result.purchase_invoice) {
 			links.push(`<a href="/app/purchase-invoice/${encodeURIComponent(result.purchase_invoice)}">${__("Рахунок закупівлі")} ${frappe.utils.escape_html(result.purchase_invoice)}</a>`);
 		}
-		(result.price_tag_jobs || []).forEach((name) => {
-			links.push(`<a href="/app/price-tag-print-job/${encodeURIComponent(name)}">${__("Пакет цінників")} ${frappe.utils.escape_html(name)}</a>`);
+		(result.price_tag_prints || []).forEach((job) => {
+			const url = print_view_url("Price Tag Print Job", job.name, job.print_format);
+			links.push(`<a href="${url}">${__("Друкувати цінники")} ${frappe.utils.escape_html(job.name)}</a>`);
 		});
 		return links.join("<br>");
 	}
@@ -202,11 +225,26 @@
 		frappe.ui.form.on(doctype, {
 			refresh(frm) {
 				if (frm.is_new()) return;
+				if (doctype === "Purchase Receipt") {
+					frm.add_custom_button(__("Контрольний лист A4"), () => {
+						window.open(
+							print_view_url("Purchase Receipt", frm.doc.name, RECEIPT_PRINT_FORMAT, 0),
+							"_blank",
+							"noopener",
+						);
+					}, __("Друк"));
+				}
 				if (doctype === "Purchase Receipt" && frm.doc.docstatus === 1 && !frm.doc.ua_receiving_completed) {
 					frm.add_custom_button(__("Завершити приймання"), () => open_receipt_completion(frm), __("Приймання"));
 				}
 				if (doctype === "Purchase Receipt" && frm.doc.ua_purchase_invoice) {
 					frm.add_custom_button(__("Рахунок закупівлі"), () => frappe.set_route("Form", "Purchase Invoice", frm.doc.ua_purchase_invoice), __("Приймання"));
+				}
+				if (doctype === "Purchase Receipt" && frm.doc.ua_price_tag_jobs) {
+					const firstJob = String(frm.doc.ua_price_tag_jobs).split("\n").filter(Boolean)[0];
+					if (firstJob) {
+						frm.add_custom_button(__("Друкувати цінники"), () => open_job_print(firstJob), __("Друк"));
+					}
 				}
 				if (doctype === "Purchase Receipt" && frm.doc.docstatus !== 1) return;
 				const stockPurpose = frm.doc.purpose || frm.doc.stock_entry_type;

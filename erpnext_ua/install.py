@@ -53,7 +53,7 @@ def ensure_tax_parameters():
 
 
 POS_ROLES = ["POS Cashier", "POS Senior Cashier", "POS Manager", "POS Administrator", "PRRO Operator"]
-APP_MODULES = ("UA FOP", "UA Fiscal", "UA POS", "UA Accounting", "UA Price Tags")
+APP_MODULES = ("UA FOP", "UA Fiscal", "UA POS", "UA Accounting", "UA Price Tags", "UA Receiving")
 
 
 PRICE_TAG_ROLES = ("Price Tag User", "Price Tag Manager")
@@ -215,9 +215,16 @@ def ensure_receiving_setup():
 					"insert_after": "ua_supplier_document_date",
 				},
 				{
+					"fieldname": "ua_add_vat_20_to_prices",
+					"label": "Додати ПДВ 20% до введених цін (без податкової проводки)",
+					"fieldtype": "Check",
+					"default": "0",
+					"insert_after": "ua_supplier_document_file",
+				},
+				{
 					"fieldname": "ua_receiving_column",
 					"fieldtype": "Column Break",
-					"insert_after": "ua_supplier_document_file",
+					"insert_after": "ua_add_vat_20_to_prices",
 				},
 				{
 					"fieldname": "ua_received_by",
@@ -286,6 +293,33 @@ def ensure_receiving_setup():
 					"options": "Purchase Receipt",
 					"read_only": 1,
 					"insert_after": "ua_receiving_reference_section",
+				},
+				{
+					"fieldname": "ua_add_vat_20_to_prices",
+					"label": "Додати ПДВ 20% до введених цін (без податкової проводки)",
+					"fieldtype": "Check",
+					"default": "0",
+					"insert_after": "ua_source_purchase_receipt",
+				},
+			],
+			"Purchase Receipt Item": [
+				{
+					"fieldname": "ua_price_without_vat",
+					"label": "Ціна без ПДВ",
+					"fieldtype": "Currency",
+					"options": "currency",
+					"in_list_view": 1,
+					"insert_after": "rate",
+				},
+			],
+			"Purchase Invoice Item": [
+				{
+					"fieldname": "ua_price_without_vat",
+					"label": "Ціна без ПДВ",
+					"fieldtype": "Currency",
+					"options": "currency",
+					"in_list_view": 1,
+					"insert_after": "rate",
 				},
 			],
 		},
