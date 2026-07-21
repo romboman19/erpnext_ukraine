@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import unittest
 from uuid import uuid4
 
-import frappe
-from frappe.tests import IntegrationTestCase
+try:
+	import frappe
+except ModuleNotFoundError:
+	frappe = None
+	IntegrationTestCase = unittest.TestCase
+else:
+	from frappe.tests import IntegrationTestCase
 
-from erpnext_ua.ua_accounting.chart_of_accounts import load_template
-from erpnext_ua.ua_accounting.chart_setup import apply_chart, preflight
+	from erpnext_ua.ua_accounting.chart_of_accounts import load_template
+	from erpnext_ua.ua_accounting.chart_setup import apply_chart, preflight
 
 
+@unittest.skipIf(frappe is None, "requires a Frappe test site")
 class TestUAChartSetup(IntegrationTestCase):
 	def _apply_and_assert(self, template_key: str):
 		if not frappe.db.exists("Warehouse Type", "Transit"):
