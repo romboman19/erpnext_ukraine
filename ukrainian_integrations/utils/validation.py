@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import re
 from urllib.parse import urlparse
 
 import frappe
 from frappe import _
+
+_BARE_HOSTNAME = re.compile(
+    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$"
+)
 
 
 def validate_profile_rows(rows, label: str) -> None:
@@ -41,6 +46,14 @@ def validate_allowed_host(
         frappe.throw(
             _("{0} host is not allowlisted. Configure {1} in site_config.json").format(label, config_key)
         )
+
+
+def validate_hostname(hostname: str, label: str) -> str:
+    """Normalize and validate a bare hostname without authorizing a connection."""
+    normalized = str(hostname or "").strip().rstrip(".").lower()
+    if not _BARE_HOSTNAME.fullmatch(normalized):
+        frappe.throw(_("{0} must be a valid hostname without credentials or a port").format(label))
+    return normalized
 
 
 def validate_erp_bank_account(bank_account: str, company: str) -> str:

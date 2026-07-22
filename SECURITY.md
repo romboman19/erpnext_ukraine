@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are provided for the latest 0.2.x release line on ERPNext/Frappe v16. Older commits should be upgraded before reporting a runtime issue.
+Security fixes are provided for the latest 0.6.x release line on ERPNext/Frappe v16. Older commits should be upgraded before reporting a runtime issue.
 
 ## Reporting a vulnerability
 

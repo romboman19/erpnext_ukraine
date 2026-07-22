@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Ukrainian Integrations">
+  <rect width="64" height="64" rx="16" fill="#0057b8"/>
+  <path d="M0 34h64v14c0 8.84-7.16 16-16 16H16C7.16 64 0 56.84 0 48V34Z" fill="#ffd700"/>
+  <path d="M19 21h9v8h8v-8h9v22h-9v-8h-8v8h-9V21Z" fill="#fff"/>
+</svg>

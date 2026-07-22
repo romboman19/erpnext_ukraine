@@ -1,4 +1,4 @@
-# Upgrade checklist: 0.1.x / 0.2.x → 0.3.0
+# Upgrade checklist
 
 ## Before maintenance
 
@@ -7,10 +7,12 @@
 - [ ] Confirm a tested restore path and maintenance window.
 - [ ] Stop schedulers/workers or put the site in maintenance mode.
 - [ ] Export current `site_config.json` securely; never commit it.
+- [ ] For 0.5.0, export the existing ecommerce channel/mapping records for reconciliation and do not delete legacy DocTypes manually.
+- [ ] For 0.6.0, record every legacy ocStore channel and mapping count; after migrate reconcile them with the disabled multi-record `OcStore Settings` copies before enabling FTP jobs.
 
 ## Deploy
 
-- [ ] Deploy the same 0.3.0 commit to backend, scheduler and every queue worker.
+- [ ] Deploy the same immutable app commit to backend, scheduler and every queue worker.
 - [ ] Run `./env/bin/pip install -e apps/erpnext_ukraine_integrations`.
 - [ ] Confirm `./env/bin/python -c "import requests; print(requests.__version__)"` reports 2.33.0 or newer.
 - [ ] Run `bench --site <site> migrate` once.
@@ -22,12 +24,16 @@ Migration 0.2.0 creates deterministic unique keys for bank transactions, custome
 
 Migration 0.3.0 adds `RZ Delivery Sender Profile` and unique Rozetka Delivery fields to Sales Invoice. Run migration before any shipment creation so a confirmed provider track can always be persisted locally.
 
+Migration 0.4.0 adds `Telegram Bot Profile`, Telegram recipient fields and the Telegram options on standard `Notification` and `Communication`. It does not copy plaintext credentials or guest endpoints from the legacy `erpnext_telegram` app.
+
 ## Reconfigure
 
 - [ ] Populate and enable explicit NP/UP sender profiles.
 - [ ] Populate `RZ Delivery Sender Profile`, select sender city/department, verify the static token and assign Company where applicable.
 - [ ] Populate Monobank, PrivatBank and LiqPay profile rows; verify Company/Bank Account ownership.
 - [ ] Populate TurboSMS Settings; do not rely on legacy fallback after the DocType exists.
+- [ ] Create a dedicated `Telegram Bot Profile`, migrate only a verified bot token into its Password field, and recreate legacy alerts as standard `Notification` records with channel `Telegram`.
+- [ ] Populate confirmed `ua_telegram_chat_id` values on User/Customer/Employee/Supplier records or direct recipient rows; do not bulk-copy unverified chat IDs.
 - [ ] Configure `Customer Identification Settings`; Telegram must have both a bot token and webhook secret.
 - [ ] If `erpnext_ua.ua_pos` is deployed, complete the separate PB POS migration in `docs/privat_pos_flow.md`.
 - [ ] Set `User.vitalpbx_extension` and rotate the VitalPBX webhook key.

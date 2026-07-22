@@ -1,0 +1,19 @@
+{
+ "doctype": "DocType",
+ "name": "Ecommerce Sync Entity Config",
+ "module": "Ecommerce",
+ "istable": 1,
+ "editable_grid": 1,
+ "field_order": ["entity", "enabled", "direction", "method", "interval_minutes", "file_format", "file_layout", "last_run_at"],
+ "fields": [
+  {"fieldname": "entity", "fieldtype": "Select", "label": "Entity", "options": "Products\nPrices\nStock\nOrders\nCustomers\nPhotos", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "enabled", "fieldtype": "Check", "label": "Enabled", "default": "0", "in_list_view": 1},
+  {"fieldname": "direction", "fieldtype": "Select", "label": "Direction", "options": "Export\nImport", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "method", "fieldtype": "Select", "label": "Method", "options": "File\nAPI\nDisabled", "default": "Disabled", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "interval_minutes", "fieldtype": "Int", "label": "Interval Minutes", "default": "60", "depends_on": "eval:doc.enabled && doc.method!='Disabled'", "mandatory_depends_on": "eval:doc.enabled && doc.method!='Disabled'", "in_list_view": 1},
+  {"fieldname": "file_format", "fieldtype": "Select", "label": "File Format", "options": "CSV\nXML\nYML", "depends_on": "eval:doc.method=='File'", "mandatory_depends_on": "eval:doc.enabled && doc.method=='File'"},
+  {"fieldname": "file_layout", "fieldtype": "Link", "label": "File Layout", "options": "Ecommerce File Layout", "depends_on": "eval:doc.method=='File'", "mandatory_depends_on": "eval:doc.enabled && doc.method=='File'"},
+  {"fieldname": "last_run_at", "fieldtype": "Datetime", "label": "Last Run", "read_only": 1}
+ ],
+ "permissions": [{"role": "System Manager", "read": 1, "write": 1}]
+}

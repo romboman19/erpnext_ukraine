@@ -8,7 +8,7 @@ Production-oriented Frappe/ERPNext v16 application for Ukrainian shipping, payme
 - Python: 3.11+
 - MariaDB: 10.6+
 - Redis: 6+
-- App version: 0.3.0
+- App version: 0.6.3
 
 The repository is validated by static analysis, unit/contract tests, package build, JavaScript parsing, and a clean ERPNext v16 install/migrate job. A deployment is production-ready only after the provider acceptance checklist has passed with the organization's own sandbox or low-risk credentials; no repository can prove third-party credentials, tariffs, terminal firmware, network ACLs, or merchant-account settings in isolation.
 
@@ -21,7 +21,10 @@ The repository is validated by static analysis, unit/contract tests, package bui
 - LiqPay: deterministic checkout initiation, signed callbacks and optional Payment Entry reconciliation.
 - VitalPBX: click-to-call, authenticated event webhook, extension-scoped call logs and realtime popups.
 - TurboSMS: sender allowlist, idempotent send API and delivery request logging.
+- Telegram: a native Frappe v16 `Notification` channel with multiple encrypted bot profiles, role/party/direct-chat recipients and direct PDF upload.
 - Prom.ua: `last_id` order pagination and stock updates by product `external_id`.
+- E-commerce Base: provider-specific channel contract, configurable CSV/XML/YML layouts, FTP/FTPS/SFTP endpoints, payload-based export hashes, item mapping, append-only sync logs and idempotent ERP order intake.
+- ocStore 3.0.3.7: multi-store `OcStore Settings`, configurable XML catalog/price/stock/photo feeds, unchanged photo uploads, scheduled FTP import of nested order XML and all-or-keep file transactions.
 - Customer identification: SMS, Telegram and inbound-call verification with rate limits, PII gating and birthday messaging.
 
 PrivatBank terminal checkout is owned by `erpnext_ua.ua_pos`; this app keeps only the migration guide and external connectors.
@@ -64,8 +67,10 @@ Prefer the Settings/Profile DocTypes in Desk. When those DocTypes contain config
 | LiqPay | `LiqPay Settings` → profiles; API v7/SHA3-256 is the default; keep `Accept Sandbox Callbacks` off in production |
 | VitalPBX | `VitalPBX Settings`, unique webhook key, and `User.vitalpbx_extension` |
 | TurboSMS | `TurboSMS Settings` with official API URL, token and active sender rows |
-| Customer identification | `Customer Identification Settings`; Telegram requires bot token plus webhook secret |
+| Telegram notifications | `Telegram Bot Profile`; configure recipients and templates in the standard `Notification` DocType |
+| Customer identification | `Identification Channel Settings`; POS defaults to SMS through TurboSMS, while Telegram and VitalPBX remain optional |
 | Prom.ua | `site_config.json`; see the runbook for the complete key list |
+| E-commerce / ocStore | One `OcStore Settings` record per shop and Company; `File Delivery Endpoint`, XML layouts, warehouses, payment/status routes and scheduler intervals are selected inside it |
 
 Custom non-production provider hosts must be explicitly allowlisted in `site_config.json`:
 
@@ -75,13 +80,17 @@ Custom non-production provider hosts must be explicitly allowlisted in `site_con
   "ukrposhta_allowed_api_hosts": ["sandbox.example.internal"],
   "rozetka_delivery_allowed_api_hosts": ["sandbox.example.internal"],
   "turbosms_allowed_api_hosts": ["sandbox.example.internal"],
-  "prom_ua_allowed_api_hosts": ["sandbox.example.internal"]
+  "prom_ua_allowed_api_hosts": ["sandbox.example.internal"],
+  "shop_express_allowed_api_hosts": ["shop.example.ua"],
+  "ecommerce_allowed_ftp_hosts": ["ftp.example.ua"]
 }
 ```
 
 Do not allowlist hosts that are not controlled by the organization or the provider: the corresponding credential is sent to that host.
 
 TurboSMS message bodies are redacted in `TurboSMS Log` by default. Set `turbosms_store_message_text=1` only after a documented privacy/retention review; the operation ledger never stores the body itself.
+
+Telegram notification tokens are separate from the customer-identification webhook bot. Outbound sends run in a worker, never retry an ambiguous result, and upload print PDFs directly to Telegram instead of creating guest-accessible document URLs. See [Telegram channel setup](docs/TELEGRAM.md).
 
 ## Webhooks
 
@@ -112,6 +121,16 @@ X-Telegram-Bot-Api-Secret-Token: <random-secret>
 
 The Telegram endpoint fails closed when the secret is absent and bounds request/response bodies.
 
+UA POS starts verification through the policy-aware endpoint:
+
+```text
+/api/method/ukrainian_integrations.customer_identification.service.begin_pos
+```
+
+The administrator selects the POS channel in `Identification Channel Settings`.
+The default is locked to `SMS` (TurboSMS); cashier channel selection is an explicit
+opt-in and disabled by default.
+
 ## Verification
 
 ```bash
@@ -133,6 +152,8 @@ CI repeats these gates and installs/migrates the app on a clean ERPNext v16 site
 - Follow [Production runbook](docs/PRODUCTION_RUNBOOK.md) for backup, deployment, monitoring, reconciliation and rollback.
 - Follow [Provider acceptance](docs/PROVIDER_ACCEPTANCE.md) before enabling any scheduler or live side effect.
 - See [Rozetka Delivery setup](docs/ROZETKA_DELIVERY.md) for profile configuration, workflow and acceptance steps.
+- See [E-commerce and ocStore](docs/ECOMMERCE_CHANNELS.md) for the shared contracts, XML formats and staged provider migration boundary.
+- See [Telegram channel setup](docs/TELEGRAM.md) for bot profiles, recipients, notifications and reconciliation.
 - See [Privat POS migration](docs/privat_pos_flow.md) for the move to `erpnext_ua.ua_pos`.
 - Security reporting and supported versions are in [SECURITY.md](SECURITY.md).
 - Release history is in [CHANGELOG.md](CHANGELOG.md).

@@ -1,0 +1,15 @@
+{
+ "doctype": "DocType",
+ "name": "Ecommerce Order Status Map",
+ "module": "Ecommerce",
+ "istable": 1,
+ "editable_grid": 1,
+ "field_order": ["channel_status", "erp_action", "reserve_stock", "reserve_days"],
+ "fields": [
+  {"fieldname": "channel_status", "fieldtype": "Data", "label": "Channel Status", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "erp_action", "fieldtype": "Select", "label": "ERP Action", "options": "Create Sales Order\nCreate Sales Invoice\nCreate SO+SI+Payment\nUpdate Status\nIgnore", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "reserve_stock", "fieldtype": "Check", "label": "Reserve Stock", "default": "1", "depends_on": "eval:doc.erp_action=='Create Sales Order' || doc.erp_action=='Create SO+SI+Payment'", "in_list_view": 1},
+  {"fieldname": "reserve_days", "fieldtype": "Int", "label": "Reserve Days", "default": "3", "depends_on": "eval:doc.reserve_stock", "mandatory_depends_on": "eval:doc.reserve_stock", "in_list_view": 1}
+ ],
+ "permissions": [{"role": "System Manager", "read": 1, "write": 1}]
+}

@@ -1,5 +1,19 @@
 # Production readiness report
 
+## 0.6.3 Telegram channel addendum
+
+Assessment date: 2026-07-21
+
+Branch: `agent/telegram-production-v16`
+
+Baseline: production 0.6.2 at `b9d8bc9`
+
+The integrated 0.6.3 branch passed Python compilation, Ruff, Bandit, dependency audit, JavaScript syntax validation, package build and all 105 unit/contract tests on the production 0.6.2 baseline. It must also pass the clean ERPNext v16 install/migrate job and production diagnostics before activation.
+
+Repository-controlled readiness remains a release candidate. Live Telegram activation is still a deployment-specific **NO-GO** until the Telegram section of `PROVIDER_ACCEPTANCE.md` is completed with a controlled bot/chat, including text, role/party resolution, PDF upload, permission denial and failed/unknown outcome tests.
+
+The original 0.3.0 assessment follows for its baseline evidence.
+
 Assessment date: 2026-07-15
 App version: 0.3.0
 Branch: `codex/production-hardening`

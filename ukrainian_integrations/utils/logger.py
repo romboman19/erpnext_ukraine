@@ -22,6 +22,7 @@ SENSITIVE_KEYS = {
     "counterparty_token",
     "telegram_bot_token",
     "telegram_webhook_secret",
+    "bot_token",
     "webhook_key",
 }
 
@@ -31,7 +32,7 @@ SENSITIVE_TEXT_PATTERNS = (
     re.compile(r"(?i)(/(?:apiKey|token)/)[^/\s]+"),
     re.compile(r"(?i)(api\.telegram\.org/bot)[^/\s]+"),
     re.compile(
-        r'''(?i)(["'](?:token|api_key|api_token|apikey|private_key|signature|webhook_key)["']\s*:\s*["'])[^"']+'''
+        r'''(?i)(["'](?:token|bot_token|api_key|api_token|apikey|private_key|signature|webhook_key)["']\s*:\s*["'])[^"']+'''
     ),
 )
 

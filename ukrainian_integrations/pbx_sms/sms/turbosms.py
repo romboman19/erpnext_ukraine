@@ -16,6 +16,13 @@ from ukrainian_integrations.utils.operations import (
 from ukrainian_integrations.utils.security import SALES_MANAGER_ROLES, SALES_ROLES, permitted_doc, require_roles
 
 TURBOSMS_URL_DEFAULT = "https://api.turbosms.ua/message/send.json"
+_SUCCESS_RESPONSE_STATUSES = {
+    0: "OK",
+    800: "SUCCESS_MESSAGE_ACCEPTED",
+    801: "SUCCESS_MESSAGE_SENT",
+    802: "SUCCESS_MESSAGE_PARTIAL_ACCEPTED",
+    803: "SUCCESS_MESSAGE_PARTIAL_SENT",
+}
 
 
 def _cfg(key: str, default=None):
@@ -65,8 +72,6 @@ def _get_turbosms_settings() -> dict:
         if senders:
             default_row = next((x for x in senders if x.get("is_default") == 1), None)
             sender = (default_row or senders[0]).get("sender_name") or ""
-        else:
-            sender = (s.get("sender") or "").strip()
 
     return {
         "enabled": 1,
@@ -75,6 +80,41 @@ def _get_turbosms_settings() -> dict:
         "sender": sender or "HUNTER RV",
         "senders": senders,
     }
+
+
+def configured_sender_names(cfg: dict | None = None) -> list[str]:
+    """Return the canonical local sender list shared by every ERPNext module."""
+    if cfg is None:
+        cfg = _get_turbosms_settings()
+    names: list[str] = []
+    seen: set[str] = set()
+    for row in cfg.get("senders") or []:
+        name = str(row.get("sender_name") or "").strip()
+        key = name.casefold()
+        if name and key not in seen:
+            names.append(name)
+            seen.add(key)
+
+    # Keep an existing installation working while it migrates from the legacy
+    # single sender field to the child table. It is still a locally configured
+    # value, never a free-form value supplied by another module.
+    legacy_default = str(cfg.get("sender") or "").strip()
+    if not names and legacy_default:
+        names.append(legacy_default)
+    return names
+
+
+def resolve_configured_sender(sender: str | None = None, cfg: dict | None = None) -> str:
+    """Resolve default sender and reject values outside TurboSMS Settings."""
+    if cfg is None:
+        cfg = _get_turbosms_settings()
+    names = configured_sender_names(cfg)
+    default_sender = str(cfg.get("sender") or "").strip()
+    resolved = str(sender or default_sender).strip()
+    by_key = {name.casefold(): name for name in names}
+    if not resolved or resolved.casefold() not in by_key:
+        raise ValueError("Sender is not configured or inactive")
+    return by_key[resolved.casefold()]
 
 
 
@@ -113,16 +153,15 @@ def classify_send_response(data) -> tuple[str, list[str]]:
     if not isinstance(data, dict):
         return "unknown", []
     try:
-        top_level_ok = int(data.get("response_code", -1)) == 0
+        response_code = int(data.get("response_code", -1))
     except (TypeError, ValueError):
         return "unknown", []
     response_status = str(data.get("response_status") or "").upper()
-    if not top_level_ok:
+    expected_status = _SUCCESS_RESPONSE_STATUSES.get(response_code)
+    if expected_status is None:
         return "failed", []
-    if not response_status:
+    if response_status != expected_status:
         return "unknown", []
-    if response_status != "OK":
-        return "failed", []
     rows = data.get("response_result")
     if isinstance(rows, dict):
         rows = [rows]
@@ -136,6 +175,8 @@ def classify_send_response(data) -> tuple[str, list[str]]:
         return "unknown", []
     if not row_ok:
         return "failed", []
+    if str(rows[0].get("response_status") or "").upper() != "OK":
+        return "unknown", []
     message_id = rows[0].get("message_id")
     return ("succeeded", [str(message_id)]) if message_id else ("unknown", [])
 
@@ -166,10 +207,10 @@ def _send_sms_internal(phone: str, text: str, idempotency_key: str, sender: str 
     if len(body) > max_text_length:
         frappe.throw(_("SMS text exceeds the configured maximum length ({0})").format(max_text_length))
 
-    sender_name = (sender or cfg.get("sender") or "HUNTER RV").strip()
-    allowed_senders = {x.get("sender_name") for x in cfg.get("senders", []) if x.get("sender_name")}
-    if allowed_senders and sender_name not in allowed_senders:
-        frappe.throw(_("Sender is not configured or inactive"), frappe.PermissionError)
+    try:
+        sender_name = resolve_configured_sender(sender, cfg)
+    except ValueError as exc:
+        frappe.throw(_(str(exc)), frappe.PermissionError)
     url = (cfg.get("base_url") or TURBOSMS_URL_DEFAULT).strip()
 
     reservation = reserve_operation(
@@ -248,8 +289,9 @@ def get_sender_options() -> dict:
     require_roles(*SALES_ROLES)
     cfg = _get_turbosms_settings()
     return {
-        "senders": [x.get("sender_name") for x in cfg.get("senders", []) if x.get("sender_name")],
-        "default_sender": cfg.get("sender") or "",
+        "enabled": cint(cfg.get("enabled")) == 1,
+        "senders": configured_sender_names(cfg),
+        "default_sender": resolve_configured_sender(cfg=cfg) if configured_sender_names(cfg) else "",
     }
 
 
