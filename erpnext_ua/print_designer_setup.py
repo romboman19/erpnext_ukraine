@@ -10,17 +10,13 @@ import frappe
 from erpnext_ua.print_designer_documents import RECEIPT_FORMAT_NAME, SALES_FORMATS, build_document_formats
 from erpnext_ua.print_designer_price_tags import (
 	PACKAGING_FORMAT_NAME,
+	PRICE_TAG_FORMAT_FIELDS,
 	PROMOTIONAL_FORMAT_NAME,
 	STANDARD_FORMAT_NAME,
 	build_price_tag_formats,
 )
 
 
-PRICE_TAG_FORMAT_FIELDS = {
-	"standard_print_format": ("Цінник звичайний 40x25", STANDARD_FORMAT_NAME),
-	"promotional_print_format": ("Цінник акційний 40x25", PROMOTIONAL_FORMAT_NAME),
-	"packaging_print_format": ("Етикетка на упаковку 40x25", PACKAGING_FORMAT_NAME),
-}
 DESIGNER_FORMAT_NAMES = (
 	STANDARD_FORMAT_NAME,
 	PROMOTIONAL_FORMAT_NAME,

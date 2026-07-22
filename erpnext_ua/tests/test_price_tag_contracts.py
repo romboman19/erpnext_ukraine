@@ -7,9 +7,7 @@ from pathlib import Path
 import erpnext_ua.hooks as hooks
 from erpnext_ua.print_designer_documents import RECEIPT_FORMAT_NAME, build_document_formats
 from erpnext_ua.print_designer_price_tags import (
-	PACKAGING_FORMAT_NAME,
-	PROMOTIONAL_FORMAT_NAME,
-	STANDARD_FORMAT_NAME,
+	PRICE_TAG_FORMAT_FIELDS,
 	build_price_tag_formats,
 )
 
@@ -30,6 +28,12 @@ class TestPriceTagContracts(unittest.TestCase):
 		)
 		self.assertIn(
 			"erpnext_ua.print_designer_setup.ensure_print_designer_formats", hooks.after_migrate
+		)
+		self.assertLess(
+			hooks.after_install.index("erpnext_ua.install.ensure_price_tag_setup"),
+			hooks.after_install.index(
+				"erpnext_ua.print_designer_setup.ensure_print_designer_formats"
+			),
 		)
 
 	def test_print_job_contains_immutable_snapshot_fields(self):
@@ -82,8 +86,14 @@ class TestPriceTagContracts(unittest.TestCase):
 		settings = json.loads(settings_path.read_text(encoding="utf-8"))
 		settings_fields = {field["fieldname"]: field for field in settings["fields"]}
 		self.assertEqual(
-			settings_fields["packaging_print_format"]["default"],
-			PACKAGING_FORMAT_NAME,
+			{
+				fieldname: settings_fields[fieldname]["default"]
+				for fieldname in PRICE_TAG_FORMAT_FIELDS
+			},
+			{
+				fieldname: legacy_name
+				for fieldname, (legacy_name, _designer_name) in PRICE_TAG_FORMAT_FIELDS.items()
+			},
 		)
 
 	def test_native_print_designer_formats_are_editable_and_renderable(self):
@@ -91,7 +101,7 @@ class TestPriceTagContracts(unittest.TestCase):
 		price_formats = build_price_tag_formats(base_settings)
 		self.assertEqual(
 			{row["name"] for row in price_formats},
-			{STANDARD_FORMAT_NAME, PROMOTIONAL_FORMAT_NAME, PACKAGING_FORMAT_NAME},
+			{designer_name for _legacy_name, designer_name in PRICE_TAG_FORMAT_FIELDS.values()},
 		)
 		for format_doc in price_formats:
 			self._assert_native_designer_format(format_doc, "Price Tag Print Job")

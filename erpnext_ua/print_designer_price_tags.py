@@ -16,6 +16,11 @@ from erpnext_ua.print_designer_layout import (
 STANDARD_FORMAT_NAME = "Цінник звичайний 40x25 (Print Designer)"
 PROMOTIONAL_FORMAT_NAME = "Цінник акційний 40x25 (Print Designer)"
 PACKAGING_FORMAT_NAME = "Етикетка на упаковку 40x25 (Print Designer)"
+PRICE_TAG_FORMAT_FIELDS = {
+	"standard_print_format": ("Цінник звичайний 40x25", STANDARD_FORMAT_NAME),
+	"promotional_print_format": ("Цінник акційний 40x25", PROMOTIONAL_FORMAT_NAME),
+	"packaging_print_format": ("Етикетка на упаковку 40x25", PACKAGING_FORMAT_NAME),
+}
 
 
 def build_price_tag_formats(base_settings: dict) -> list[dict]:

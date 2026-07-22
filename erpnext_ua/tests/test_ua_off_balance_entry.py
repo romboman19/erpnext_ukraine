@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+import unittest
 from uuid import uuid4
 
-import frappe
-from frappe.tests import IntegrationTestCase
+try:
+	import frappe
+except ModuleNotFoundError:
+	frappe = None
+	IntegrationTestCase = unittest.TestCase
+else:
+	from frappe.tests import IntegrationTestCase
 
-from erpnext_ua.ua_accounting.chart_setup import apply_chart
-from erpnext_ua.ua_accounting.off_balance import create_off_balance_entry
-from erpnext_ua.install import ensure_accounting_setup
+	from erpnext_ua.install import ensure_accounting_setup
+	from erpnext_ua.ua_accounting.chart_setup import apply_chart
+	from erpnext_ua.ua_accounting.off_balance import create_off_balance_entry
 
 
+@unittest.skipIf(frappe is None, "requires a Frappe test site")
 class TestUAOffBalanceEntry(IntegrationTestCase):
 	def setUp(self):
 		ensure_accounting_setup()
