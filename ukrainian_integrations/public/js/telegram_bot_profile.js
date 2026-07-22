@@ -7,6 +7,13 @@ frappe.ui.form.on("Telegram Bot Profile", {
     )
       return;
 
+    frm.add_custom_button(__("Create Telegram Notification"), () => {
+      frappe.new_doc("Notification", {
+        channel: "Telegram",
+        ua_telegram_bot_profile: frm.doc.name,
+      });
+    });
+
     frm.add_custom_button(__("Send Test Message"), () => {
       const idempotencyKey =
         typeof crypto !== "undefined" && crypto.randomUUID

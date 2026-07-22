@@ -28,6 +28,8 @@
   {"hidden": 0, "is_query_report": 0, "label": "TurboSMS Log", "link_count": 0, "link_to": "TurboSMS Log", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "VitalPBX Settings", "link_count": 0, "link_to": "VitalPBX Settings", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "VitalPBX Call Log", "link_count": 0, "link_to": "VitalPBX Call Log", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Telegram", "link_count": 0, "link_to": "Telegram Bot Profile", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Notifications", "link_count": 0, "link_to": "Notification", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "File Delivery Endpoints", "link_count": 0, "link_to": "File Delivery Endpoint", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Customer Identification", "link_count": 0, "onboard": 0, "type": "Card Break"},
   {"hidden": 0, "is_query_report": 0, "label": "Identification Channel Settings", "link_count": 0, "link_to": "Customer Identification Settings", "link_type": "DocType", "onboard": 0, "type": "Link"},
@@ -42,7 +44,7 @@
   {"hidden": 0, "is_query_report": 0, "label": "Integration Operations", "link_count": 0, "link_to": "UA Integration Operation", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Integration Log", "link_count": 0, "link_to": "Hunter Integration Log", "link_type": "DocType", "onboard": 0, "type": "Link"}
  ],
- "modified": "2026-07-18 16:00:00.000000",
+ "modified": "2026-07-22 14:06:17.000000",
  "modified_by": "Administrator",
  "module": "Ukrainian Integrations",
  "name": "Ukrainian Integrations",

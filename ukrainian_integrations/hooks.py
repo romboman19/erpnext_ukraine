@@ -20,10 +20,14 @@ add_to_apps_screen = [
 after_install = "ukrainian_integrations.install.after_install"
 before_uninstall = "ukrainian_integrations.uninstall.before_uninstall"
 
-app_include_js = "/assets/ukrainian_integrations/js/vitalpbx_popup_listener.js"
+app_include_js = [
+    "/assets/ukrainian_integrations/js/vitalpbx_popup_listener.js",
+    "/assets/ukrainian_integrations/js/notification_realtime_listener.js",
+]
 
 doctype_js = {
     "Notification": "public/js/notification_telegram.js",
+    "Notification Settings": "public/js/notification_settings_browser.js",
     "Sales Invoice": [
         "public/js/sales_invoice_shipment_actions.js",
         "public/js/sales_invoice_vitalpbx_actions.js",
