@@ -1,10 +1,21 @@
 app_name = "ukrainian_integrations"
-app_title = "ERPNext Ukraine Integrations"
+app_title = "Ukrainian Integrations"
 app_publisher = "HUNTER.rv"
-app_description = "External connectors for ERPNext Ukraine: delivery, banks, online payments, marketplaces, PBX and SMS"
+app_description = "External connectors for ERPNext Ukraine: delivery, banks, payments, marketplaces and communications"
 app_email = "it@hunter.rv.ua"
 app_license = "MIT"
 required_apps = ["erpnext"]
+app_logo_url = "/assets/ukrainian_integrations/images/app-logo.svg"
+app_home = "/app/ukrainian-integrations"
+
+add_to_apps_screen = [
+    {
+        "name": app_name,
+        "logo": app_logo_url,
+        "title": app_title,
+        "route": app_home,
+    }
+]
 
 after_install = "ukrainian_integrations.install.after_install"
 before_uninstall = "ukrainian_integrations.uninstall.before_uninstall"
@@ -12,6 +23,7 @@ before_uninstall = "ukrainian_integrations.uninstall.before_uninstall"
 app_include_js = "/assets/ukrainian_integrations/js/vitalpbx_popup_listener.js"
 
 doctype_js = {
+    "Notification": "public/js/notification_telegram.js",
     "Sales Invoice": [
         "public/js/sales_invoice_shipment_actions.js",
         "public/js/sales_invoice_vitalpbx_actions.js",
@@ -24,10 +36,27 @@ doctype_js = {
     "Monobank Settings": "public/js/monobank_settings_actions.js",
     "PrivatBank Settings": "public/js/privatbank_settings_actions.js",
     "LiqPay Settings": "public/js/liqpay_settings_actions.js",
+    "Telegram Bot Profile": "public/js/telegram_bot_profile.js",
+}
+
+extend_doctype_class = {
+    "Notification": [
+        "ukrainian_integrations.communication.telegram.notification.TelegramNotificationMixin",
+    ],
+}
+
+override_doctype_class = {
+    "System Health Report": (
+        "ukrainian_integrations.monitoring.system_health.ContainerAwareSystemHealthReport"
+    ),
 }
 
 scheduler_events = {
     "cron": {
+        "* * * * *": [
+            "ukrainian_integrations.monitoring.system_health.update_scheduler_heartbeat",
+            "ukrainian_integrations.ecommerce.scheduler.dispatch",
+        ],
         "*/30 * * * *": [
             "ukrainian_integrations.shipment.nova_poshta.scheduler.sync_ttn_statuses",
             "ukrainian_integrations.shipment.ukr_poshta.scheduler.sync_ttn_statuses",
@@ -35,11 +64,11 @@ scheduler_events = {
             "ukrainian_integrations.payments.core.bank_import_scheduler.run_all_bank_imports",
         ],
         "*/10 * * * *": [
-            "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_orders",
+            "ukrainian_integrations.ecommerce.providers.prom_ua.service.pull_orders",
             "ukrainian_integrations.customer_identification.service.expire_pending",
         ],
         "*/20 * * * *": [
-            "ukrainian_integrations.ecommerce.core.scheduler.cron_sync_stock",
+            "ukrainian_integrations.ecommerce.providers.prom_ua.service.push_stock",
         ],
     },
     "daily": [

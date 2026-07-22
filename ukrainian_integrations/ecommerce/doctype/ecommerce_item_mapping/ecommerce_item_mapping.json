@@ -1,0 +1,32 @@
+{
+ "doctype": "DocType",
+ "name": "Ecommerce Item Mapping",
+ "module": "Ecommerce",
+ "autoname": "hash",
+ "title_field": "item",
+ "search_fields": "channel,item,external_id,variant_sku,sync_status",
+ "field_order": ["item", "channel", "external_id", "variant_sku", "last_export_hash", "sync_status", "last_synced_at", "legacy_section", "export_hash_state", "external_sku", "enabled", "mapping_key", "external_mapping_key"],
+ "fields": [
+  {"fieldname": "item", "fieldtype": "Link", "label": "Item", "options": "Item", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "channel", "fieldtype": "Data", "label": "Channel", "reqd": 1, "in_list_view": 1, "search_index": 1},
+  {"fieldname": "external_id", "fieldtype": "Data", "label": "External ID", "reqd": 1, "in_list_view": 1, "search_index": 1},
+  {"fieldname": "variant_sku", "fieldtype": "Data", "label": "Variant SKU", "in_list_view": 1, "search_index": 1},
+  {"fieldname": "last_export_hash", "fieldtype": "Data", "label": "Last Export Hash", "read_only": 1, "no_copy": 1, "length": 64},
+  {"fieldname": "sync_status", "fieldtype": "Select", "label": "Sync Status", "options": "Pending\nSynced\nFailed\nUnknown\nDisabled", "default": "Pending", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "last_synced_at", "fieldtype": "Datetime", "label": "Last Synced At", "read_only": 1, "no_copy": 1},
+  {"fieldname": "legacy_section", "fieldtype": "Section Break", "label": "Legacy Migration", "hidden": 1},
+  {"fieldname": "export_hash_state", "fieldtype": "Long Text", "label": "Export Hash State", "read_only": 1, "hidden": 1, "no_copy": 1},
+  {"fieldname": "external_sku", "fieldtype": "Data", "label": "Legacy External SKU", "hidden": 1},
+  {"fieldname": "enabled", "fieldtype": "Check", "label": "Legacy Enabled", "default": "1", "hidden": 1},
+  {"fieldname": "mapping_key", "fieldtype": "Data", "label": "Legacy Mapping Key", "read_only": 1, "hidden": 1, "no_copy": 1, "length": 64},
+  {"fieldname": "external_mapping_key", "fieldtype": "Data", "label": "Legacy External Mapping Key", "read_only": 1, "hidden": 1, "no_copy": 1, "length": 64}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Sales Manager", "read": 1, "write": 1, "create": 1}
+ ],
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

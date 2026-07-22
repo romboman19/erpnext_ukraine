@@ -1,0 +1,28 @@
+{
+ "doctype": "DocType",
+ "name": "Ecommerce File Layout",
+ "module": "Ecommerce",
+ "autoname": "field:layout_name",
+ "title_field": "layout_name",
+ "search_fields": "layout_name,format,encoding",
+ "field_order": ["layout_name", "format", "encoding", "delimiter", "structure_section", "root_element", "item_element", "fields_section", "fields"],
+ "fields": [
+  {"fieldname": "layout_name", "fieldtype": "Data", "label": "Layout Name", "reqd": 1, "unique": 1, "in_list_view": 1},
+  {"fieldname": "format", "fieldtype": "Select", "label": "Format", "options": "CSV\nXML\nYML", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "encoding", "fieldtype": "Select", "label": "Encoding", "options": "UTF-8\nUTF-8-SIG\nCP1251", "default": "UTF-8", "reqd": 1},
+  {"fieldname": "delimiter", "fieldtype": "Data", "label": "Delimiter", "default": ",", "depends_on": "eval:doc.format=='CSV'", "mandatory_depends_on": "eval:doc.format=='CSV'"},
+  {"fieldname": "structure_section", "fieldtype": "Section Break", "label": "Document Structure", "depends_on": "eval:doc.format!='CSV'"},
+  {"fieldname": "root_element", "fieldtype": "Data", "label": "Root Element", "depends_on": "eval:doc.format!='CSV'", "mandatory_depends_on": "eval:doc.format!='CSV'"},
+  {"fieldname": "item_element", "fieldtype": "Data", "label": "Item Element", "depends_on": "eval:doc.format!='CSV'", "mandatory_depends_on": "eval:doc.format!='CSV'"},
+  {"fieldname": "fields_section", "fieldtype": "Section Break", "label": "Fields"},
+  {"fieldname": "fields", "fieldtype": "Table", "label": "File Fields", "options": "Ecommerce File Field", "reqd": 1}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Sales Manager", "read": 1}
+ ],
+ "engine": "InnoDB",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

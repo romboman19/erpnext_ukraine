@@ -1,0 +1,28 @@
+{
+ "doctype": "DocType",
+ "name": "Ecommerce Sync Log",
+ "module": "Ecommerce",
+ "autoname": "ECOM-SYNC-.YYYY.-.#####",
+ "search_fields": "channel,entity,direction,method,status,idempotency_key",
+ "field_order": ["channel", "entity", "direction", "method", "status", "idempotency_key", "records_ok", "records_failed", "message", "payload_ref"],
+ "fields": [
+  {"fieldname": "channel", "fieldtype": "Data", "label": "Channel", "reqd": 1, "in_list_view": 1, "search_index": 1},
+  {"fieldname": "entity", "fieldtype": "Select", "label": "Entity", "options": "Products\nPrices\nStock\nOrders\nCustomers\nPhotos", "reqd": 1, "in_list_view": 1, "search_index": 1},
+  {"fieldname": "direction", "fieldtype": "Select", "label": "Direction", "options": "Export\nImport", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "method", "fieldtype": "Select", "label": "Method", "options": "File\nAPI", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Success\nPartial\nFailed\nUnknown", "reqd": 1, "in_list_view": 1, "search_index": 1},
+  {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key", "reqd": 1, "read_only": 1, "search_index": 1, "length": 240},
+  {"fieldname": "records_ok", "fieldtype": "Int", "label": "Records OK", "default": "0", "read_only": 1},
+  {"fieldname": "records_failed", "fieldtype": "Int", "label": "Records Failed", "default": "0", "read_only": 1},
+  {"fieldname": "message", "fieldtype": "Small Text", "label": "Message", "read_only": 1},
+  {"fieldname": "payload_ref", "fieldtype": "Data", "label": "Payload Reference", "read_only": 1, "length": 1000}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1},
+  {"role": "Sales Manager", "read": 1}
+ ],
+ "engine": "InnoDB",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "track_changes": 0
+}

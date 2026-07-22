@@ -21,16 +21,32 @@ except ModuleNotFoundError:
     frappe.db = types.SimpleNamespace(exists=lambda *args, **kwargs: False)
     sys.modules["frappe"] = frappe
 
+from ukrainian_integrations.communication.telegram.client import TelegramClient, is_valid_chat_id
+from ukrainian_integrations.customer_identification.service import _select_channel
 from ukrainian_integrations.customer_identification.telegram import (
     TelegramAPIError,
     _telegram,
 )
+from ukrainian_integrations.ecommerce.core.exchange import (
+    build_canonical_catalog,
+    build_yml_catalog,
+    parse_orders_csv,
+    parse_orders_xml,
+)
 from ukrainian_integrations.ecommerce.providers.prom_ua.api import PromUAClient
 from ukrainian_integrations.ecommerce.providers.prom_ua.service import _order_item_rows
+from ukrainian_integrations.ecommerce.providers.shop_express.api import ShopExpressClient
+from ukrainian_integrations.ecommerce.providers.shop_express.service import _batch_warnings, _category_path
+from ukrainian_integrations.migrations import _merge_app_icons_into_layout, remove_legacy_integration_artifacts
 from ukrainian_integrations.payments.liqpay.client import LiqPayClient
 from ukrainian_integrations.payments.monobank.client import MonobankClient
 from ukrainian_integrations.payments.privatbank.service import _normalize_amount, _pagination_state
-from ukrainian_integrations.pbx_sms.sms.turbosms import classify_send_response, successful_message_ids
+from ukrainian_integrations.pbx_sms.sms.turbosms import (
+    classify_send_response,
+    configured_sender_names,
+    resolve_configured_sender,
+    successful_message_ids,
+)
 from ukrainian_integrations.pbx_sms.vitalpbx.custom_fields import _preserve_upgrade_stable_fieldtypes
 from ukrainian_integrations.pbx_sms.vitalpbx.events import is_status_transition_allowed
 from ukrainian_integrations.pbx_sms.vitalpbx.service import PBXRejectedError, _assert_call_accepted
@@ -57,6 +73,249 @@ from ukrainian_integrations.utils.security import secrets_equal
 
 
 class PureLogicTest(unittest.TestCase):
+    def test_clean_yml_catalog_escapes_values_and_keeps_stable_skus(self):
+        content = build_yml_catalog(
+            channel_name="Магазин & сервіс",
+            company="HUNTER",
+            store_url="https://shop.example.ua",
+            currency="UAH",
+            categories=[{"id": "1", "name": "Одяг & взуття", "parent_id": ""}],
+            products=[
+                {
+                    "external_id": "SKU-1",
+                    "sku": "SKU-1",
+                    "name": "Товар <1>",
+                    "category_id": "1",
+                    "price": 125.5,
+                    "quantity": 3,
+                    "available": True,
+                    "currency": "UAH",
+                    "pictures": [],
+                }
+            ],
+        )
+        self.assertIn(b"<vendorCode>SKU-1</vendorCode>", content)
+        self.assertIn(b"125.50", content)
+        self.assertIn(b"\xd0\x9c\xd0\xb0\xd0\xb3\xd0\xb0\xd0\xb7\xd0\xb8\xd0\xbd &amp;", content)
+
+    def test_canonical_catalog_has_explicit_version_and_stock(self):
+        content = build_canonical_catalog(
+            channel_name="ocStore",
+            currency="UAH",
+            categories=[{"id": "1", "name": "All", "parent_id": ""}],
+            products=[
+                {
+                    "external_id": "42",
+                    "sku": "SKU-42",
+                    "name": "Item",
+                    "category_id": "1",
+                    "price": 10,
+                    "quantity": 2,
+                    "available": True,
+                    "currency": "UAH",
+                    "pictures": [],
+                }
+            ],
+        )
+        self.assertIn(b'schema="erpnext-ecommerce-v1"', content)
+        self.assertIn(b'<quantity>2</quantity>', content)
+
+    def test_order_xml_parser_accepts_clean_exchange_and_rejects_entities(self):
+        orders = parse_orders_xml(
+            """<?xml version="1.0" encoding="UTF-8"?>
+            <ecommerce_exchange schema="erpnext-ecommerce-v1" entity="orders">
+              <orders><order id="101" number="OC-101" currency="UAH">
+                <customer id="7"><name>Іван</name><phone>+380501234567</phone></customer>
+                <items><item sku="SKU-1" quantity="2" price="15.50" /></items>
+              </order></orders>
+            </ecommerce_exchange>"""
+        )
+        self.assertEqual(orders[0]["external_id"], "101")
+        self.assertEqual(orders[0]["customer"]["name"], "Іван")
+        self.assertEqual(orders[0]["items"][0]["sku"], "SKU-1")
+        with self.assertRaises(ValueError):
+            parse_orders_xml('<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><order id="1"/>')
+        with self.assertRaises(ValueError):
+            parse_orders_xml((" " * 5000) + '<!DOCTYPE foo><order id="1"/>')
+
+    def test_order_csv_parser_groups_product_rows_by_order(self):
+        orders = parse_orders_csv(
+            "order_id,order_number,customer_name,sku,quantity,price,currency\n"
+            "1,OC-1,Іван,SKU-1,1,10,UAH\n"
+            "1,OC-1,Іван,SKU-2,2,20,UAH\n"
+        )
+        self.assertEqual(len(orders), 1)
+        self.assertEqual(len(orders[0]["items"]), 2)
+
+    @patch("ukrainian_integrations.ecommerce.providers.shop_express.api.requests.post")
+    def test_shop_express_reauthenticates_once_after_expired_token(self, post):
+        def response(payload):
+            raw = __import__("json").dumps(payload).encode()
+            result = Mock(status_code=200, headers={"Content-Length": str(len(raw))})
+            result.iter_content.return_value = [raw]
+            return result
+
+        post.side_effect = [
+            response({"status": "OK", "response": {"token": "first"}}),
+            response({"status": "UNAUTHORIZED", "response": {}}),
+            response({"status": "OK", "response": {"token": "second"}}),
+            response({"status": "OK", "response": {"orders": []}}),
+        ]
+        stored = []
+        client = ShopExpressClient(
+            base_url="https://shop.example.ua",
+            login="api@example.ua",
+            password="secret",
+            token_callback=stored.append,
+        )
+        result = client.export_orders(limit=10)
+        self.assertEqual(result["status"], "OK")
+        self.assertEqual(post.call_count, 4)
+        self.assertEqual(stored, ["first", "second"])
+        self.assertEqual(post.call_args.kwargs["json"]["token"], "second")
+
+    @patch("ukrainian_integrations.ecommerce.providers.shop_express.api.requests.post")
+    def test_shop_express_does_not_retry_ambiguous_timeout(self, post):
+        post.side_effect = requests.Timeout("unknown outcome")
+        client = ShopExpressClient(
+            base_url="https://shop.example.ua",
+            login="api@example.ua",
+            password="secret",
+            token="cached",
+        )
+        with self.assertRaises(requests.Timeout):
+            client.update_residues([{"sku": "SKU-1", "residues": 1}])
+        self.assertEqual(post.call_count, 1)
+
+    def test_shop_express_batch_log_rejects_partial_or_failed_rows(self):
+        payload = [{"sku": "SKU-1"}, {"sku": "SKU-2"}]
+        response = {
+            "status": "OK",
+            "response": {"log": [{"status": "OK"}, {"status": "ERROR", "sku": "SKU-2"}]},
+        }
+        self.assertEqual(_batch_warnings(response, payload, "stock update")[0]["sku"], "SKU-2")
+        with self.assertRaises(RuntimeError):
+            _batch_warnings({"status": "OK", "response": {"log": []}}, payload, "stock update")
+
+    def test_shop_express_catalog_category_path_uses_stable_external_ids(self):
+        categories = {
+            "1": {"id": "1", "name_key": "All Item Groups", "name": "All", "parent_id": ""},
+            "2": {"id": "2", "name_key": "Clothes", "name": "Одяг", "parent_id": "1"},
+        }
+        self.assertEqual(
+            _category_path("2", categories),
+            [
+                {"external_id": "All Item Groups", "value": {"uk": "All"}},
+                {
+                    "external_id": "Clothes",
+                    "parent_external_id": "All Item Groups",
+                    "value": {"uk": "Одяг"},
+                },
+            ],
+        )
+
+    def test_pos_identification_defaults_to_locked_turbosms_channel(self):
+        settings = types.SimpleNamespace(
+            default_channel="Telegram",
+            pos_channel="SMS",
+            allow_pos_channel_selection=0,
+        )
+        self.assertEqual(_select_channel(settings, for_pos=True), "SMS")
+        self.assertEqual(
+            _select_channel(settings, "Telegram", for_pos=True),
+            "SMS",
+        )
+        self.assertEqual(_select_channel(settings), "Telegram")
+
+    def test_pos_channel_selection_requires_explicit_opt_in(self):
+        settings = types.SimpleNamespace(
+            default_channel="SMS",
+            pos_channel="SMS",
+            allow_pos_channel_selection=1,
+        )
+        self.assertEqual(
+            _select_channel(settings, "Telegram", for_pos=True),
+            "Telegram",
+        )
+        self.assertEqual(
+            _select_channel(settings, "TurboSMS", for_pos=True),
+            "SMS",
+        )
+
+    def test_new_apps_are_merged_into_saved_desktop_layout_without_reset(self):
+        layout = [
+            {"label": "Framework", "idx": 0},
+            {"label": "Ukrainian Integrations", "idx": 1, "hidden": 1},
+        ]
+        app_icons = [
+            {"label": "Ukrainian Integrations", "idx": 10},
+            {"label": "ERPNext Ukraine", "idx": 11},
+            {"label": "Print Designer", "idx": 12},
+        ]
+
+        merged, added = _merge_app_icons_into_layout(layout, app_icons)
+
+        self.assertEqual(added, 2)
+        self.assertEqual(
+            [icon["label"] for icon in merged],
+            ["Framework", "Ukrainian Integrations", "ERPNext Ukraine", "Print Designer"],
+        )
+        self.assertEqual(merged[1]["hidden"], 1)
+        self.assertEqual(
+            layout,
+            [
+                {"label": "Framework", "idx": 0},
+                {"label": "Ukrainian Integrations", "idx": 1, "hidden": 1},
+            ],
+        )
+
+        merged_again, added_again = _merge_app_icons_into_layout(merged, app_icons)
+        self.assertEqual(added_again, 0)
+        self.assertEqual(merged_again, merged)
+
+    def test_legacy_integration_cleanup_migrates_turbosms_sender_before_deletion(self):
+        legacy_doctypes = {
+            "NP Integration Settings",
+            "UP Integration Settings",
+            "TurboSMS Settings",
+        }
+        database = Mock()
+        database.exists.side_effect = lambda doctype, name: (
+            doctype == "DocType" and name in legacy_doctypes
+        )
+        database.sql.return_value = [("HUNTER RV",)]
+        database.get_value.return_value = 0
+        settings = Mock()
+        settings.get.return_value = []
+
+        with (
+            patch.object(frappe, "db", database),
+            patch.object(frappe, "get_single", return_value=settings, create=True),
+            patch.object(frappe, "delete_doc", create=True) as delete_doc,
+            patch.object(frappe, "clear_cache", create=True),
+        ):
+            result = remove_legacy_integration_artifacts()
+
+        self.assertEqual(
+            result["removed_doctypes"],
+            ["NP Integration Settings", "UP Integration Settings"],
+        )
+        self.assertTrue(result["migrated_turbosms_sender"])
+        settings.append.assert_called_once_with(
+            "senders",
+            {"sender_name": "HUNTER RV", "is_active": 1, "is_default": 1},
+        )
+        settings.save.assert_called_once_with(ignore_permissions=True)
+        self.assertEqual(delete_doc.call_count, 2)
+        database.delete.assert_called_once_with(
+            "Singles",
+            {"doctype": "TurboSMS Settings", "field": "sender"},
+        )
+        database.sql.assert_called_once_with(
+            unittest.mock.ANY,
+            ("TurboSMS Settings", "sender"),
+        )
+
     def test_legacy_sender_profile_fieldtype_is_not_coerced(self):
         custom_fields = {
             "Sales Invoice": [
@@ -76,6 +335,26 @@ class PureLogicTest(unittest.TestCase):
         self.assertEqual(field["fieldtype"], "Data")
         self.assertNotIn("options", field)
 
+    def test_legacy_sender_cleanup_accepts_null_single_value(self):
+        database = Mock()
+        database.exists.side_effect = lambda doctype, name: (
+            doctype == "DocType" and name == "TurboSMS Settings"
+        )
+        database.sql.return_value = [(None,)]
+        database.get_value.return_value = 0
+        settings = Mock()
+        settings.get.return_value = []
+
+        with (
+            patch.object(frappe, "db", database),
+            patch.object(frappe, "get_single", return_value=settings, create=True),
+            patch.object(frappe, "clear_cache", create=True),
+        ):
+            result = remove_legacy_integration_artifacts()
+
+        self.assertFalse(result["migrated_turbosms_sender"])
+        settings.append.assert_not_called()
+
     def test_payload_redaction_is_recursive(self):
         payload = {"token": "secret", "nested": [{"private_key": "private", "value": 4}]}
         self.assertEqual(
@@ -87,12 +366,14 @@ class PureLogicTest(unittest.TestCase):
         raw = (
             "GET https://example.test/path?token=abc123&x=1 "
             "Authorization: Bearer secret-value "
-            "https://api.telegram.org/bot123456:telegram-secret/sendMessage"
+            "https://api.telegram.org/bot123456:telegram-secret/sendMessage "
+            "{'bot_token': 'another-secret'}"
         )
         sanitized = sanitize_text(raw)
         self.assertNotIn("abc123", sanitized)
         self.assertNotIn("secret-value", sanitized)
         self.assertNotIn("telegram-secret", sanitized)
+        self.assertNotIn("another-secret", sanitized)
 
     def test_canonical_hash_is_order_independent(self):
         self.assertEqual(canonical_hash({"a": 1, "b": 2}), canonical_hash({"b": 2, "a": 1}))
@@ -209,7 +490,9 @@ class PureLogicTest(unittest.TestCase):
         valid = {
             "response_code": 0,
             "response_status": "OK",
-            "response_result": [{"response_code": 0, "message_id": "m-1"}],
+            "response_result": [
+                {"response_code": 0, "response_status": "OK", "message_id": "m-1"}
+            ],
         }
         self.assertEqual(successful_message_ids(valid), ["m-1"])
         self.assertEqual(successful_message_ids({**valid, "response_code": 103}), [])
@@ -218,6 +501,76 @@ class PureLogicTest(unittest.TestCase):
         self.assertEqual(classify_send_response(rejected)[0], "failed")
         malformed = {**valid, "response_result": [{"message_id": "m-1"}]}
         self.assertEqual(classify_send_response(malformed)[0], "unknown")
+
+    def test_turbosms_accepts_documented_message_success_codes(self):
+        recipient = {
+            "response_code": 0,
+            "response_status": "OK",
+            "message_id": "m-801",
+        }
+        statuses = {
+            800: "SUCCESS_MESSAGE_ACCEPTED",
+            801: "SUCCESS_MESSAGE_SENT",
+            802: "SUCCESS_MESSAGE_PARTIAL_ACCEPTED",
+            803: "SUCCESS_MESSAGE_PARTIAL_SENT",
+        }
+        for response_code, response_status in statuses.items():
+            with self.subTest(response_code=response_code):
+                data = {
+                    "response_code": response_code,
+                    "response_status": response_status,
+                    "response_result": [recipient],
+                }
+                self.assertEqual(classify_send_response(data), ("succeeded", ["m-801"]))
+
+    def test_turbosms_success_code_still_requires_matching_status_and_recipient_success(self):
+        valid = {
+            "response_code": 801,
+            "response_status": "SUCCESS_MESSAGE_SENT",
+            "response_result": [
+                {"response_code": 0, "response_status": "OK", "message_id": "m-1"}
+            ],
+        }
+        self.assertEqual(
+            classify_send_response({**valid, "response_status": "OK"})[0],
+            "unknown",
+        )
+        self.assertEqual(
+            classify_send_response(
+                {
+                    **valid,
+                    "response_result": [
+                        {
+                            "response_code": 503,
+                            "response_status": "FAILED_SMS_SEND",
+                            "message_id": None,
+                        }
+                    ],
+                }
+            )[0],
+            "failed",
+        )
+
+    def test_turbosms_sender_registry_is_shared_and_fail_closed(self):
+        cfg = {
+            "enabled": 1,
+            "sender": "Primary",
+            "senders": [
+                {"sender_name": "Primary", "is_active": 1},
+                {"sender_name": "Retail", "is_active": 1},
+                {"sender_name": "primary", "is_active": 1},
+            ],
+        }
+        self.assertEqual(configured_sender_names(cfg), ["Primary", "Retail"])
+        self.assertEqual(resolve_configured_sender(cfg=cfg), "Primary")
+        self.assertEqual(resolve_configured_sender("retail", cfg), "Retail")
+        with self.assertRaises(ValueError):
+            resolve_configured_sender("Free form sender", cfg)
+
+    def test_turbosms_legacy_default_remains_a_local_sender(self):
+        cfg = {"enabled": 1, "sender": "Legacy", "senders": []}
+        self.assertEqual(configured_sender_names(cfg), ["Legacy"])
+        self.assertEqual(resolve_configured_sender(cfg=cfg), "Legacy")
 
     def test_vitalpbx_statuses_do_not_regress(self):
         self.assertTrue(is_status_transition_allowed("ringing", "answered"))
@@ -235,7 +588,7 @@ class PureLogicTest(unittest.TestCase):
     @patch("ukrainian_integrations.customer_identification.telegram._settings")
     @patch("ukrainian_integrations.customer_identification.telegram.requests.post")
     def test_telegram_client_rejects_redirects_and_bounds_requests(self, post, settings):
-        settings.return_value.get_password.return_value = "token"
+        settings.return_value.get_password.return_value = "123456:abcdefghijklmnopqrstuvwxyzABCDE_1234"
         raw = b'{"ok":true,"result":{"message_id":1}}'
         response = Mock(status_code=200, headers={"Content-Length": str(len(raw))})
         response.iter_content.return_value = [raw]
@@ -248,7 +601,7 @@ class PureLogicTest(unittest.TestCase):
     @patch("ukrainian_integrations.customer_identification.telegram._settings")
     @patch("ukrainian_integrations.customer_identification.telegram.requests.post")
     def test_telegram_server_error_is_ambiguous(self, post, settings):
-        settings.return_value.get_password.return_value = "token"
+        settings.return_value.get_password.return_value = "123456:abcdefghijklmnopqrstuvwxyzABCDE_1234"
         raw = b'{"ok":false}'
         response = Mock(status_code=503, headers={"Content-Length": str(len(raw))})
         response.iter_content.return_value = [raw]
@@ -256,6 +609,50 @@ class PureLogicTest(unittest.TestCase):
         with self.assertRaises(TelegramAPIError) as raised:
             _telegram("sendMessage", {"chat_id": "1", "text": "test"})
         self.assertFalse(raised.exception.definite)
+
+    def test_telegram_chat_ids_are_strictly_numeric(self):
+        self.assertTrue(is_valid_chat_id("123456"))
+        self.assertTrue(is_valid_chat_id("-1001234567890"))
+        self.assertFalse(is_valid_chat_id("@channel"))
+        self.assertFalse(is_valid_chat_id("12 34"))
+        self.assertFalse(is_valid_chat_id(""))
+
+    def test_telegram_pdf_is_uploaded_directly_without_a_public_url(self):
+        raw = b'{"ok":true,"result":{"message_id":7}}'
+        response = Mock(status_code=200, headers={"Content-Length": str(len(raw))})
+        response.iter_content.return_value = [raw]
+        post = Mock(return_value=response)
+
+        data = TelegramClient(
+            "123456:abcdefghijklmnopqrstuvwxyzABCDE_1234",
+            post=post,
+        ).send_document(
+            chat_id="-100123",
+            content=b"%PDF-test",
+            filename="invoice.pdf",
+            caption="Invoice",
+        )
+
+        self.assertTrue(data["ok"])
+        self.assertNotIn("json", post.call_args.kwargs)
+        self.assertEqual(post.call_args.kwargs["data"]["chat_id"], "-100123")
+        self.assertEqual(post.call_args.kwargs["files"]["document"][0], "invoice.pdf")
+
+    def test_telegram_client_rejects_unapproved_methods(self):
+        with self.assertRaises(ValueError):
+            TelegramClient("123456:abcdefghijklmnopqrstuvwxyzABCDE_1234").request("getFile", {})
+
+    def test_telegram_client_uses_provider_error_code_for_definite_rejection(self):
+        raw = b'{"ok":false,"error_code":400}'
+        response = Mock(status_code=200, headers={"Content-Length": str(len(raw))})
+        response.iter_content.return_value = [raw]
+        post = Mock(return_value=response)
+        client = TelegramClient("123456:abcdefghijklmnopqrstuvwxyzABCDE_1234", post=post)
+
+        with self.assertRaises(TelegramAPIError) as raised:
+            client.send_message(chat_id="123", text="test")
+
+        self.assertTrue(raised.exception.definite)
 
     def test_ukrposhta_ui_weight_is_converted_from_kg_to_grams(self):
         values = _shipment_parameters({"weight": 1.25}, default_declared_value=100)

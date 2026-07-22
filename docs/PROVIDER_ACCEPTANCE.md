@@ -72,6 +72,17 @@ Complete only the sections used by the deployment. Record date, operator, enviro
 - [ ] Provider HTTP 200 with non-zero `response_code` is recorded as failed.
 - [ ] Timeout remains unknown and the same key is blocked from blind resend.
 
+## Telegram notifications
+
+- [ ] Create a dedicated least-privilege bot profile and confirm its token is a `Password` field unavailable to Sales Manager users.
+- [ ] Send one controlled text notification to a private chat and one to an approved group/channel chat ID.
+- [ ] Resolve recipients through a document User/Customer/Employee/Supplier link and through a role; confirm no unintended recipients are included.
+- [ ] Send one approved print format as PDF and confirm Telegram receives an uploaded document without a public ERPNext URL.
+- [ ] Simulate HTTP 400, timeout and HTTP 503 outcomes; verify `failed`, `unknown` and `unknown` respectively, with no automatic retry.
+- [ ] Confirm the same idempotency key cannot send a second message and cannot be reused with different content.
+- [ ] Confirm a user without reference-document permission cannot call the manual send API or generate its print.
+- [ ] Inspect the related `Communication`, `Hunter Integration Log` and `UA Integration Operation`; confirm tokens, full chat IDs and raw Telegram payloads are absent.
+
 ## VitalPBX
 
 - [ ] Missing/wrong webhook key returns unauthorized.
@@ -86,3 +97,15 @@ Complete only the sections used by the deployment. Record date, operator, enviro
 - [ ] An order containing one mapped and one unmapped Item creates no partial Sales Order.
 - [ ] Stock uses `/products/edit_by_external_id`, and every sent row appears in `processed_ids` with no errors.
 - [ ] Only configured warehouses contribute stock, including the zero/not-available case.
+
+## ocStore 3.0.3.7 (File/XML)
+
+- [ ] Create a separate non-Single `OcStore Settings` record for every shop and verify its Company, currency, selling price list, warehouses and customer defaults.
+- [ ] Allowlist each FTP/SFTP hostname; for SFTP install and verify the expected host key in `known_hosts` on backend, scheduler and every worker. Unknown keys must be rejected.
+- [ ] Run Test FTP Connections for the exchange and photo endpoints without exposing credentials in logs.
+- [ ] Export controlled Products, Prices, Stock and Photos files; reconcile counts and confirm attached Item photos are byte-identical after upload.
+- [ ] Change a field excluded by all active layouts and confirm no scheduled export; then change price, quantity, description or photo included in a layout and confirm export occurs.
+- [ ] Import one XML file containing at least two valid orders twice; the second pass creates no duplicate Sales Order, Sales Invoice or Payment Entry.
+- [ ] Put one invalid order after one valid order in the same file; confirm the complete file transaction rolls back, the FTP file remains and `Ecommerce Sync Log.status` is `Failed`.
+- [ ] Import a fully valid multi-order file; confirm its ERP documents and per-order Success logs are committed before the FTP file disappears.
+- [ ] Simulate ambiguous FTP deletion after commit; confirm the operation is `Unknown`, documents are not duplicated on reconciliation and no blind external retry occurs.
