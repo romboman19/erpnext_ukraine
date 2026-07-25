@@ -55,6 +55,31 @@ def ensure_tax_parameters():
 POS_ROLES = ["POS Cashier", "POS Senior Cashier", "POS Manager", "POS Administrator", "PRRO Operator"]
 
 
+def ensure_pos_page():
+	"""Keep the Desk page present even when Frappe's orphan cleanup runs during migrate."""
+	if not frappe.db.table_exists("Page"):
+		return
+	roles = ["POS Cashier", "POS Senior Cashier", "POS Manager", "POS Administrator", "System Manager"]
+	if frappe.db.exists("Page", "ua-pos"):
+		page = frappe.get_doc("Page", "ua-pos")
+	else:
+		page = frappe.new_doc("Page")
+		page.page_name = "ua-pos"
+	page.title = "UA POS"
+	page.module = "UA POS"
+	# This app is read-only in container deployments. A non-standard Page keeps
+	# Frappe from exporting JSON on save and from removing it as an orphan.
+	page.standard = "No"
+	page.roles = []
+	for role in roles:
+		page.append("roles", {"role": role})
+	if page.is_new():
+		page.insert(ignore_permissions=True)
+	else:
+		page.save(ignore_permissions=True)
+	frappe.db.commit()
+
+
 def ensure_pos_setup():
 	"""Ідемпотентно створює ролі та поля інтеграції POS без змін ERPNext core."""
 	for role in POS_ROLES:
@@ -74,9 +99,21 @@ def ensure_pos_setup():
 				{"fieldname": "ua_fop_profile", "label": "FOP Profile", "fieldtype": "Link", "options": "FOP Profile"},
 			],
 			"Mode of Payment": [
-				{"fieldname": "ua_pos_kind", "label": "UA POS Kind", "fieldtype": "Select", "options": "\nCash\nCard\nIBAN\nBonus\nInstallment"},
-				{"fieldname": "ua_payformcd", "label": "PRRO Payment Form Code", "fieldtype": "Int"},
-				{"fieldname": "ua_currency", "label": "POS Currency", "fieldtype": "Link", "options": "Currency", "default": "UAH"},
+				{"fieldname": "ua_pos_section", "label": "Українська каса та ПРРО", "fieldtype": "Section Break", "insert_after": "type"},
+				{"fieldname": "ua_pos_enabled", "label": "Доступний у касі", "fieldtype": "Check", "default": "0", "in_list_view": 1, "insert_after": "ua_pos_section"},
+				{"fieldname": "ua_pos_channel", "label": "Технічний канал оплати", "fieldtype": "Select", "options": "\nГотівка\nПлатіжний термінал\nІнтернет-еквайринг\nБанківський переказ\nПлатіжний сервіс\nПередоплата\nКредит / розстрочка\nСертифікат / замінник\nІнше", "insert_after": "ua_pos_enabled"},
+				{"fieldname": "ua_prro_payment_form", "label": "Форма оплати ДПС", "fieldtype": "Select", "options": "\nГОТІВКА\nБЕЗГОТІВКОВА\nІНШЕ", "in_list_view": 1, "insert_after": "ua_pos_channel"},
+				{"fieldname": "ua_prro_payment_means", "label": "Засіб оплати у фіскальному чеку", "fieldtype": "Data", "in_list_view": 1, "insert_after": "ua_prro_payment_form", "description": "Рядок 19 ФКЧ-1: Картка, LiqPay, Сертифікат тощо. Для готівки використовується ГОТІВКА."},
+				{"fieldname": "ua_payformcd", "label": "Код PAYFORMCD у XML ДПС", "fieldtype": "Int", "insert_after": "ua_prro_payment_means", "description": "Код має відповідати чинній XSD ДПС. 0 — готівка, 1 — банківська картка, 2 — передоплата, 3 — кредит, 100000 — безготівковий платіжний інструмент."},
+				{"fieldname": "ua_prro_code_verified", "label": "Код XML ДПС перевірено", "fieldtype": "Check", "default": "0", "insert_after": "ua_payformcd", "description": "Без цієї ознаки спосіб оплати не показується касиру."},
+				{"fieldname": "ua_payment_rules_column", "fieldtype": "Column Break", "insert_after": "ua_prro_code_verified"},
+				{"fieldname": "ua_allow_cashless", "label": "Дозволено для БЕЗГОТІВКОВОЇ форми", "fieldtype": "Check", "default": "0", "insert_after": "ua_payment_rules_column"},
+				{"fieldname": "ua_allow_other", "label": "Дозволено для форми ІНШЕ", "fieldtype": "Check", "default": "0", "insert_after": "ua_allow_cashless"},
+				{"fieldname": "ua_allow_prepayment", "label": "Дозволено для передоплати", "fieldtype": "Check", "default": "0", "insert_after": "ua_allow_other"},
+				{"fieldname": "ua_allow_debt", "label": "Дозволено для боргу", "fieldtype": "Check", "default": "0", "insert_after": "ua_allow_prepayment"},
+				{"fieldname": "ua_requires_terminal", "label": "Потрібен інтегрований платіжний термінал", "fieldtype": "Check", "default": "0", "insert_after": "ua_allow_debt"},
+				{"fieldname": "ua_currency", "label": "Валюта каси", "fieldtype": "Link", "options": "Currency", "default": "UAH", "insert_after": "ua_requires_terminal"},
+				{"fieldname": "ua_pos_kind", "label": "Застарілий технічний тип UA POS", "fieldtype": "Select", "options": "\nCash\nCard\nIBAN\nBonus\nInstallment", "hidden": 1, "insert_after": "ua_currency"},
 			],
 			"Item": [
 				{"fieldname": "ua_serial_mode", "label": "UA Serial Mode", "fieldtype": "Select", "options": "\nStrict\nAdvisory\nNone"},
@@ -100,11 +137,74 @@ def ensure_pos_setup():
 				{"fieldname": "ua_city", "label": "Місто", "fieldtype": "Data"},
 				{"fieldname": "ua_pos_comment", "label": "Коментар касира", "fieldtype": "Small Text"},
 				{"fieldname": "ua_telegram_chat_id", "label": "Telegram Chat ID", "fieldtype": "Data", "hidden": 1, "read_only": 1},
+				{"fieldname": "ua_telegram_status", "label": "Telegram Status", "fieldtype": "Data", "read_only": 1, "no_copy": 1},
 			],
 		},
 		update=True,
 	)
+	ensure_payment_method_catalog()
 	frappe.db.commit()
+
+
+def ensure_payment_method_catalog():
+	"""Завантажує каталог засобів оплати, не активуючи неперевірені канали."""
+	from erpnext_ua.ua_fiscal.payment_catalog import BASE_PAYMENT_METHODS, CHANNEL_KIND, PRRO_PAYMENT_CATALOG
+
+	def values(config: dict) -> dict:
+		return {
+			"ua_pos_channel": config["channel"],
+			"ua_prro_payment_form": config["form"],
+			"ua_prro_payment_means": config.get("means") or config["name"],
+			"ua_payformcd": config["code"],
+			"ua_allow_cashless": config["allow_cashless"],
+			"ua_allow_other": config["allow_other"],
+			"ua_allow_prepayment": config["allow_prepayment"],
+			"ua_allow_debt": config["allow_debt"],
+			"ua_requires_terminal": config["requires_terminal"],
+			"ua_currency": "UAH",
+			"ua_pos_kind": CHANNEL_KIND[config["channel"]],
+		}
+
+	for config in BASE_PAYMENT_METHODS:
+		if not frappe.db.exists("Mode of Payment", config["name"]):
+			frappe.get_doc(
+				{
+					"doctype": "Mode of Payment",
+					"mode_of_payment": config["name"],
+					"type": config["mop_type"],
+					"enabled": 1,
+					**values(config),
+					"ua_pos_enabled": 1,
+					"ua_prro_code_verified": 1,
+				}
+			).insert(ignore_permissions=True)
+		else:
+			frappe.db.set_value(
+				"Mode of Payment",
+				config["name"],
+				{**values(config), "ua_pos_enabled": 1, "ua_prro_code_verified": 1},
+				update_modified=False,
+			)
+
+	for config in PRRO_PAYMENT_CATALOG:
+		if frappe.db.exists("Mode of Payment", config["name"]):
+			# Каталог задає початкові значення лише один раз. Після того як
+			# адміністратор налаштував канал, наступна міграція не має права
+			# перезаписати перевірені ним код, форму, назву або дозволи.
+			if not frappe.db.get_value("Mode of Payment", config["name"], "ua_pos_channel"):
+				frappe.db.set_value("Mode of Payment", config["name"], values(config), update_modified=False)
+			continue
+		frappe.get_doc(
+			{
+				"doctype": "Mode of Payment",
+				"mode_of_payment": config["name"],
+				"type": config["mop_type"],
+				"enabled": 0,
+				**values(config),
+				"ua_pos_enabled": 0,
+				"ua_prro_code_verified": 0,
+			}
+		).insert(ignore_permissions=True)
 
 
 def ensure_prro_setup():
