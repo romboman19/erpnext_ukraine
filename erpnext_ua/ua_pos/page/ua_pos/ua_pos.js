@@ -961,19 +961,72 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
           const result = isSms
             ? await identificationApi("confirm", { request_id: request.request_id, code: values.code })
             : await identificationApi("get_status", { request_id: request.request_id });
-          if (result.status === "Verified") {
-            dialog.$wrapper.find(".js-id-status").html('<span style="color:#079455">● Покупця підтверджено</span>');
-            if (await useIdentifiedCustomer(result)) dialog.hide();
-          } else if (["Expired", "Failed", "Cancelled"].includes(result.status)) {
-            dialog.$wrapper.find(".js-id-status").html(`<span style="color:#d92d20">● Запит завершено: ${esc(result.status)}</span>`);
-          } else {
-            dialog.$wrapper.find(".js-id-status").text("Підтвердження ще не отримано. Спробуйте перевірити ще раз.");
-          }
+          await handleVerificationResult(result);
         } finally {
           dialog.get_primary_btn().prop("disabled", false);
         }
       },
     });
+
+    const expiresAt = request.expires_at ? new Date(request.expires_at) : null;
+    const $status = dialog.$wrapper.find(".js-id-status");
+    let timer = null;
+
+    function updateCountdown() {
+      if (!expiresAt) return;
+      const remaining = Math.max(0, Math.floor((expiresAt - new Date()) / 1000));
+      const minutes = Math.floor(remaining / 60);
+      const seconds = remaining % 60;
+      $status.text(`Очікуємо підтвердження… Залишилось ${minutes}:${String(seconds).padStart(2, "0")}`);
+      if (remaining <= 0) {
+        clearInterval(timer);
+        $status.html('<span style="color:#d92d20">● Час вичерпано</span>');
+        dialog.get_primary_btn().prop("disabled", true);
+      }
+    }
+
+    async function handleVerificationResult(result) {
+      if (result.status === "Verified") {
+        $status.html('<span style="color:#079455">● Покупця підтверджено</span>');
+        cleanup();
+        if (await useIdentifiedCustomer(result)) dialog.hide();
+      } else if (["Expired", "Failed", "Cancelled"].includes(result.status)) {
+        $status.html(`<span style="color:#d92d20">● Запит завершено: ${esc(result.status)}</span>`);
+        cleanup();
+        dialog.get_primary_btn().prop("disabled", true);
+      } else {
+        $status.text("Підтвердження ще не отримано. Спробуйте перевірити ще раз.");
+      }
+    }
+
+    function cleanup() {
+      if (timer) clearInterval(timer);
+      frappe.realtime.off("customer_identification_verified", onVerified);
+      frappe.realtime.off("customer_identification_cancelled", onCancelled);
+    }
+
+    async function onVerified(data) {
+      if (!data || data.request_id !== request.request_id) return;
+      const result = await identificationApi("get_status", { request_id: request.request_id });
+      await handleVerificationResult(result);
+    }
+
+    async function onCancelled(data) {
+      if (!data || data.request_id !== request.request_id) return;
+      cleanup();
+      $status.html('<span style="color:#d92d20">● Підтвердження скасовано покупцем</span>');
+      dialog.get_primary_btn().prop("disabled", true);
+    }
+
+    dialog.$wrapper.on("hidden.bs.modal", cleanup);
+
+    if (expiresAt) {
+      updateCountdown();
+      timer = setInterval(updateCountdown, 1000);
+    }
+    frappe.realtime.on("customer_identification_verified", onVerified);
+    frappe.realtime.on("customer_identification_cancelled", onCancelled);
+
     dialog.show();
     if (isSms) dialog.fields_dict.code.$input.focus();
   }
