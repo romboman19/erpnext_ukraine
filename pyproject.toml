@@ -8,6 +8,9 @@ version = "0.4.0"
 description = "ERPNext Ukraine business layer: FOP, cash desk/POS, PRRO, tax controls, documents and translations"
 requires-python = ">=3.11"
 readme = "README.md"
+dependencies = [
+    "qrcode>=8.0,<9",
+]
 
 [tool.setuptools]
 include-package-data = true

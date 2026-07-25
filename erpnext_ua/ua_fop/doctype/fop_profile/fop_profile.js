@@ -1,5 +1,13 @@
 frappe.ui.form.on("FOP Profile", {
 	refresh(frm) {
+		frm.set_query("cabinet_kep_key", () => ({ filters: { status: "Active" } }));
+		set_dps_managed_fields(frm);
+		frm.add_custom_button(
+			__("Завантажити дані з ДПС"),
+			() => load_taxpayer_card(frm),
+			__("ДПС")
+		);
+
 		if (frm.is_new()) return;
 
 		frm.add_custom_button(__("Згенерувати податковий календар"), () => {
@@ -38,7 +46,143 @@ frappe.ui.form.on("FOP Profile", {
 
 		render_headline(frm);
 	},
+
+	allow_manual_dps_fields(frm) {
+		set_dps_managed_fields(frm);
+	},
 });
+
+const DPS_FIELD_LABELS = {
+	fop_full_name: "ПІБ підприємця",
+	prro_registered_name: "Найменування для ПРРО",
+	tax_id: "РНОКПП",
+	status: "Статус",
+	single_tax_registration_date: "Дата реєстрації ЄП",
+	single_tax_group: "Група ЄП",
+	tax_rate_mode: "Режим ставки",
+	vat_payer: "Платник ПДВ",
+	vat_number: "ІПН платника ПДВ",
+	iban: "IBAN",
+	bank_name: "Банк",
+	kved_main: "Основний КВЕД",
+	registration_address: "Податкова адреса",
+};
+
+function set_dps_managed_fields(frm) {
+	const read_only = !frm.doc.allow_manual_dps_fields;
+	["fop_full_name", "prro_registered_name"].forEach((fieldname) => {
+		frm.set_df_property(fieldname, "read_only", read_only ? 1 : 0);
+	});
+}
+
+function escaped(value) {
+	return frappe.utils.escape_html(String(value ?? ""));
+}
+
+function preview_html(frm, result) {
+	const rows = Object.entries(result.updates || {})
+		.map(([fieldname, value]) => {
+			const current = frm.doc[fieldname] ?? "";
+			return `<tr>
+				<td><b>${escaped(__(DPS_FIELD_LABELS[fieldname] || fieldname))}</b></td>
+				<td>${escaped(current)}</td>
+				<td>${escaped(value)}</td>
+			</tr>`;
+		})
+		.join("");
+	const accounts = (result.bank_accounts || [])
+		.map((item) => `<li>${escaped(item.iban)} · ${escaped(item.bank_name)} · ${escaped(item.currency)}</li>`)
+		.join("");
+	const kveds = (result.kveds || [])
+		.map((item) => `<li>${item.is_main ? "<b>Основний:</b> " : ""}${escaped(item.code)} — ${escaped(item.title)}</li>`)
+		.join("");
+	return `<div class="small">
+		<table class="table table-bordered">
+			<thead><tr><th>${escaped(__("Поле"))}</th><th>${escaped(__("Зараз"))}</th><th>${escaped(__("ДПС"))}</th></tr></thead>
+			<tbody>${rows}</tbody>
+		</table>
+		${accounts ? `<b>${escaped(__("Рахунки"))}</b><ul>${accounts}</ul>` : ""}
+		${kveds ? `<b>${escaped(__("КВЕДи"))}</b><ul>${kveds}</ul>` : ""}
+	</div>`;
+}
+
+async function apply_draft_result(frm, result) {
+	await frm.set_value(result.updates || {});
+	const kveds = result.kveds || [];
+	if (kveds.length) {
+		const main = kveds.find((item) => item.is_main) || kveds[0];
+		await frm.set_value("kved_main", main.code);
+		frm.clear_table("kveds");
+		kveds.filter((item) => item.code !== main.code).forEach((item) => {
+			const row = frm.add_child("kveds");
+			row.kved = item.code;
+			row.title = item.title || item.code;
+		});
+		frm.refresh_field("kveds");
+	}
+	frm.dirty();
+}
+
+async function load_taxpayer_card(frm) {
+	if (!frm.doc.tax_id || !frm.doc.cabinet_kep_key) {
+		frappe.msgprint(__("Спочатку вкажіть РНОКПП і виберіть КЕП для кабінету ДПС."));
+		return;
+	}
+	const preview = await frappe.call({
+		method: "erpnext_ua.ua_fop.taxpayer_cabinet.preview_taxpayer_card",
+		args: { tax_id: frm.doc.tax_id, kep_key: frm.doc.cabinet_kep_key },
+		freeze: true,
+		freeze_message: __("Отримання облікових даних із ДПС…"),
+	});
+	const result = preview.message || {};
+	const accounts = result.bank_accounts || [];
+	const dialog = new frappe.ui.Dialog({
+		title: __("Дані ФОП із кабінету ДПС"),
+		fields: [
+			{ fieldname: "preview", fieldtype: "HTML", options: preview_html(frm, result) },
+			{
+				fieldname: "selected_iban",
+				fieldtype: "Select",
+				label: __("Основний IBAN"),
+				options: accounts.map((item) => item.iban).join("\n"),
+				default: result.updates && result.updates.iban,
+				hidden: accounts.length === 0,
+				reqd: accounts.length > 0,
+			},
+		],
+		primary_action_label: frm.is_new() ? __("Заповнити форму") : __("Оновити профіль"),
+		primary_action: async (values) => {
+			dialog.disable_primary_action();
+			try {
+				if (frm.is_new()) {
+					const prepared = await frappe.call({
+						method: "erpnext_ua.ua_fop.taxpayer_cabinet.prepare_fop_profile",
+						args: {
+							tax_id: frm.doc.tax_id,
+							kep_key: frm.doc.cabinet_kep_key,
+							selected_iban: values.selected_iban || null,
+						},
+						freeze: true,
+					});
+					await apply_draft_result(frm, prepared.message || {});
+					frappe.show_alert({ message: __("Дані заповнено. Перевірте та збережіть профіль."), indicator: "green" });
+				} else {
+					await frappe.call({
+						method: "erpnext_ua.ua_fop.taxpayer_cabinet.sync_fop_profile",
+						args: { fop_profile: frm.doc.name, selected_iban: values.selected_iban || null },
+						freeze: true,
+					});
+					await frm.reload_doc();
+					frappe.show_alert({ message: __("Профіль ФОП синхронізовано з ДПС"), indicator: "green" });
+				}
+				dialog.hide();
+			} finally {
+				dialog.enable_primary_action();
+			}
+		},
+	});
+	dialog.show();
+}
 
 function render_headline(frm) {
 	const fmt = (v) => format_currency(v, "UAH");

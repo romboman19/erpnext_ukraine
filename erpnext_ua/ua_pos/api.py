@@ -3,13 +3,20 @@ from __future__ import annotations
 import json
 import secrets
 import uuid
+import xml.etree.ElementTree as ET
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 
 import frappe
 from frappe import _
 from frappe.rate_limiter import rate_limit
 
+from erpnext_ua.ua_fiscal.payment import (
+	canonical_payform_name,
+	configured_payment_methods,
+	fiscal_payform_name,
+	resolve_payment_method,
+)
 from erpnext_ua.ua_pos.services.common import (
 	SESSION_TTL,
 	active_shift,
@@ -65,6 +72,18 @@ def _cash_balance(shift: str) -> float:
 			where operational_shift=%s and docstatus=1 and is_cash_drawer=1 and currency='UAH'""",
 			shift,
 		)[0][0]
+	)
+
+
+@frappe.whitelist()
+def list_cash_desks() -> list[dict]:
+	"""Return active desks for the login selector without exposing secrets."""
+	return frappe.get_all(
+		"POS Cash Desk",
+		filters={"status": "Active"},
+		fields=["name", "desk_name", "company", "warehouse", "prro_cash_register"],
+		order_by="desk_name asc, name asc",
+		limit_page_length=200,
 	)
 
 
@@ -133,6 +152,7 @@ def session_state(pos_session_token: str) -> dict:
 		"employee_name": employee_name or session["employee"],
 		"shift": shift,
 		"desk": desk,
+		"payment_methods": configured_payment_methods(),
 		"unfinished_orders": unfinished,
 	}
 
@@ -321,13 +341,268 @@ def fiscal_status(pos_session_token: str) -> dict:
 		return {"configured": False, "message": _("Для каси не налаштовано ПРРО")}
 	register = frappe.get_doc("PRRO Cash Register", desk.prro_cash_register)
 	shift = frappe.get_doc("PRRO Shift", register.current_shift).as_dict() if register.current_shift else None
-	return {"configured": True, "register": register.name, "current_shift": shift}
+	last_shift_name = frappe.db.get_value(
+		"PRRO Shift",
+		{"cash_register": register.name},
+		"name",
+		order_by="creation desc",
+	)
+	last_shift = None
+	if last_shift_name:
+		last_shift = frappe.db.get_value(
+			"PRRO Shift",
+			last_shift_name,
+			["name", "status", "opened_at", "closed_at", "z_report_fiscal_number"],
+			as_dict=True,
+		)
+	return {"configured": True, "register": register.name, "current_shift": shift, "last_shift": last_shift}
+
+
+def _fiscal_receipt_for_report(shift_name: str, receipt_kind: str):
+	name = frappe.db.get_value(
+		"PRRO Receipt",
+		{
+			"shift": shift_name,
+			"receipt_kind": receipt_kind,
+			"status": ("in", ("Fiscalized", "Offline")),
+		},
+		"name",
+		order_by="local_number desc",
+	)
+	return frappe.get_doc("PRRO Receipt", name) if name else None
+
+
+def _fiscal_xml_head(receipt) -> dict:
+	if not receipt or not receipt.receipt_xml:
+		return {}
+	try:
+		root = ET.fromstring(receipt.receipt_xml.encode("windows-1251"))
+	except (UnicodeEncodeError, ET.ParseError):
+		return {}
+	head = root.find("CHECKHEAD")
+	if head is None:
+		head = root.find("ZREPHEAD")
+	if head is None:
+		return {}
+	return {child.tag: child.text or "" for child in head}
+
+
+def _xml_float(parent, tag: str) -> float:
+	if parent is None:
+		return 0.0
+	return frappe.utils.flt(parent.findtext(tag) or 0, 2)
+
+
+def _xml_int(parent, tag: str) -> int:
+	if parent is None:
+		return 0
+	return int(parent.findtext(tag) or 0)
+
+
+def _z_report_totals(receipt) -> dict:
+	"""Read immutable totals from the accepted zrep01 XML for reprinting."""
+	try:
+		root = ET.fromstring(receipt.receipt_xml.encode("windows-1251"))
+	except (AttributeError, UnicodeEncodeError, ET.ParseError) as exc:
+		frappe.throw(_("Підтверджений Z-звіт містить некоректний XML: {0}").format(exc))
+
+	def section(tag: str) -> dict:
+		element = root.find(tag)
+		payforms = []
+		if element is not None:
+			for row in element.findall("./PAYFORMS/ROW"):
+				code = _xml_int(row, "PAYFORMCD")
+				payforms.append(
+					{
+						"code": code,
+						"name": canonical_payform_name(code, row.findtext("PAYFORMNM")),
+						"sum": _xml_float(row, "SUM"),
+					}
+				)
+		taxes = []
+		if element is not None:
+			for row in element.findall("./TAXES/ROW"):
+				taxes.append(
+					{
+						"type": _xml_int(row, "TYPE"),
+						"name": row.findtext("NAME") or "",
+						"letter": row.findtext("LETTER") or "",
+						"prc": _xml_float(row, "PRC"),
+						"turnover": _xml_float(row, "TURNOVER"),
+						"sum": _xml_float(row, "SUM"),
+					}
+				)
+		return {
+			"sum": _xml_float(element, "SUM"),
+			"count": _xml_int(element, "ORDERSCNT"),
+			"payforms": payforms,
+			"taxes": taxes,
+		}
+
+	body = root.find("ZREPBODY")
+	return {
+		"realiz": section("ZREPREALIZ"),
+		"returns": section("ZREPRETURN"),
+		"service_input": _xml_float(body, "SERVICEINPUT"),
+		"service_output": _xml_float(body, "SERVICEOUTPUT"),
+	}
+
+
+def _fiscal_head_datetime(head: dict) -> str:
+	value = f"{head.get('ORDERDATE') or ''}{head.get('ORDERTIME') or ''}"
+	if len(value) != 14 or not value.isdigit():
+		return ""
+	try:
+		return datetime.strptime(value, "%d%m%Y%H%M%S").strftime("%d.%m.%Y %H:%M:%S")
+	except ValueError:
+		return ""
+
+
+def _report_datetime(value) -> str:
+	"""Format fiscal-event timestamps for a human-readable report without microseconds."""
+	if not value:
+		return ""
+	try:
+		return frappe.utils.get_datetime(value).strftime("%d.%m.%Y %H:%M:%S")
+	except (TypeError, ValueError):
+		return str(value)
+
+
+def _fiscal_report_data(cash_desk: str, report_type: str, shift_name: str | None = None) -> dict:
+	"""Builds a printable snapshot from the immutable PRRO ledger."""
+	kind = str(report_type or "").strip().upper()
+	if kind not in {"OPENING", "X", "Z"}:
+		frappe.throw(_("Невідомий тип звіту ПРРО"))
+	desk = frappe.get_doc("POS Cash Desk", cash_desk)
+	if not desk.prro_cash_register:
+		frappe.throw(_("Для каси не налаштовано ПРРО"))
+	register = frappe.get_doc("PRRO Cash Register", desk.prro_cash_register)
+	shift_name = shift_name or register.current_shift
+	if not shift_name and kind in {"OPENING", "Z"}:
+		shift_name = frappe.db.get_value(
+			"PRRO Shift",
+			{"cash_register": register.name},
+			"name",
+			order_by="creation desc",
+		)
+	if not shift_name:
+		frappe.throw(_("Фіскальну зміну не знайдено"))
+	shift = frappe.get_doc("PRRO Shift", shift_name)
+	if shift.cash_register != register.name:
+		frappe.throw(_("Зміна належить іншій касі ПРРО"), frappe.PermissionError)
+
+	from erpnext_ua.ua_fiscal import orchestration
+
+	opening = _fiscal_receipt_for_report(shift.name, "Open Shift")
+	if not opening:
+		frappe.throw(_("Підтверджений документ відкриття зміни не знайдено"))
+	z_receipt = _fiscal_receipt_for_report(shift.name, "Z Report")
+	if kind == "Z" and not z_receipt:
+		frappe.throw(_("Підтверджений Z-звіт ще не сформовано"))
+	# X is a live state report; Z must reproduce the immutable document that DPS
+	# accepted rather than recalculate figures from mutable application data.
+	totals = _z_report_totals(z_receipt) if kind == "Z" else orchestration._shift_totals(shift.name)
+	head = _fiscal_xml_head(z_receipt if kind == "Z" else opening)
+
+	def payment_total(bucket: dict, code: int) -> float:
+		return frappe.utils.flt(
+			sum(frappe.utils.flt(row.get("sum")) for row in bucket.get("payforms", []) if int(row.get("code") or 0) == code),
+			2,
+		)
+
+	sales = frappe.utils.flt(totals["realiz"]["sum"], 2)
+	returns = frappe.utils.flt(totals["returns"]["sum"], 2)
+	cash_balance = frappe.utils.flt(
+		payment_total(totals["realiz"], 0)
+		- payment_total(totals["returns"], 0)
+		+ totals["service_input"]
+		- totals["service_output"],
+		2,
+	)
+	document = opening if kind == "OPENING" else z_receipt if kind == "Z" else None
+	tax_number = head.get("IPN") or head.get("TIN") or frappe.db.get_value("FOP Profile", register.fop_profile, "tax_id")
+	titles = {
+		"OPENING": "ЧЕК ВІДКРИТТЯ ЗМІНИ",
+		"X": "X-ЗВІТ",
+		"Z": "Z-ЗВІТ",
+	}
+	return {
+		"report_type": kind,
+		"title": titles[kind],
+		"non_fiscal": kind == "X",
+		"generated_at": _report_datetime(frappe.utils.now_datetime()),
+		"organization": head.get("ORGNM") or frappe.db.get_value("FOP Profile", register.fop_profile, "prro_registered_name"),
+		"tax_id": head.get("TIN") or frappe.db.get_value("FOP Profile", register.fop_profile, "tax_id"),
+		"tax_prefix": "ПН" if head.get("IPN") else "ІД",
+		"tax_number": tax_number,
+		"point_name": head.get("POINTNM") or register.unit_name,
+		"point_address": head.get("POINTADDR") or register.unit_address,
+		"cashier": head.get("CASHIER") or shift.cashier,
+		"cash_register": register.name,
+		"cash_register_fiscal_number": register.fiscal_number,
+		"cash_desk_local_number": register.register_local_number,
+		"shift": shift.name,
+		"operational_shift": shift.operational_shift,
+		"shift_status": shift.status,
+		"opened_at": _report_datetime(shift.opened_at),
+		"closed_at": _report_datetime(shift.closed_at),
+		"document_at": _fiscal_head_datetime(head),
+		"document_uid": head.get("UID"),
+		"document_name": document.name if document else None,
+		"local_number": document.local_number if document else None,
+		"fiscal_number": document.fiscal_number if document else None,
+		"fiscal_number_label": "Фіскальний № Z-звіту" if kind == "Z" else "ЧЕК №",
+		"is_offline": int(document.is_offline or 0) if document else 0,
+		"testing": str(head.get("TESTING") or "").lower() == "true",
+		"sales_receipts_count": int(totals["realiz"]["count"]),
+		"return_receipts_count": int(totals["returns"]["count"]),
+		"receipts_count": int(totals["realiz"]["count"] + totals["returns"]["count"]),
+		"sales_total": sales,
+		"returns_total": returns,
+		"net_total": frappe.utils.flt(sales - returns, 2),
+		"service_input": frappe.utils.flt(totals["service_input"], 2),
+		"service_output": frappe.utils.flt(totals["service_output"], 2),
+		"cash_balance": cash_balance,
+		"sales_payforms": totals["realiz"]["payforms"],
+		"return_payforms": totals["returns"]["payforms"],
+		"sales_taxes": totals["realiz"]["taxes"],
+		"return_taxes": totals["returns"]["taxes"],
+	}
+
+
+@frappe.whitelist()
+def fiscal_report_data(pos_session_token: str, report_type: str, shift: str | None = None) -> dict:
+	session = get_session(pos_session_token)
+	return _fiscal_report_data(session["cash_desk"], report_type, shift)
+
+
+@frappe.whitelist()
+def queue_fiscal_report_print(
+	pos_session_token: str,
+	report_type: str,
+	shift: str | None = None,
+	idem_key: str | None = None,
+) -> dict:
+	session = get_session(pos_session_token)
+	report = _fiscal_report_data(session["cash_desk"], report_type, shift)
+	desk = frappe.get_doc("POS Cash Desk", session["cash_desk"])
+	if not desk.receipt_printer:
+		return {"fallback_browser": True, "report": report}
+	from erpnext_ua.ua_pos.print_service import queue_fiscal_report
+
+	job = queue_fiscal_report(
+		desk.name,
+		report,
+		idem_key=idem_key or uuid.uuid4().hex,
+	)
+	audit("fiscal_report_print_queued", session, ("PRRO Shift", report["shift"]), {"print_job": job.name})
+	return {"fallback_browser": False, "job": job.name, "status": job.status}
 
 
 @frappe.whitelist()
 def fiscal_open_shift(pos_session_token: str) -> dict:
 	session = get_session(pos_session_token)
-	_require_shift(session)
+	operational_shift = _require_shift(session)
 	desk = frappe.get_doc("POS Cash Desk", session["cash_desk"])
 	if not desk.prro_cash_register:
 		frappe.throw(_("Для каси не налаштовано ПРРО"))
@@ -335,11 +610,56 @@ def fiscal_open_shift(pos_session_token: str) -> dict:
 
 	register = frappe.get_doc("PRRO Cash Register", desk.prro_cash_register)
 	if register.current_shift:
+		# Legacy/recovered openings could miss this relation even though the
+		# management shift was validated before the fiscal operation.
+		if not frappe.db.get_value("PRRO Shift", register.current_shift, "operational_shift"):
+			frappe.db.set_value(
+				"PRRO Shift",
+				register.current_shift,
+				"operational_shift",
+				operational_shift,
+				update_modified=False,
+			)
+			frappe.db.commit()
 		return fiscal_status(pos_session_token)
 	key = desk.default_kep_key or register.default_kep_key
 	if not key:
 		frappe.throw(_("Для ПРРО не налаштовано КЕП"))
-	orchestration.open_shift(register.name, key)
+	try:
+		orchestration.open_shift(
+			register.name,
+			key,
+			operational_shift=operational_shift,
+		)
+	except Exception:
+		# Після остаточно відхиленого документа recovery має одразу звірити
+		# його відсутність у ДПС і повернути локальний номер. Інакше перша
+		# помилка приховує причину, а друга спроба лише повідомляє про
+		# незавершений ledger-запис.
+		failed_receipt = frappe.db.get_value(
+			"PRRO Receipt",
+			{
+				"cash_register": register.name,
+				"receipt_kind": "Open Shift",
+				"status": ("in", ("Uncertain", "Error", "Fiscalized")),
+			},
+			"name",
+			order_by="local_number desc",
+		)
+		recovered = None
+		if failed_receipt:
+			try:
+				recovered = orchestration.reconcile_receipt(failed_receipt)
+			except Exception:
+				frappe.log_error(
+					frappe.get_traceback(),
+					f"PRRO open-shift recovery {failed_receipt}",
+				)
+		# Timeout/protocol ambiguity can coexist with an accepted DPS document.
+		# If immediate reconciliation confirmed it, return success instead of
+		# asking the cashier to click again and risking a duplicate operation.
+		if not recovered or recovered.get("status") != "Fiscalized":
+			raise
 	audit("fiscal_shift_open", session, ("PRRO Cash Register", register.name))
 	return fiscal_status(pos_session_token)
 
@@ -360,7 +680,32 @@ def fiscal_close_shift(pos_session_token: str) -> dict:
 	key = desk.default_kep_key or register.default_kep_key
 	if not key:
 		frappe.throw(_("Для ПРРО не налаштовано КЕП"))
-	orchestration.close_shift(register.name, key)
+	try:
+		orchestration.close_shift(register.name, key)
+	except Exception:
+		failed_name = frappe.db.get_value(
+			"PRRO Receipt",
+			{
+				"cash_register": register.name,
+				"shift": register.current_shift,
+				"receipt_kind": ("in", ("Z Report", "Close Shift")),
+				"status": ("in", ("Uncertain", "Error", "Fiscalized")),
+			},
+			"name",
+			order_by="local_number desc",
+		)
+		recovered = None
+		if failed_name:
+			try:
+				recovered = orchestration.reconcile_receipt(failed_name)
+			except Exception:
+				frappe.log_error(frappe.get_traceback(), f"PRRO close-shift recovery {failed_name}")
+		if not recovered or recovered.get("status") != "Fiscalized":
+			raise
+		# If only Z was accepted, continue with the distinct Close Shift
+		# document. close_shift resumes the confirmed Z idempotently.
+		if recovered.get("receipt_kind") == "Z Report":
+			orchestration.close_shift(register.name, key)
 	audit("fiscal_shift_close", session, ("PRRO Cash Register", register.name))
 	return fiscal_status(pos_session_token)
 
@@ -866,12 +1211,32 @@ def _save_terminal_transaction(attempt, terminal: str, operation_id: str, result
 	txn.invoice_number = result.invoice_number
 	txn.auth_code = result.auth_code
 	txn.card_mask = result.card_mask
+	txn.merchant_id = result.merchant_id
+	txn.device_id = result.device_id
+	txn.payment_system_name = result.payment_system_name
+	txn.acquirer_name = result.acquirer_name
 	txn.response_json = frappe.as_json(_masked_terminal_payload(result.raw))
 	txn.save(ignore_permissions=True)
+	terminal_updates = _terminal_fiscal_updates(result)
+	if terminal_updates:
+		frappe.db.set_value("PB POS Terminal", terminal, terminal_updates, update_modified=False)
 	attempt.terminal_transaction = txn.name
 	attempt.status = "Confirmed" if result.status == "confirmed" else ("Declined" if result.status == "declined" else "Unknown")
 	attempt.save(ignore_permissions=True)
 	return txn
+
+
+def _terminal_fiscal_updates(result) -> dict:
+	return {
+		fieldname: value
+		for fieldname, value in (
+			("merchant_id", result.merchant_id),
+			("device_id", result.device_id),
+			("payment_system_name", result.payment_system_name),
+			("acquirer_name", result.acquirer_name),
+		)
+		if value
+	}
 
 
 def _validate_order_items(order):
@@ -1051,10 +1416,18 @@ def _fiscalize(order, desk, si):
 	for payment in order.payments_plan:
 		if payment.status != "Confirmed":
 			continue
-		configured_code = frappe.db.get_value("Mode of Payment", payment.mode_of_payment, "ua_payformcd")
+		configured_code = payment.get("prro_payment_code")
+		if configured_code in (None, ""):
+			configured_code = frappe.db.get_value("Mode of Payment", payment.mode_of_payment, "ua_payformcd")
+		code = int(configured_code) if configured_code not in (None, "") else (0 if payment.kind == "Cash" else 1)
 		row = {
-			"code": int(configured_code) if configured_code not in (None, "") else (0 if payment.kind == "Cash" else 1),
-			"name": payment.mode_of_payment,
+			"code": code,
+			"name": fiscal_payform_name(
+				payment.kind,
+				code,
+				payment.get("prro_payment_means") or payment.mode_of_payment,
+			),
+			"form": payment.get("prro_payment_form") or ("ГОТІВКА" if code == 0 else "БЕЗГОТІВКОВА"),
 			"sum": payment.amount,
 		}
 		if payment.kind == "Cash":
@@ -1064,16 +1437,39 @@ def _fiscalize(order, desk, si):
 			attempt = frappe.get_doc("POS Payment Attempt", payment.payment_attempt)
 			if attempt.terminal_transaction:
 				txn = frappe.get_doc("Terminal Transaction", attempt.terminal_transaction)
+				terminal = frappe.get_doc("PB POS Terminal", txn.terminal)
+				paysys = {
+					"tax_num": terminal.payment_system_tax_number,
+					"name": txn.payment_system_name or terminal.payment_system_name,
+					"acquire_id": txn.merchant_id or terminal.merchant_id,
+					"acquire_pn": terminal.acquirer_tax_number,
+					"acquire_name": txn.acquirer_name or terminal.acquirer_name,
+					"transaction_id": txn.operation_id,
+					"transaction_date": frappe.utils.get_datetime(txn.creation).strftime("%d%m%Y%H%M%S"),
+					"transaction_number": txn.invoice_number or txn.rrn,
+					"device_id": txn.device_id or terminal.device_id,
+					"epz_details": txn.card_mask,
+					"auth_code": txn.auth_code,
+					"sum": payment.amount,
+				}
+				missing = [
+					label
+					for fieldname, label in (
+						("name", "платіжна система"),
+						("acquire_id", "Merchant ID"),
+						("acquire_name", "найменування еквайра"),
+						("device_id", "Terminal ID"),
+					)
+					if not paysys.get(fieldname)
+				]
+				if missing:
+					frappe.throw(
+						_("Термінал не повернув реквізити для фіскального чека: {0}").format(
+							", ".join(missing)
+						)
+					)
 				row["paysys"] = [
-					{
-						"transaction_id": txn.operation_id,
-						"transaction_date": frappe.utils.get_datetime(txn.creation).isoformat(),
-						"transaction_number": txn.invoice_number or txn.rrn,
-						"device_id": txn.terminal,
-						"epz_details": txn.card_mask,
-						"auth_code": txn.auth_code,
-						"sum": payment.amount,
-					}
+					paysys
 				]
 		payments.append(row)
 	total = abs(frappe.utils.flt(order.grand_total))
@@ -1100,6 +1496,20 @@ def _fiscalize(order, desk, si):
 	)
 
 
+def _reconcile_existing_receipt(receipt_name: str | None, *, include_error: bool = False) -> dict | None:
+	"""Safely resolve an existing fiscal document without blindly resending it."""
+	if not receipt_name:
+		return None
+	status = frappe.db.get_value("PRRO Receipt", receipt_name, "status")
+	if status == "Fiscalized":
+		return {"name": receipt_name, "status": status}
+	if status != "Uncertain" and not (include_error and status == "Error"):
+		return {"name": receipt_name, "status": status}
+	from erpnext_ua.ua_fiscal.orchestration import reconcile_receipt
+
+	return reconcile_receipt(receipt_name)
+
+
 def _completed_returns(original_order: str) -> list[str]:
 	return frappe.get_all(
 		"POS Order",
@@ -1115,7 +1525,7 @@ def _completed_returns(original_order: str) -> list[str]:
 def _return_summary(original) -> dict:
 	return_names = _completed_returns(original.name)
 	returned_by_item = defaultdict(float)
-	refunded_by_kind = defaultdict(float)
+	refunded_by_method = defaultdict(float)
 	if return_names:
 		for row in frappe.get_all(
 			"POS Order Item",
@@ -1126,9 +1536,9 @@ def _return_summary(original) -> dict:
 		for row in frappe.get_all(
 			"POS Order Payment",
 			filters={"parent": ("in", return_names), "status": "Confirmed"},
-			fields=["kind", "amount"],
+			fields=["kind", "mode_of_payment", "amount"],
 		):
-			refunded_by_kind[row.kind] += frappe.utils.flt(row.amount)
+			refunded_by_method[(row.kind, row.mode_of_payment)] += frappe.utils.flt(row.amount)
 	items = []
 	for row in original.items:
 		available = max(0, frappe.utils.flt(row.qty) - returned_by_item[row.name])
@@ -1145,21 +1555,26 @@ def _return_summary(original) -> dict:
 				"amount": row.amount,
 			}
 		)
-	paid_by_kind = defaultdict(float)
-	mode_by_kind = {}
+	paid_by_method = defaultdict(float)
+	method_snapshot = {}
 	for row in original.payments_plan:
 		if row.status == "Confirmed":
-			paid_by_kind[row.kind] += frappe.utils.flt(row.amount)
-			mode_by_kind.setdefault(row.kind, row.mode_of_payment)
+			key = (row.kind, row.mode_of_payment)
+			paid_by_method[key] += frappe.utils.flt(row.amount)
+			method_snapshot[key] = row
 	refund_limits = [
 		{
-			"kind": kind,
-			"mode_of_payment": mode_by_kind[kind],
+			"kind": key[0],
+			"mode_of_payment": key[1],
+			"payment_form": method_snapshot[key].get("prro_payment_form"),
+			"payment_means": method_snapshot[key].get("prro_payment_means") or key[1],
+			"payment_code": method_snapshot[key].get("prro_payment_code"),
+			"payment_context": method_snapshot[key].get("payment_context") or "Звичайна оплата",
 			"paid": amount,
-			"refunded": refunded_by_kind[kind],
-			"available": max(0, amount - refunded_by_kind[kind]),
+			"refunded": refunded_by_method[key],
+			"available": max(0, amount - refunded_by_method[key]),
 		}
-		for kind, amount in paid_by_kind.items()
+		for key, amount in paid_by_method.items()
 	]
 	return {"items": items, "refund_limits": refund_limits}
 
@@ -1167,9 +1582,12 @@ def _return_summary(original) -> dict:
 @frappe.whitelist()
 def return_details(pos_session_token: str, token: str) -> dict:
 	session = get_session(pos_session_token)
+	from erpnext_ua.ua_pos.barcode import decode_lookup_token
+
+	lookup_token = decode_lookup_token(token)
 	name = frappe.db.get_value(
 		"POS Order",
-		{"lookup_token": (token or "").strip(), "status": ("in", tuple(FINAL_ORDER_STATUSES))},
+		{"lookup_token": lookup_token, "status": ("in", tuple(FINAL_ORDER_STATUSES))},
 		"name",
 	)
 	if not name:
@@ -1243,13 +1661,20 @@ def create_return_order(pos_session_token: str, token: str, items, idem_key: str
 
 def _validate_return_payments(order, payment_rows: list[dict]):
 	original = frappe.get_doc("POS Order", order.return_against)
-	limits = {row["kind"]: frappe.utils.flt(row["available"]) for row in _return_summary(original)["refund_limits"]}
+	limits = {
+		(row["kind"], row["mode_of_payment"]): frappe.utils.flt(row["available"])
+		for row in _return_summary(original)["refund_limits"]
+	}
 	requested = defaultdict(float)
 	for row in payment_rows:
-		requested[row.get("kind")] += frappe.utils.flt(row.get("amount"))
-	for kind, amount in requested.items():
-		if amount > limits.get(kind, 0) + 0.001:
-			frappe.throw(_("Сума повернення способом {0} перевищує доступний ліміт {1}").format(kind, limits.get(kind, 0)))
+		requested[(row.get("kind"), row.get("mode_of_payment"))] += frappe.utils.flt(row.get("amount"))
+	for key, amount in requested.items():
+		if amount > limits.get(key, 0) + 0.001:
+			frappe.throw(
+				_("Сума повернення способом {0} перевищує доступний ліміт {1}").format(
+					key[1], limits.get(key, 0)
+				)
+			)
 
 
 def _record_birthday_benefit(order):
@@ -1287,8 +1712,20 @@ def _complete_paid_order(doc, desk, session) -> dict:
 		try:
 			receipt = _fiscalize(doc, desk, si)
 		except Exception as exc:
-			doc.status = "Fiscal Pending"
-			doc.recovery_note = str(exc)[:500]
+			# The document can already be accepted by DPS even when verification
+			# of the signed ticket fails locally. Resolve by local number before
+			# returning Fiscal Pending; never submit a second sale blindly.
+			receipt = doc.prro_receipt or frappe.db.get_value(
+				"PRRO Receipt", {"pos_order": doc.name}, "name", order_by="local_number desc"
+			)
+			recovered = None
+			try:
+				recovered = _reconcile_existing_receipt(receipt)
+			except Exception:
+				frappe.log_error(frappe.get_traceback(), f"POS immediate fiscal recovery {doc.name}")
+			doc.prro_receipt = receipt
+			doc.status = "Completed" if recovered and recovered.get("status") == "Fiscalized" else "Fiscal Pending"
+			doc.recovery_note = None if doc.status == "Completed" else str(exc)[:500]
 		else:
 			doc.prro_receipt = receipt
 			receipt_status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
@@ -1343,18 +1780,23 @@ def _queue_print_if_configured(doc):
 @frappe.whitelist()
 def retry_fiscalization(pos_session_token: str, order: str) -> dict:
 	session = get_session(pos_session_token)
-	doc = _owned_order(session, order, {"Fiscal Pending", "Posted", "Manual Review"})
+	doc = _owned_order(session, order)
+	# A stale browser can still show Fiscal Pending after background recovery.
+	# Returning the completed document makes the action idempotent and refreshes
+	# the UI without touching DPS, accounting or cash movements again.
+	if doc.status in FINAL_ORDER_STATUSES | {"Printing"}:
+		return doc.as_dict()
+	if doc.status not in {"Fiscal Pending", "Posted", "Manual Review"}:
+		frappe.throw(_("Цей чек не очікує відновлення фіскалізації"))
 	if not doc.sales_invoice:
 		frappe.throw(_("Sales Invoice ще не створено"))
 	failed_receipt = doc.prro_receipt or frappe.db.get_value(
 		"PRRO Receipt", {"pos_order": doc.name}, "name", order_by="local_number desc"
 	)
-	if failed_receipt and frappe.db.get_value("PRRO Receipt", failed_receipt, "status") == "Error":
-		# Reconcile спершу перевіряє DocumentInfoByLocalNum. Повтор дозволяється
-		# лише якщо registrar state підтвердив, що останній номер не спожито.
-		from erpnext_ua.ua_fiscal.orchestration import reconcile_receipt
-
-		reconcile_receipt(failed_receipt)
+	# Reconcile first for both ambiguous delivery and a definite error.
+	# A retry after Error is allowed only when registrar state proves that the
+	# last local number was not consumed; orchestration enforces that invariant.
+	_reconcile_existing_receipt(failed_receipt, include_error=True)
 	desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
 	receipt = _fiscalize(doc, desk, frappe.get_doc("Sales Invoice", doc.sales_invoice))
 	status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
@@ -1375,6 +1817,10 @@ def recover_pos_fiscal_pending():
 			if not doc.sales_invoice:
 				continue
 			desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
+			failed_receipt = doc.prro_receipt or frappe.db.get_value(
+				"PRRO Receipt", {"pos_order": doc.name}, "name", order_by="local_number desc"
+			)
+			_reconcile_existing_receipt(failed_receipt)
 			receipt = _fiscalize(doc, desk, frappe.get_doc("Sales Invoice", doc.sales_invoice))
 			status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
 			if not receipt or status in {"Fiscalized", "Offline"}:
@@ -1400,11 +1846,46 @@ def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) 
 	payment_rows = parse_rows(payments)
 	if not payment_rows:
 		frappe.throw(_("Вкажіть спосіб оплати"))
+	desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
+	return_methods = {}
+	if doc.order_type == "Return":
+		original = frappe.get_doc("POS Order", doc.return_against)
+		return_methods = {
+			(row["mode_of_payment"], row.get("payment_form") or ""): row
+			for row in _return_summary(original)["refund_limits"]
+		}
 	for row in payment_rows:
-		if row.get("kind") not in {"Cash", "Card", "IBAN", "Bonus", "Installment"}:
-			frappe.throw(_("Некоректний тип оплати"))
-		if not frappe.db.exists("Mode of Payment", row.get("mode_of_payment")):
-			frappe.throw(_("Спосіб оплати {0} не знайдено").format(row.get("mode_of_payment")))
+		return_snapshot = return_methods.get((row.get("mode_of_payment"), row.get("payment_form") or ""))
+		if return_snapshot and return_snapshot.get("payment_code") not in (None, ""):
+			method = {
+				"mode_of_payment": return_snapshot["mode_of_payment"],
+				"kind": return_snapshot["kind"],
+				"payment_form": return_snapshot.get("payment_form") or ("ГОТІВКА" if return_snapshot["kind"] == "Cash" else "БЕЗГОТІВКОВА"),
+				"payment_means": return_snapshot.get("payment_means") or return_snapshot["mode_of_payment"],
+				"payment_code": int(return_snapshot["payment_code"]),
+				"payment_context": return_snapshot.get("payment_context") or "Звичайна оплата",
+				"requires_terminal": int(return_snapshot["kind"] == "Card"),
+				"currency": "UAH",
+			}
+		else:
+			method = resolve_payment_method(
+				row.get("mode_of_payment"),
+				requested_form=row.get("payment_form"),
+				context=row.get("payment_context"),
+			)
+		row.update(
+			{
+				"mode_of_payment": method["mode_of_payment"],
+				"kind": method["kind"],
+				"prro_payment_form": method["payment_form"],
+				"prro_payment_means": method["payment_means"],
+				"prro_payment_code": method["payment_code"],
+				"payment_context": method["payment_context"],
+				"currency": method["currency"],
+			}
+		)
+		if method["requires_terminal"] and not desk.terminal:
+			frappe.throw(_("Для способу оплати {0} потрібен інтегрований платіжний термінал").format(method["payment_means"]))
 	if abs(sum(frappe.utils.flt(row.get("amount")) for row in payment_rows) - doc.grand_total) > 0.01:
 		frappe.throw(_("Сума оплат має дорівнювати сумі чека"))
 	if doc.fiscal_mode == "Non Fiscal" and len(payment_rows) > 1:
@@ -1414,7 +1895,8 @@ def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) 
 		cash_refund = sum(frappe.utils.flt(row.get("amount")) for row in payment_rows if row.get("kind") == "Cash")
 		if cash_refund > _cash_balance(doc.operational_shift) + 0.001:
 			frappe.throw(_("У касі недостатньо готівки для повернення"))
-	desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
+	if doc.fiscal_mode == "Fiscal" and any(row.get("kind") == "Card" for row in payment_rows) and not desk.terminal:
+		frappe.throw(_("Для цієї каси не налаштовано банківський термінал"))
 	doc.status = "Payment In Progress"
 	doc.payments_plan = []
 	doc.save(ignore_permissions=True)
@@ -1476,6 +1958,9 @@ def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) 
 	if doc.status != "Paid":
 		frappe.db.commit()
 		return doc.as_dict()
+	# Persist the confirmed external payment and its fiscal attributes before
+	# invoice/PRRO completion, so a later fiscal error cannot erase bank evidence.
+	frappe.db.commit()
 	return _complete_paid_order(doc, desk, session)
 
 
@@ -1498,8 +1983,13 @@ def card_status(pos_session_token: str, attempt: str) -> dict:
 		txn.invoice_number = result.invoice_number or txn.invoice_number
 		txn.auth_code = result.auth_code or txn.auth_code
 		txn.card_mask = result.card_mask or txn.card_mask
+		for fieldname, value in _terminal_fiscal_updates(result).items():
+			setattr(txn, fieldname, value)
 		txn.response_json = frappe.as_json(_masked_terminal_payload(result.raw))
 		txn.save(ignore_permissions=True)
+	terminal_updates = _terminal_fiscal_updates(result)
+	if terminal_updates:
+		frappe.db.set_value("PB POS Terminal", terminal, terminal_updates, update_modified=False)
 	doc.status = (
 		"Confirmed"
 		if result.status == "confirmed"
@@ -1518,6 +2008,8 @@ def card_status(pos_session_token: str, attempt: str) -> dict:
 		order.status = "Payment Unknown"
 	order.save(ignore_permissions=True)
 	if order.status == "Paid":
+		# Preserve the recovered bank result before invoice/PRRO completion.
+		frappe.db.commit()
 		order_payload = _complete_paid_order(order, frappe.get_doc("POS Cash Desk", order.cash_desk), session)
 	else:
 		frappe.db.commit()
@@ -1541,24 +2033,38 @@ def receipt_data(pos_session_token: str, order: str) -> dict:
 		"Company", desk.company, ["company_name", "tax_id", "company_description"], as_dict=True
 	) or {}
 	employee_name = frappe.db.get_value("Employee", doc.employee, "employee_name") or doc.employee
+	from erpnext_ua.ua_pos.barcode import code128_svg_data_uri, encode_lookup_token
+
+	lookup_barcode = encode_lookup_token(doc.lookup_token)
 	fiscal_receipt = None
 	if doc.fiscal_mode == "Fiscal":
 		if not doc.prro_receipt:
 			frappe.throw(_("Фіскальний чек ще не створено. Спочатку виконайте відновлення фіскалізації."))
-		fiscal_receipt = frappe.db.get_value(
-			"PRRO Receipt",
-			doc.prro_receipt,
-			["name", "status", "fiscal_number", "local_number", "is_offline", "qr_data", "fiscalized_at"],
-			as_dict=True,
+		receipt_doc = frappe.get_doc("PRRO Receipt", doc.prro_receipt)
+		fiscal_receipt = frappe._dict(
+			{
+				"name": receipt_doc.name,
+				"status": receipt_doc.status,
+				"fiscal_number": receipt_doc.fiscal_number,
+				"local_number": receipt_doc.local_number,
+				"is_offline": receipt_doc.is_offline,
+				"fiscalized_at": receipt_doc.fiscalized_at,
+			}
 		)
 		if not fiscal_receipt or fiscal_receipt.status not in {"Fiscalized", "Offline"}:
 			frappe.throw(_("Фіскальний документ ще не підтверджено і його не можна друкувати"))
+		from erpnext_ua.ua_pos.print_service import fiscal_snapshot, render_browser_fiscal_receipt
+
+		snapshot = fiscal_snapshot(receipt_doc, include_qr_image=True)
+		fiscal_receipt["html"] = render_browser_fiscal_receipt(snapshot, lookup_token=doc.lookup_token)
 	return {
 		"order": doc.as_dict(),
 		"company": company,
 		"cash_desk": desk.desk_name,
 		"employee_name": employee_name,
 		"fiscal_receipt": fiscal_receipt,
+		"lookup_barcode": lookup_barcode,
+		"lookup_barcode_svg": code128_svg_data_uri(lookup_barcode),
 		"printed_at": str(frappe.utils.now_datetime()),
 	}
 

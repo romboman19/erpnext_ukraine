@@ -7,10 +7,17 @@
  "field_order": [
   "company",
   "fop_full_name",
+  "prro_registered_name",
   "tax_id",
   "column_break_ident",
   "status",
   "single_tax_registration_date",
+  "section_dps_cabinet",
+  "cabinet_kep_key",
+  "allow_manual_dps_fields",
+  "column_break_dps_cabinet",
+  "dps_last_sync_at",
+  "dps_last_sync_by",
   "section_tax",
   "single_tax_group",
   "tax_rate_mode",
@@ -42,10 +49,20 @@
    "unique": 1
   },
   {
+   "description": "Заповнюється автоматично з приватного кабінету ДПС. Для виняткового ручного виправлення увімкніть прапорець у секції «Електронний кабінет ДПС».",
    "fieldname": "fop_full_name",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "ПІБ підприємця",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "description": "Заповнюється автоматично з ДПС для XML-поля ORGNM. Регістр, пробіли та префікси мають збігатися буквально.",
+   "fieldname": "prro_registered_name",
+   "fieldtype": "Data",
+   "label": "Найменування для ПРРО (ORGNM)",
+   "read_only": 1,
    "reqd": 1
   },
   {
@@ -72,6 +89,42 @@
    "fieldname": "single_tax_registration_date",
    "fieldtype": "Date",
    "label": "Дата реєстрації платником ЄП"
+  },
+  {
+   "fieldname": "section_dps_cabinet",
+   "fieldtype": "Section Break",
+   "label": "Електронний кабінет ДПС"
+  },
+  {
+   "description": "Створіть або виберіть UA KEP Key із приватним файлом ключа та паролем. Секрети не дублюються у профілі ФОП.",
+   "fieldname": "cabinet_kep_key",
+   "fieldtype": "Link",
+   "label": "КЕП для кабінету ДПС",
+   "options": "UA KEP Key"
+  },
+  {
+   "default": "0",
+   "description": "Резервний режим на випадок, коли реєстраційні дані ДПС потрібно виправити вручну. Наступне завантаження з ДПС знову запропонує офіційні значення.",
+   "fieldname": "allow_manual_dps_fields",
+   "fieldtype": "Check",
+   "label": "Ручне коригування ПІБ та ORGNM"
+  },
+  {
+   "fieldname": "column_break_dps_cabinet",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "dps_last_sync_at",
+   "fieldtype": "Datetime",
+   "label": "Остання синхронізація з ДПС",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dps_last_sync_by",
+   "fieldtype": "Link",
+   "label": "Синхронізував",
+   "options": "User",
+   "read_only": 1
   },
   {
    "fieldname": "section_tax",

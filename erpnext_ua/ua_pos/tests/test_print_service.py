@@ -5,7 +5,16 @@ from unittest.mock import patch
 import frappe
 
 from erpnext_ua.ua_pos.doctype.pos_printer.pos_printer import is_lan_address
-from erpnext_ua.ua_pos.print_service import EscPosReceipt, render_order_receipt
+from erpnext_ua.ua_pos.barcode import code128_svg_data_uri, decode_lookup_token, encode_lookup_token
+from erpnext_ua.ua_pos.print_service import (
+	EscPosReceipt,
+	_qr_svg_data_uri,
+	fiscal_snapshot,
+	render_browser_fiscal_receipt,
+	render_browser_fiscal_report,
+	render_fiscal_report,
+	render_order_receipt,
+)
 
 
 class TestPrintService(unittest.TestCase):
@@ -27,16 +36,35 @@ class TestPrintService(unittest.TestCase):
 		self.assertIn(b"1P0https://example.invalid/check/1", payload)
 		self.assertTrue(payload.endswith(b"\x1dV\x00"))
 
+	def test_browser_qr_is_generated_locally_as_svg(self):
+		uri = _qr_svg_data_uri("https://cabinet.tax.gov.ua/cashregs/check?id=1")
+		self.assertTrue(uri.startswith("data:image/svg+xml;base64,"))
+		self.assertGreater(len(uri), 500)
+
+	def test_return_lookup_barcode_is_compact_and_reversible(self):
+		token = "dec4a628-2965-479a-a666-956fbf0ccb41"
+		barcode = encode_lookup_token(token)
+		self.assertEqual(len(barcode), 22)
+		self.assertEqual(decode_lookup_token(barcode), token)
+		self.assertEqual(decode_lookup_token(token), token)
+		self.assertTrue(code128_svg_data_uri(barcode).startswith("data:image/svg+xml;base64,"))
+
 	def test_render_fiscal_receipt_uses_immutable_xml(self):
 		xml = (
 			'<?xml version="1.0" encoding="windows-1251"?>'
 			"<CHECK><CHECKHEAD><TIN>3184710691</TIN><ORGNM>ФОП Тест</ORGNM>"
 			"<POINTNM>Магазин</POINTNM><POINTADDR>м. Рівне</POINTADDR><CASHIER>Касир</CASHIER>"
-			"<ORDERDATE>14072026</ORDERDATE><ORDERTIME>131500</ORDERTIME></CHECKHEAD>"
+			"<ORDERDATE>14072026</ORDERDATE><ORDERTIME>131500</ORDERTIME>"
+			"<CASHREGISTERNUM>4000545102</CASHREGISTERNUM></CHECKHEAD>"
 			"<CHECKTOTAL><SUM>450.00</SUM></CHECKTOTAL>"
-			"<CHECKPAY><ROW><PAYFORMNM>ГОТІВКА</PAYFORMNM><SUM>450.00</SUM></ROW></CHECKPAY>"
-			"<CHECKBODY><ROW><NAME>Ніж</NAME><AMOUNT>1</AMOUNT><PRICE>450.00</PRICE>"
-			"<COST>450.00</COST></ROW></CHECKBODY></CHECK>"
+			"<CHECKPAY><ROW><PAYFORMCD>0</PAYFORMCD><PAYFORMNM>Cash</PAYFORMNM>"
+			"<SUM>450.00</SUM><PROVIDED>500.00</PROVIDED><REMAINS>50.00</REMAINS></ROW></CHECKPAY>"
+			"<CHECKBODY><ROW><NAME>Ніж</NAME><AMOUNT>1</AMOUNT>"
+			"<TOBACCOWEIGHT>0.8</TOBACCOWEIGHT><TOBACCOQT>20</TOBACCOQT>"
+			"<ALCOSTRENGTH>40</ALCOSTRENGTH><ALCOVOL>0.7</ALCOVOL>"
+			"<PRICE>500.00</PRICE><COST>450.00</COST><DISCOUNTTYPE>0</DISCOUNTTYPE>"
+			"<SUBTOTAL>500.00</SUBTOTAL><DISCOUNTPERCENT>10.00</DISCOUNTPERCENT>"
+			"<DISCOUNTSUM>50.00</DISCOUNTSUM></ROW></CHECKBODY></CHECK>"
 		)
 		receipt = frappe._dict(
 			{
@@ -67,6 +95,155 @@ class TestPrintService(unittest.TestCase):
 		self.assertIn("ФОП Тест".encode("cp1251"), payload)
 		self.assertIn(b"6000000001", payload)
 		self.assertIn("КОПІЯ".encode("cp1251"), payload)
+		self.assertIn("ІД 3184710691".encode("cp1251"), payload)
+		self.assertIn("ЧЕК № 6000000001".encode("cp1251"), payload)
+		self.assertIn("14.07.2026 13:15:00".encode("cp1251"), payload)
+		self.assertIn("ОНЛАЙН".encode("cp1251"), payload)
+		self.assertIn("ФН ПРРО 4000545102".encode("cp1251"), payload)
+		self.assertIn("ГОТІВКА".encode("cp1251"), payload)
+		self.assertIn("ОТРИМАНО".encode("cp1251"), payload)
+		self.assertIn("ЗНИЖКА 10.00%".encode("cp1251"), payload)
+		self.assertIn(b"-50.00", payload)
+		self.assertIn("ПРРО ERPNext Україна".encode("cp1251"), payload)
+		self.assertIn(b"\x1dkI", payload)
+		self.assertNotIn(b"Cash", payload)
+
+		snapshot = fiscal_snapshot(receipt, include_qr_image=True)
+		self.assertEqual(snapshot["tax_prefix"], "ІД")
+		self.assertEqual(snapshot["payments"][0]["means"], "ГОТІВКА")
+		self.assertEqual(
+			snapshot["qr_data"],
+			"https://cabinet.tax.gov.ua/cashregs/check?date=20260714&time=131500&id=6000000001&sm=450.00&fn=4000545102",
+		)
+		html = render_browser_fiscal_receipt(snapshot, lookup_token="return-token")
+		self.assertIn("ГОТІВКА", html)
+		self.assertNotIn("Cash", html)
+		self.assertIn("ЧЕК № 6000000001", html)
+		self.assertIn("ФН ПРРО 4000545102", html)
+		self.assertIn("return-token", html)
+		self.assertIn("data:image/svg+xml;base64,", html)
+		self.assertIn("ОТРИМАНО: 500.00 грн", html)
+		self.assertIn("РЕШТА: 50.00 грн", html)
+		self.assertIn("Знижка 10.00%: −50.00 грн", html)
+		self.assertNotIn("UAH", html)
+		self.assertIn("Кількість тютюнових виробів в одиниці: 20", html)
+		self.assertIn("Об’єм алкогольного напою: 0.7 л", html)
+		self.assertIn("ПРРО ERPNext Україна", html)
+		self.assertIn("fiscal-barcode", html)
+
+	def test_return_uses_fkc2_without_sale_only_totals(self):
+		xml = (
+			'<?xml version="1.0" encoding="windows-1251"?>'
+			"<CHECK><CHECKHEAD><TIN>3184710691</TIN><ORGNM>ФОП Тест</ORGNM>"
+			"<POINTNM>Магазин</POINTNM><POINTADDR>м. Рівне</POINTADDR><CASHIER>Касир</CASHIER>"
+			"<DOCSUBTYPE>1</DOCSUBTYPE><ORDERDATE>14072026</ORDERDATE><ORDERTIME>141500</ORDERTIME>"
+			"<CASHREGISTERNUM>4000545102</CASHREGISTERNUM></CHECKHEAD>"
+			"<CHECKTOTAL><SUM>149.00</SUM><RNDSUM>0.05</RNDSUM></CHECKTOTAL>"
+			"<CHECKPAY><ROW><PAYFORMCD>0</PAYFORMCD><PAYFORMNM>Cash</PAYFORMNM>"
+			"<SUM>149.00</SUM><PROVIDED>200.00</PROVIDED><REMAINS>51.00</REMAINS></ROW></CHECKPAY>"
+			"<CHECKBODY><ROW><NAME>Повернений товар</NAME><AMOUNT>1</AMOUNT><PRICE>149.00</PRICE>"
+			"<COST>149.00</COST></ROW></CHECKBODY></CHECK>"
+		)
+		receipt = frappe._dict(
+			{
+				"name": "PRRO-RETURN-1",
+				"status": "Fiscalized",
+				"fiscal_number": "6000000002",
+				"local_number": 3,
+				"is_offline": 0,
+				"receipt_xml": xml,
+				"total_amount": 149,
+			}
+		)
+		order = frappe._dict(
+			{
+				"name": "POS-RETURN-1",
+				"fiscal_mode": "Fiscal",
+				"prro_receipt": receipt.name,
+				"lookup_token": "return-token",
+			}
+		)
+		printer = frappe._dict({"characters_per_line": 48, "encoding": "cp1251", "code_page": 46})
+		snapshot = fiscal_snapshot(receipt)
+		html = render_browser_fiscal_receipt(snapshot)
+		self.assertIn("<b>СУМА</b>", html)
+		self.assertIn("ВИДАТКОВИЙ ЧЕК", html)
+		self.assertNotIn("ДО СПЛАТИ", html)
+		self.assertNotIn("ОТРИМАНО", html)
+		self.assertNotIn("РЕШТА", html)
+		self.assertNotIn("Заокруглення", html)
+
+		with patch("frappe.get_doc", return_value=receipt):
+			payload = render_order_receipt(order, printer)
+		self.assertIn("СУМА".encode("cp1251"), payload)
+		self.assertIn("ВИДАТКОВИЙ ЧЕК".encode("cp1251"), payload)
+		self.assertNotIn("ДО СПЛАТИ".encode("cp1251"), payload)
+		self.assertNotIn("ОТРИМАНО".encode("cp1251"), payload)
+		self.assertNotIn("РЕШТА".encode("cp1251"), payload)
+
+	def test_render_x_report_contains_shift_totals(self):
+		printer = frappe._dict({"characters_per_line": 48, "encoding": "cp1251", "code_page": 46})
+		report = {
+			"report_type": "X",
+			"title": "X-ЗВІТ",
+			"non_fiscal": True,
+			"testing": True,
+			"organization": "КОЗЯРЧУК РОМАН",
+			"tax_id": "3423612974",
+			"point_name": "Магазин Hunter",
+			"cash_register_fiscal_number": "4000545102",
+			"cash_desk_local_number": 4,
+			"shift": "SHIFT-1",
+			"cashier": "Касир",
+			"opened_at": "2026-07-14 20:37:41",
+			"receipts_count": 2,
+			"sales_total": 298,
+			"returns_total": 0,
+			"net_total": 298,
+			"service_input": 100,
+			"service_output": 0,
+			"cash_balance": 398,
+			"sales_payforms": [{"code": 0, "name": "ГОТІВКА", "sum": 298}],
+			"generated_at": "2026-07-14 21:00:00",
+		}
+		payload = render_fiscal_report(report, printer)
+		self.assertIn("X-ЗВІТ".encode("cp1251"), payload)
+		self.assertIn("НЕФІСКАЛЬНИЙ".encode("cp1251"), payload)
+		self.assertIn("298.00 грн".encode("cp1251"), payload)
+		self.assertIn("Розрахунковий залишок".encode("cp1251"), payload)
+		html = render_browser_fiscal_report(report)
+		self.assertIn("X-ЗВІТ", html)
+		self.assertIn("НЕФІСКАЛЬНИЙ", html)
+		self.assertIn("ПРРО ERPNext Україна", html)
+
+	def test_render_z_report_labels_fiscal_fields_unambiguously(self):
+		printer = frappe._dict({"characters_per_line": 48, "encoding": "cp1251", "code_page": 46})
+		report = {
+			"report_type": "Z",
+			"title": "Z-ЗВІТ",
+			"organization": "КОЗЯРЧУК РОМАН",
+			"tax_prefix": "ІД",
+			"tax_number": "3423612974",
+			"cash_register_fiscal_number": "4000545102",
+			"cash_desk_local_number": 4,
+			"shift": "SHIFT-1",
+			"cashier": "Касир",
+			"opened_at": "14.07.2026 20:37:41",
+			"closed_at": "14.07.2026 21:07:59",
+			"document_at": "14.07.2026 21:07:57",
+			"fiscal_number": "7324103331",
+			"fiscal_number_label": "Фіскальний № Z-звіту",
+			"local_number": 3199,
+			"generated_at": "14.07.2026 21:44:55",
+		}
+		payload = render_fiscal_report(report, printer)
+		self.assertIn("ІД 3423612974".encode("cp1251"), payload)
+		self.assertIn("ФН ПРРО 4000545102".encode("cp1251"), payload)
+		self.assertIn("Фіскальний № Z-звіту 7324103331".encode("cp1251"), payload)
+		self.assertIn("Z-документ: 14.07.2026 21:07:57".encode("cp1251"), payload)
+		self.assertIn("Локальний № документа 3199".encode("cp1251"), payload)
+		self.assertIn("Надруковано: 14.07.2026 21:44:55".encode("cp1251"), payload)
+		self.assertNotIn(b".998758", payload)
 
 
 if __name__ == "__main__":

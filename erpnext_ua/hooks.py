@@ -1,7 +1,7 @@
 app_name = "erpnext_ua"
-app_title = "ERPNext Ukraine"
+app_title = "ERPNext Україна"
 app_publisher = "HUNTER.rv"
-app_description = "Ukraine business layer for ERPNext: FOP, cash desk/POS, PRRO, tax controls and documents"
+app_description = "Український бізнес-модуль ERPNext: ФОП, каса, ПРРО, податковий контроль і документи"
 app_email = "it@hunter.rv.ua"
 app_license = "MIT"
 required_apps = ["erpnext"]
@@ -11,6 +11,7 @@ after_install = [
     "erpnext_ua.install.ensure_pos_setup",
 	"erpnext_ua.install.ensure_prro_setup",
 	"erpnext_ua.install.ensure_pos_printers",
+	"erpnext_ua.install.ensure_pos_page",
 ]
 
 after_migrate = [
@@ -18,11 +19,13 @@ after_migrate = [
     "erpnext_ua.install.ensure_pos_setup",
 	"erpnext_ua.install.ensure_prro_setup",
 	"erpnext_ua.install.ensure_pos_printers",
+	"erpnext_ua.install.ensure_pos_page",
 ]
 
 doctype_js = {
-    "Sales Invoice": "ua_fiscal/doctype_js/sales_invoice_fiscal.js",
-    "PB POS Terminal": "ua_pos/public/js/pb_pos_terminal.js",
+	"Sales Invoice": "ua_fiscal/doctype_js/sales_invoice_fiscal.js",
+	"PB POS Terminal": "ua_pos/public/js/pb_pos_terminal.js",
+	"PRRO Receipt": "ua_fiscal/doctype_js/prro_receipt.js",
 }
 
 doc_events = {

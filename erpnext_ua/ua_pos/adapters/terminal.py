@@ -14,6 +14,10 @@ class TerminalResult:
 	invoice_number: str | None = None
 	auth_code: str | None = None
 	card_mask: str | None = None
+	merchant_id: str | None = None
+	device_id: str | None = None
+	payment_system_name: str | None = None
+	acquirer_name: str | None = None
 	amount: float | None = None
 	currency: str = "UAH"
 	receipt_text: str | None = None
@@ -24,6 +28,12 @@ class TerminalResult:
 
 
 class TerminalAdapter(ABC):
+	@abstractmethod
+	def identify(self, terminal: dict[str, Any]) -> dict[str, Any]: ...
+
+	@abstractmethod
+	def terminal_info(self, terminal: dict[str, Any]) -> dict[str, Any]: ...
+
 	@abstractmethod
 	def ping(self, terminal: dict[str, Any]) -> bool: ...
 
@@ -111,6 +121,18 @@ class PrivatPOSGatewayClient:
 			"POST", "/verify", json={"terminal": terminal_ip, "params": {"port": int(port)}}
 		)
 
+	def terminal_info(self, terminal_ip: str, port: int = 2000) -> dict:
+		return self._request(
+			"POST", "/terminalinfo", json={"terminal": terminal_ip, "params": {"port": int(port)}}
+		)
+
+	def identify(self, terminal_ip: str, port: int = 2000) -> dict:
+		return self._request(
+			"POST",
+			"/identify",
+			json={"terminal": terminal_ip, "params": {"msgType": "identify", "port": int(port)}},
+		)
+
 	def status(self, terminal_ip: str, operation_id: str, port: int = 2000) -> dict:
 		return self._request(
 			"POST",
@@ -125,8 +147,9 @@ class PrivatPosAdapter(TerminalAdapter):
 
 	@staticmethod
 	def _result(raw: dict, *, amount: float | None = None) -> TerminalResult:
-		code = str(raw.get("responseCode") or raw.get("response_code") or "")
-		status = str(raw.get("status") or raw.get("result") or "").lower()
+		payload = raw.get("params") if isinstance(raw.get("params"), dict) else raw
+		code = str(payload.get("responseCode") or payload.get("response_code") or "")
+		status = str(payload.get("status") or payload.get("result") or "").lower()
 		if code == "0000" or status in {"ok", "success", "approved", "confirmed"}:
 			status = "confirmed"
 		elif status in {"cancelled", "canceled", "voided"}:
@@ -139,12 +162,16 @@ class PrivatPosAdapter(TerminalAdapter):
 			status = "unknown"
 		return TerminalResult(
 			status=status,
-			rrn=raw.get("rrn"),
-			invoice_number=raw.get("invoice_number") or raw.get("invoiceNumber"),
-			auth_code=raw.get("auth_code") or raw.get("authCode"),
-			card_mask=raw.get("card_mask") or raw.get("cardMask"),
+			rrn=payload.get("rrn"),
+			invoice_number=payload.get("invoice_number") or payload.get("invoiceNumber"),
+			auth_code=payload.get("auth_code") or payload.get("authCode") or payload.get("approvalCode"),
+			card_mask=payload.get("card_mask") or payload.get("cardMask") or payload.get("pan"),
+			merchant_id=payload.get("merchant_id") or payload.get("merchantId") or payload.get("merchant"),
+			device_id=payload.get("device_id") or payload.get("deviceId") or payload.get("terminalId"),
+			payment_system_name=payload.get("payment_system_name") or payload.get("paymentSystem"),
+			acquirer_name=payload.get("acquirer_name") or payload.get("bankAcquirer"),
 			amount=amount,
-			receipt_text=raw.get("receipt_text") or raw.get("receipt"),
+			receipt_text=payload.get("receipt_text") or payload.get("receipt"),
 			raw=raw,
 		)
 
@@ -152,6 +179,12 @@ class PrivatPosAdapter(TerminalAdapter):
 		raw = self.client.ping(terminal["ip"], terminal.get("port", 2000))
 		description = str(raw.get("description") or "").lower()
 		return not raw.get("error") or "log file is empty" in description
+
+	def terminal_info(self, terminal: dict[str, Any]) -> dict[str, Any]:
+		return self.client.terminal_info(terminal["ip"], terminal.get("port", 2000))
+
+	def identify(self, terminal: dict[str, Any]) -> dict[str, Any]:
+		return self.client.identify(terminal["ip"], terminal.get("port", 2000))
 
 	def sale(self, terminal: dict[str, Any], amount: float, operation_id: str) -> TerminalResult:
 		raw = self.client.operation(

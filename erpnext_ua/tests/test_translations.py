@@ -77,6 +77,24 @@ class TestUkrainianTranslations(unittest.TestCase):
 		for message, translation in expected.items():
 			self.assertEqual(self.translations[(message, "")], translation)
 
+	def test_prro_labels_are_ukrainian(self):
+		expected = {
+			"DocType": "Тип документа",
+			"UA Fiscal": "Фіскалізація ПРРО",
+			"PRRO Cash Register": "Каса ПРРО",
+			"PRRO Offline Session": "Офлайн-сесія ПРРО",
+			"PRRO Receipt": "Фіскальний документ ПРРО",
+			"PRRO Settings": "Налаштування ПРРО",
+			"PRRO Shift": "Фіскальна зміна ПРРО",
+			"UA KEP Key": "Ключ КЕП",
+			"Fiscalized": "Фіскалізовано",
+			"Uncertain": "Потребує перевірки",
+			"Service In": "Службове внесення",
+			"Z Report": "Z-звіт",
+		}
+		for message, translation in expected.items():
+			self.assertEqual(self.translations[(message, "")], translation)
+
 
 if __name__ == "__main__":
 	unittest.main()

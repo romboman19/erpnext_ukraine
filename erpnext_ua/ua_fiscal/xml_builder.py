@@ -87,10 +87,13 @@ def _ordered(head: dict, order: list[str]) -> str:
 
 
 def _common_head(fop: dict, register: dict, local_number, cashier_name, dt) -> dict:
+	registered_name = (fop.get("prro_registered_name") or fop.get("fop_full_name") or "").strip()
 	head = {
 		"UID": str(uuid.uuid4()).upper(),
 		"TIN": fop["tax_id"],
-		"ORGNM": f"ФОП {fop['fop_full_name']}",
+		# ДПС звіряє ORGNM буквально з реєстраційними даними. Не можна
+		# самовільно додавати «ФОП», змінювати регістр або інші символи.
+		"ORGNM": registered_name,
 		"POINTNM": register["unit_name"],
 		"POINTADDR": register["unit_address"],
 		"ORDERDATE": dt.strftime("%d%m%Y"),
@@ -184,7 +187,9 @@ def build_sale_check(
 ) -> bytes:
 	"""Чек реалізації/повернення (тип за DOCSUBTYPE у head).
 
-	items:    [{code, name, uom, qty, price, amount, uktzed?, unit_cd?, letters?}]
+	items:    [{code, name, uom, qty, price, amount, uktzed?, unit_cd?, letters?,
+	            discount_type?, subtotal?, discount_percent?, discount_sum?, excise_labels?,
+	            tobacco_weight?, tobacco_qty?, alcohol_strength?, alcohol_volume?}]
 	payments: [{code, name, sum, provided?, remains?}]  (code: 0-готівка, 1-картка)
 	taxes:    [{type, name, letter, prc, sign, turnover, sum}]  (лише для платників ПДВ)
 	"""
@@ -271,10 +276,41 @@ def build_sale_check(
 			row.append(f"<UNITCD>{escape(str(item['unit_cd']))}</UNITCD>")
 		row.append(f"<UNITNM>{escape(item.get('uom') or 'шт')}</UNITNM>")
 		row.append(f"<AMOUNT>{frappe.utils.flt(item['qty']):g}</AMOUNT>")
+		if item.get("tobacco_weight") is not None:
+			row.append(f"<TOBACCOWEIGHT>{frappe.utils.flt(item['tobacco_weight']):g}</TOBACCOWEIGHT>")
+		if item.get("tobacco_qty") is not None:
+			row.append(f"<TOBACCOQT>{int(item['tobacco_qty'])}</TOBACCOQT>")
+		if item.get("alcohol_strength") is not None:
+			row.append(f"<ALCOSTRENGTH>{frappe.utils.flt(item['alcohol_strength']):g}</ALCOSTRENGTH>")
+		if item.get("alcohol_volume") is not None:
+			row.append(f"<ALCOVOL>{frappe.utils.flt(item['alcohol_volume']):g}</ALCOVOL>")
 		row.append(f"<PRICE>{_fmt_sum(item['price'])}</PRICE>")
 		if item.get("letters"):
 			row.append(f"<LETTERS>{escape(item['letters'])}</LETTERS>")
 		row.append(f"<COST>{_fmt_sum(item['amount'])}</COST>")
+		if item.get("discount_sum") is not None and frappe.utils.flt(item.get("discount_sum")):
+			discount_type = int(item.get("discount_type", 0))
+			if discount_type not in (0, 1):
+				raise ValueError("Тип знижки/надбавки має бути 0 або 1")
+			subtotal = item.get("subtotal")
+			if subtotal is None:
+				subtotal = frappe.utils.flt(item["amount"]) + (
+					frappe.utils.flt(item["discount_sum"])
+					if discount_type == 0
+					else -frappe.utils.flt(item["discount_sum"])
+				)
+			row.append(f"<DISCOUNTTYPE>{discount_type}</DISCOUNTTYPE>")
+			row.append(f"<SUBTOTAL>{_fmt_sum(subtotal)}</SUBTOTAL>")
+			if item.get("discount_percent") is not None:
+				row.append(f"<DISCOUNTPERCENT>{_fmt_sum(item['discount_percent'])}</DISCOUNTPERCENT>")
+			row.append(f"<DISCOUNTSUM>{_fmt_sum(item['discount_sum'])}</DISCOUNTSUM>")
+		excise_labels = [str(value).strip() for value in (item.get("excise_labels") or []) if str(value).strip()]
+		if excise_labels:
+			labels_xml = "".join(
+				f'<ROW ROWNUM="{index}"><EXCISELABEL>{escape(value)}</EXCISELABEL></ROW>'
+				for index, value in enumerate(excise_labels, start=1)
+			)
+			row.append(f"<EXCISELABELS>{labels_xml}</EXCISELABELS>")
 		row.append("</ROW>")
 		body_rows.append("".join(row))
 

@@ -1,6 +1,6 @@
 {
  "doctype":"DocType","name":"Terminal Transaction","module":"UA POS","autoname":"TERM-TXN-.YYYY.-.#####",
- "field_order":["payment_attempt","terminal","operation","operation_id","amount","currency","status","rrn","invoice_number","auth_code","card_mask","request_json","response_json","reconciliation_status"],
+ "field_order":["payment_attempt","terminal","operation","operation_id","amount","currency","status","rrn","invoice_number","auth_code","card_mask","merchant_id","device_id","payment_system_name","acquirer_name","request_json","response_json","reconciliation_status"],
  "fields":[
   {"fieldname":"payment_attempt","fieldtype":"Link","label":"Payment Attempt","options":"POS Payment Attempt","reqd":1},
   {"fieldname":"terminal","fieldtype":"Link","label":"Terminal","options":"PB POS Terminal","reqd":1},
@@ -11,6 +11,8 @@
   {"fieldname":"status","fieldtype":"Select","label":"Status","options":"Confirmed\nDeclined\nCancelled\nTimeout\nUnknown","reqd":1},
   {"fieldname":"rrn","fieldtype":"Data","label":"RRN"},{"fieldname":"invoice_number","fieldtype":"Data","label":"Invoice Number"},
   {"fieldname":"auth_code","fieldtype":"Data","label":"Authorization Code"},{"fieldname":"card_mask","fieldtype":"Data","label":"Card Mask"},
+  {"fieldname":"merchant_id","fieldtype":"Data","label":"Merchant ID"},{"fieldname":"device_id","fieldtype":"Data","label":"Terminal ID"},
+  {"fieldname":"payment_system_name","fieldtype":"Data","label":"Payment System"},{"fieldname":"acquirer_name","fieldtype":"Data","label":"Acquirer"},
   {"fieldname":"request_json","fieldtype":"Code","label":"Request","options":"JSON"},{"fieldname":"response_json","fieldtype":"Code","label":"Response","options":"JSON"},
   {"fieldname":"reconciliation_status","fieldtype":"Select","label":"Reconciliation","options":"Pending\nMatched\nMismatch\nManual","default":"Pending"}
  ],

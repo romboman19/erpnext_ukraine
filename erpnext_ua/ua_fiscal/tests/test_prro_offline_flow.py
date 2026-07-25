@@ -10,7 +10,7 @@ import frappe
 from erpnext_ua.ua_fiscal import orchestration as orch
 from erpnext_ua.ua_fiscal import xml_builder as xb
 from erpnext_ua.ua_fiscal.fiscal_client import FiscalTransportError
-from erpnext_ua.ua_fiscal.tests.test_prro_flow import TESTNAME, _cleanup
+from erpnext_ua.ua_fiscal.tests.test_prro_flow import TESTNAME, _cleanup, _test_company
 
 
 class OfflineFailoverClient:
@@ -56,13 +56,14 @@ class OfflineFailoverClient:
 
 def _prepare_fixture():
 	frappe.set_user("Administrator")
-	company = frappe.get_all("Company", pluck="name")[0]
+	company = _test_company()
 	_cleanup(company)
 	fop = frappe.get_doc(
 		{
 			"doctype": "FOP Profile",
 			"company": company,
 			"fop_full_name": "Тест Тестович",
+			"prro_registered_name": "ТЕСТ ТЕСТОВИЧ",
 			"tax_id": "3184710691",
 			"single_tax_group": "2",
 			"tax_rate_mode": "Фіксована ставка",

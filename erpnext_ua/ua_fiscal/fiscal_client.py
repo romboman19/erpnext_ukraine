@@ -226,14 +226,22 @@ class FiscalClient:
 	def document_info_by_local_number(
 		self, fiscal_number: str, local_number: int, kep_key: str
 	) -> dict | None:
-		return self.command(
-			{
-				"Command": "DocumentInfoByLocalNum",
-				"NumFiscal": fiscal_number,
-				"NumLocal": int(local_number),
-			},
-			signed_by=kep_key,
-		)
+		try:
+			return self.command(
+				{
+					"Command": "DocumentInfoByLocalNum",
+					"NumFiscal": fiscal_number,
+					"NumLocal": int(local_number),
+				},
+				signed_by=kep_key,
+			)
+		except FiscalServerError as exc:
+			# Для цієї команди ДПС повертає ErrorCode=13, коли документа з
+			# указаним локальним номером не існує. Це очікувана негативна
+			# відповідь під час recovery, а не збій фіскального сервера.
+			if str(exc.error_code) == "13":
+				return None
+			raise
 
 	def device_register(self, fiscal_number: str, device_id: str, kep_key: str, forced=False) -> dict:
 		return self.command(

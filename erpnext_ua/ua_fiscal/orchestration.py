@@ -19,6 +19,7 @@ from erpnext_ua.ua_fiscal.fiscal_client import (
 	FiscalServerError,
 	FiscalTransportError,
 )
+from erpnext_ua.ua_fiscal.payment import canonical_payform_name
 
 PAYFORM_CASH = 0
 PAYFORM_CARD = 1
@@ -94,7 +95,7 @@ def _fop_dict(fop_profile: str) -> dict:
 	return frappe.db.get_value(
 		"FOP Profile",
 		fop_profile,
-		["fop_full_name", "tax_id", "vat_payer", "vat_number"],
+		["fop_full_name", "prro_registered_name", "tax_id", "vat_payer", "vat_number"],
 		as_dict=True,
 	)
 
@@ -119,12 +120,10 @@ def _cashier(kep_key: str) -> tuple[str, str]:
 	return values.subject_name or values.user, values.user
 
 
-def _build_qr(register_fn: str, fiscal_num: str, total, dt) -> str:
-	return (
-		f"https://cabinet.tax.gov.ua/cashregs/check?id={fiscal_num}"
-		f"&fn={register_fn}&sm={frappe.utils.flt(total):.2f}"
-		f"&date={dt.strftime('%Y%m%d')}&time={dt.strftime('%H%M')}"
-	)
+def _build_qr(register_fn: str, fiscal_num: str, total, dt, *, mac: str | None = None) -> str:
+	from erpnext_ua.ua_fiscal.receipt_format import build_verification_url
+
+	return build_verification_url(register_fn, fiscal_num, total, dt, mac=mac)
 
 
 def _kind_label(kind: str) -> str:
@@ -133,7 +132,12 @@ def _kind_label(kind: str) -> str:
 		"Return": "Повернення",
 		"Service In": "Службове внесення",
 		"Service Out": "Службова видача",
-	}.get(kind, "Продаж")
+		"Open Shift": "Відкриття зміни",
+		"Close Shift": "Закриття зміни",
+		"Z Report": "Z-звіт",
+		"Offline Begin": "Початок офлайн",
+		"Offline End": "Завершення офлайн",
+	}.get(kind, kind)
 
 
 def _idem_key(prefix: str, register: str, reference: str | None) -> str:
@@ -560,22 +564,13 @@ def open_shift(
 		idem_key=_idem_key("open-shift", register.name, shift.name),
 	)
 	try:
-		ticket = _send_online(client, receipt, xml, kep_key)
+		_send_online(client, receipt, xml, kep_key)
 	except Exception:
 		shift.db_set("status", "Error", update_modified=False)
 		frappe.db.commit()
 		raise
-	_update_offline_reserve(register, ticket)
-	shift.db_set("status", "Open", update_modified=False)
-	shift.db_set("opened_at", frappe.utils.now_datetime(), update_modified=False)
-	shift.db_set("opening_fiscal_number", ticket["order_tax_num"], update_modified=False)
-	shift.db_set("opening_local_number", local_number, update_modified=False)
-	frappe.db.set_value(
-		"PRRO Cash Register",
-		register.name,
-		{"current_shift": shift.name, "runtime_state": "Online", "last_server_sync": frappe.utils.now_datetime()},
-		update_modified=False,
-	)
+	receipt.reload()
+	_finalize_confirmed_receipt(receipt, register, shift, client)
 	frappe.db.commit()
 	return shift.name
 
@@ -827,7 +822,13 @@ def _queue_offline_sale(
 	receipt = _queue_signed_offline(receipt, xml, kep_key, client, session, financial=True)
 	receipt.db_set(
 		"qr_data",
-		_build_qr(register.fiscal_number, fiscal_number, total, dt),
+		_build_qr(
+			register.fiscal_number,
+			fiscal_number,
+			total,
+			dt,
+			mac=receipt.signed_document_hash,
+		),
 		update_modified=False,
 	)
 	receipt.reload()
@@ -1101,7 +1102,9 @@ def _shift_totals(shift_name: str) -> dict:
 		buckets[key]["sum"] += frappe.utils.flt(row.total_amount)
 		buckets[key]["count"] += 1
 		for payment in json.loads(row.payment_summary or "[]"):
-			payforms[key][(int(payment["code"]), payment["name"])] += frappe.utils.flt(payment["sum"])
+			code = int(payment["code"])
+			name = canonical_payform_name(code, payment.get("name"))
+			payforms[key][(code, name)] += frappe.utils.flt(payment["sum"])
 		for tax in json.loads(row.tax_summary or "[]"):
 			tax_key = (int(tax.get("type", 0)), tax["name"], tax.get("letter"), frappe.utils.flt(tax["prc"]))
 			taxes[key][tax_key]["turnover"] += frappe.utils.flt(tax["turnover"])
@@ -1214,73 +1217,73 @@ def close_shift(cash_register: str, kep_key: str, client: FiscalClient | None = 
 	shift.db_set("status", "Closing", update_modified=False)
 	fop = _fop_dict(register.fop_profile)
 	cashier_name, _user = _cashier(kep_key)
-	z_local = register.allocate_local_number()
-	zrep = xb.build_zrep(
-		fop=fop,
-		register=_register_dict(register),
-		local_number=z_local,
-		cashier_name=cashier_name,
-		realiz=totals["realiz"],
-		returns=totals["returns"],
-		service_input=totals["service_input"],
-		service_output=totals["service_output"],
-		testing=_testing_flag(client),
-	)
-	z_ledger = _new_ledger(
-		register=register,
-		shift=shift,
-		kind="Z Report",
-		local_number=z_local,
-		xml=zrep,
-		idem_key=_idem_key("z-report", register.name, shift.name),
-	)
-	z_ticket = _send_online(client, z_ledger, zrep, kep_key)
+	z_idem = _idem_key("z-report", register.name, shift.name)
+	z_ledger = _existing_receipt(z_idem)
+	if z_ledger:
+		if z_ledger.status != "Fiscalized":
+			raise FiscalProtocolError(
+				f"Z-звіт {z_ledger.name} має статус {z_ledger.status}; спочатку потрібна звірка з ДПС"
+			)
+		zrep = z_ledger.receipt_xml.encode("windows-1251")
+	else:
+		z_local = register.allocate_local_number()
+		zrep = xb.build_zrep(
+			fop=fop,
+			register=_register_dict(register),
+			local_number=z_local,
+			cashier_name=cashier_name,
+			realiz=totals["realiz"],
+			returns=totals["returns"],
+			service_input=totals["service_input"],
+			service_output=totals["service_output"],
+			testing=_testing_flag(client),
+		)
+		z_ledger = _new_ledger(
+			register=register,
+			shift=shift,
+			kind="Z Report",
+			local_number=z_local,
+			xml=zrep,
+			idem_key=z_idem,
+		)
+		_send_online(client, z_ledger, zrep, kep_key)
+		z_ledger.reload()
+	_finalize_confirmed_receipt(z_ledger, register, shift, client)
+	frappe.db.commit()
 
 	# Z-звіт також споживає наскрізний номер. Повторна звірка перед документом
 	# закриття виконує офіційну вимогу перевіряти номер перед кожним /doc.
 	_preflight_online_document(register, kep_key, client, expected_shift_state=1)
 	register.reload()
-	c_local = register.allocate_local_number()
-	head = xb.build_check_head(
-		doctype=xb.DOCTYPE_CLOSE_SHIFT,
-		fop=fop,
-		register=_register_dict(register),
-		local_number=c_local,
-		cashier_name=cashier_name,
-		testing=_testing_flag(client),
-	)
-	close_xml = xb.build_service_document(head)
-	close_ledger = _new_ledger(
-		register=register,
-		shift=shift,
-		kind="Close Shift",
-		local_number=c_local,
-		xml=close_xml,
-		idem_key=_idem_key("close-shift", register.name, shift.name),
-	)
-	close_ticket = _send_online(client, close_ledger, close_xml, kep_key)
-	frappe.db.set_value(
-		"PRRO Shift",
-		shift.name,
-		{
-			"status": "Closed",
-			"closed_at": frappe.utils.now_datetime(),
-			"closing_fiscal_number": close_ticket["order_tax_num"],
-			"closing_local_number": c_local,
-			"z_report_fiscal_number": z_ticket["order_tax_num"],
-			"z_report_xml": zrep.decode("windows-1251"),
-			"sales_total": totals["realiz"]["sum"],
-			"refunds_total": totals["returns"]["sum"],
-			"receipts_count": totals["realiz"]["count"] + totals["returns"]["count"],
-		},
-		update_modified=False,
-	)
-	frappe.db.set_value(
-		"PRRO Cash Register",
-		register.name,
-		{"current_shift": None, "runtime_state": "Online", "last_server_sync": frappe.utils.now_datetime()},
-		update_modified=False,
-	)
+	close_idem = _idem_key("close-shift", register.name, shift.name)
+	close_ledger = _existing_receipt(close_idem)
+	if close_ledger:
+		if close_ledger.status != "Fiscalized":
+			raise FiscalProtocolError(
+				f"Документ закриття {close_ledger.name} має статус {close_ledger.status}; спочатку потрібна звірка з ДПС"
+			)
+	else:
+		c_local = register.allocate_local_number()
+		head = xb.build_check_head(
+			doctype=xb.DOCTYPE_CLOSE_SHIFT,
+			fop=fop,
+			register=_register_dict(register),
+			local_number=c_local,
+			cashier_name=cashier_name,
+			testing=_testing_flag(client),
+		)
+		close_xml = xb.build_service_document(head)
+		close_ledger = _new_ledger(
+			register=register,
+			shift=shift,
+			kind="Close Shift",
+			local_number=c_local,
+			xml=close_xml,
+			idem_key=close_idem,
+		)
+		_send_online(client, close_ledger, close_xml, kep_key)
+		close_ledger.reload()
+	_finalize_confirmed_receipt(close_ledger, register, shift, client)
 	frappe.db.commit()
 	return shift.name
 
@@ -1456,9 +1459,124 @@ def reconcile_receipt(receipt_name: str, client=None) -> dict:
 		return _reconcile_receipt_locked(receipt_name, client)
 
 
+def _finalize_confirmed_receipt(receipt, register, shift, client=None):
+	"""Idempotently applies local state changes after DPS confirmed a document.
+
+	The HTTP request may time out after DPS has accepted it.  Recovery must then
+	update not only the immutable receipt ledger, but also the shift/register
+	state which normally follows ``_send_online``.
+	"""
+	expected_type = _kind_label(receipt.receipt_kind)
+	if receipt.receipt_type != expected_type:
+		frappe.db.set_value(
+			"PRRO Receipt", receipt.name, "receipt_type", expected_type, update_modified=False
+		)
+	now = receipt.fiscalized_at or frappe.utils.now_datetime()
+	if receipt.receipt_kind == "Open Shift":
+		current_shift = frappe.db.get_value("PRRO Cash Register", register.name, "current_shift")
+		if current_shift and current_shift != shift.name:
+			frappe.db.set_value(
+				"PRRO Cash Register", register.name, "runtime_state", "Blocked", update_modified=False
+			)
+			raise FiscalProtocolError(
+				f"ДПС підтвердила відкриття зміни {shift.name}, але локально активна інша зміна {current_shift}"
+			)
+		frappe.db.set_value(
+			"PRRO Shift",
+			shift.name,
+			{
+				"status": "Open",
+				"opened_at": shift.opened_at or now,
+				"opening_fiscal_number": receipt.fiscal_number,
+				"opening_local_number": receipt.local_number,
+			},
+			update_modified=False,
+		)
+		frappe.db.set_value(
+			"PRRO Cash Register",
+			register.name,
+			{
+				"current_shift": shift.name,
+				"runtime_state": "Online",
+				"last_server_sync": frappe.utils.now_datetime(),
+			},
+			update_modified=False,
+		)
+		# A stored ticket can also contain the reserve identifiers required for
+		# a later protocol-compliant offline transition.
+		if receipt.dps_response and client:
+			try:
+				stored = receipt.dps_response
+				response = (
+					base64.b64decode(stored.removeprefix("base64:"))
+					if stored.startswith("base64:")
+					else stored.encode("windows-1251")
+				)
+				_update_offline_reserve(register, parse_ticket(response, client))
+			except Exception:
+				# Shift recovery is already authoritative via DocumentInfoByLocalNum;
+				# failure to re-read optional reserve data must not undo it.
+				frappe.log_error(frappe.get_traceback(), f"PRRO ticket reserve recovery {receipt.name}")
+		return
+
+	if receipt.receipt_kind == "Z Report":
+		frappe.db.set_value(
+			"PRRO Shift",
+			shift.name,
+			{
+				"status": "Closing" if shift.status != "Closed" else "Closed",
+				"z_report_fiscal_number": receipt.fiscal_number,
+				"z_report_xml": receipt.receipt_xml,
+			},
+			update_modified=False,
+		)
+		return
+
+	if receipt.receipt_kind == "Close Shift":
+		totals = _shift_totals(shift.name)
+		z_fiscal = frappe.db.get_value(
+			"PRRO Receipt",
+			{"shift": shift.name, "receipt_kind": "Z Report", "status": "Fiscalized"},
+			"fiscal_number",
+			order_by="local_number desc",
+		)
+		frappe.db.set_value(
+			"PRRO Shift",
+			shift.name,
+			{
+				"status": "Closed",
+				"closed_at": shift.closed_at or now,
+				"closing_fiscal_number": receipt.fiscal_number,
+				"closing_local_number": receipt.local_number,
+				"z_report_fiscal_number": z_fiscal or shift.z_report_fiscal_number,
+				"sales_total": totals["realiz"]["sum"],
+				"refunds_total": totals["returns"]["sum"],
+				"receipts_count": totals["realiz"]["count"] + totals["returns"]["count"],
+			},
+			update_modified=False,
+		)
+		frappe.db.set_value(
+			"PRRO Cash Register",
+			register.name,
+			{
+				"current_shift": None,
+				"runtime_state": "Online",
+				"last_server_sync": frappe.utils.now_datetime(),
+			},
+			update_modified=False,
+		)
+
+
 def _reconcile_receipt_locked(receipt_name: str, client=None) -> dict:
 	client = client or FiscalClient()
 	receipt = frappe.get_doc("PRRO Receipt", receipt_name)
+	if receipt.status == "Fiscalized":
+		register = frappe.get_doc("PRRO Cash Register", receipt.cash_register)
+		shift = frappe.get_doc("PRRO Shift", receipt.shift)
+		_finalize_confirmed_receipt(receipt, register, shift, client)
+		frappe.db.commit()
+		receipt.reload()
+		return receipt.as_dict()
 	if receipt.status not in {"Uncertain", "Error"}:
 		return receipt.as_dict()
 	register = frappe.get_doc("PRRO Cash Register", receipt.cash_register)
@@ -1478,6 +1596,9 @@ def _reconcile_receipt_locked(receipt_name: str, client=None) -> dict:
 			},
 			update_modified=False,
 		)
+		frappe.db.commit()
+		receipt.reload()
+		_finalize_confirmed_receipt(receipt, register, shift, client)
 		frappe.db.commit()
 		receipt.reload()
 		return receipt.as_dict()

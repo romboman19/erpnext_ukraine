@@ -11,6 +11,7 @@ import frappe
 
 from erpnext_ua.ua_fiscal import orchestration as orch
 from erpnext_ua.ua_fiscal.fiscal_client import FiscalServerError
+from erpnext_ua.ua_fiscal.payment import fiscal_payform_name
 
 # Мапінг типу форми оплати ERPNext → код форми оплати ДПС
 PAYFORM_CASH = 0
@@ -44,7 +45,11 @@ def _invoice_lines(si) -> list[dict]:
 		net_rate = it.get("net_rate")
 		amount = abs(frappe.utils.flt(net_amount if net_amount is not None else it.get("amount")))
 		qty = abs(frappe.utils.flt(it.qty))
-		lines.append({
+		final_rate = abs(frappe.utils.flt(net_rate if net_rate is not None else it.rate))
+		gross_rate = abs(frappe.utils.flt(it.get("price_list_rate") or it.get("rate") or final_rate))
+		subtotal = frappe.utils.flt(gross_rate * qty, 2)
+		discount_sum = frappe.utils.flt(max(0, subtotal - amount), 2)
+		line = {
 			"code": it.item_code or it.item_name,
 			"barcode": it.get("barcode"),
 			"uktzed": it.get("customs_tariff_number") or item_meta.get("customs_tariff_number"),
@@ -54,9 +59,19 @@ def _invoice_lines(si) -> list[dict]:
 			"name": it.item_name or it.item_code,
 			"uom": it.uom or it.stock_uom or "шт",
 			"qty": qty,
-			"price": abs(frappe.utils.flt(net_rate if net_rate is not None else it.rate)),
+			"price": gross_rate if discount_sum else final_rate,
 			"amount": amount,
-		})
+		}
+		if discount_sum:
+			line.update(
+				{
+					"discount_type": 0,
+					"subtotal": subtotal,
+					"discount_percent": frappe.utils.flt(discount_sum * 100 / subtotal, 2) if subtotal else 0,
+					"discount_sum": discount_sum,
+				}
+			)
+		lines.append(line)
 	return lines
 
 
@@ -66,20 +81,31 @@ def _invoice_payments(si) -> list[dict]:
 		amount = abs(frappe.utils.flt(p.amount))
 		if not amount:
 			continue
-		configured_code = frappe.db.get_value("Mode of Payment", p.mode_of_payment, "ua_payformcd")
+		payment_config = frappe.db.get_value(
+			"Mode of Payment",
+			p.mode_of_payment,
+			["ua_payformcd", "ua_prro_payment_form", "ua_prro_payment_means"],
+			as_dict=True,
+		) or {}
+		configured_code = payment_config.get("ua_payformcd")
 		code = (
 			int(configured_code)
 			if configured_code not in (None, "")
 			else (PAYFORM_CASH if (p.type or "").lower() == "cash" else PAYFORM_CASHLESS)
 		)
-		row = {"code": code, "name": (p.mode_of_payment or "").upper() or "ГОТІВКА", "sum": amount}
+		row = {
+			"code": code,
+			"name": fiscal_payform_name(None, code, payment_config.get("ua_prro_payment_means") or p.mode_of_payment),
+			"form": payment_config.get("ua_prro_payment_form") or ("ГОТІВКА" if code == 0 else "БЕЗГОТІВКОВА"),
+			"sum": amount,
+		}
 		# решта для готівки
 		if code == PAYFORM_CASH and frappe.utils.flt(si.get("change_amount")) > 0:
 			row["provided"] = amount + frappe.utils.flt(si.change_amount)
 			row["remains"] = frappe.utils.flt(si.change_amount)
 		payments.append(row)
 	if not payments:  # рахунок без POS-оплат — вважаємо готівкою на всю суму
-		payments.append({"code": PAYFORM_CASH, "name": "ГОТІВКА",
+		payments.append({"code": PAYFORM_CASH, "name": "ГОТІВКА", "form": "ГОТІВКА",
 						 "sum": abs(frappe.utils.flt(si.rounded_total or si.grand_total))})
 	return payments
 

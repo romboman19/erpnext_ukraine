@@ -60,6 +60,22 @@ class TestFiscalCommand(unittest.TestCase):
 			client.server_state()
 		self.assertEqual(caught.exception.error_code, 9)
 
+	def test_document_info_returns_none_when_dps_reports_absent_data(self):
+		http = _HTTP()
+		http.post = lambda *args, **kwargs: type(
+			"AbsentResponse",
+			(),
+			{
+				"status_code": 200,
+				"content": b'{"ErrorCode":13,"ErrorMessage":"requested data is absent"}',
+				"text": '{"ErrorCode":13,"ErrorMessage":"requested data is absent"}',
+				"json": lambda self: json.loads(self.content),
+			},
+		)()
+		client = FiscalClient(settings=_Settings(), http=http)
+		client.sign = lambda data, kep_key, *, online=True: data
+		self.assertIsNone(client.document_info_by_local_number("4000545102", 3198, "test-key"))
+
 
 if __name__ == "__main__":
 	unittest.main()
