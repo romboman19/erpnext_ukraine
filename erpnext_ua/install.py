@@ -464,6 +464,31 @@ def ensure_pos_page():
 	frappe.db.commit()
 
 
+def ensure_pos_page():
+	"""Keep the Desk page present even when Frappe's orphan cleanup runs during migrate."""
+	if not frappe.db.table_exists("Page"):
+		return
+	roles = ["POS Cashier", "POS Senior Cashier", "POS Manager", "POS Administrator", "System Manager"]
+	if frappe.db.exists("Page", "ua-pos"):
+		page = frappe.get_doc("Page", "ua-pos")
+	else:
+		page = frappe.new_doc("Page")
+		page.page_name = "ua-pos"
+	page.title = "UA POS"
+	page.module = "UA POS"
+	# This app is read-only in container deployments. A non-standard Page keeps
+	# Frappe from exporting JSON on save and from removing it as an orphan.
+	page.standard = "No"
+	page.roles = []
+	for role in roles:
+		page.append("roles", {"role": role})
+	if page.is_new():
+		page.insert(ignore_permissions=True)
+	else:
+		page.save(ignore_permissions=True)
+	frappe.db.commit()
+
+
 def ensure_pos_setup():
 	"""Ідемпотентно створює ролі та поля інтеграції POS без змін ERPNext core."""
 	for role in POS_ROLES:
@@ -521,6 +546,7 @@ def ensure_pos_setup():
 				{"fieldname": "ua_city", "label": "Місто", "fieldtype": "Data"},
 				{"fieldname": "ua_pos_comment", "label": "Коментар касира", "fieldtype": "Small Text"},
 				{"fieldname": "ua_telegram_chat_id", "label": "Telegram Chat ID", "fieldtype": "Data", "hidden": 1, "read_only": 1},
+				{"fieldname": "ua_telegram_status", "label": "Telegram Status", "fieldtype": "Data", "read_only": 1, "no_copy": 1},
 			],
 		},
 		update=True,
