@@ -1,0 +1,435 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-07-14 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "sale_section",
+  "sales_invoice",
+  "sales_invoice_item",
+  "allocation",
+  "allocation_slice",
+  "posting_date",
+  "posting_datetime",
+  "company",
+  "customer",
+  "stock_section",
+  "item_code",
+  "stock_lot",
+  "warehouse",
+  "source_method",
+  "relationship_model",
+  "serial_no",
+  "batch_no",
+  "partner_section",
+  "partner_profile",
+  "contract",
+  "supplier",
+  "financial_section",
+  "currency",
+  "conversion_rate",
+  "sold_qty",
+  "net_rate",
+  "net_amount",
+  "commission_rate",
+  "commission_amount",
+  "price_version",
+  "partner_unit_rate",
+  "partner_amount",
+  "retained_amount",
+  "base_section",
+  "base_net_amount",
+  "base_commission_amount",
+  "base_partner_amount",
+  "base_retained_amount",
+  "recognition_journal_entry",
+  "off_balance_amount",
+  "off_balance_entry",
+  "lifecycle_section",
+  "returned_qty",
+  "settled_partner_amount",
+  "settlement_report",
+  "cancellation_reason"
+ ],
+ "fields": [
+  {
+   "default": "SOLD",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "SOLD\nPARTIALLY_RETURNED\nRETURNED\nREPORTED\nCANCELLED",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "sale_section",
+   "fieldtype": "Section Break",
+   "label": "Sale Evidence"
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sales Invoice",
+   "options": "Sales Invoice",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "sales_invoice_item",
+   "fieldtype": "Data",
+   "label": "Sales Invoice Item Row",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "allocation",
+   "fieldtype": "Link",
+   "label": "CC Allocation",
+   "options": "CC Allocation",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "allocation_slice",
+   "fieldtype": "Data",
+   "label": "CC Allocation Slice",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "in_standard_filter": 1,
+   "label": "Posting Date",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "posting_datetime",
+   "fieldtype": "Datetime",
+   "label": "Posting Datetime",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "stock_section",
+   "fieldtype": "Section Break",
+   "label": "Immutable FIFO Source"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item",
+   "options": "Item",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "stock_lot",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "CC Stock Lot",
+   "options": "CC Stock Lot",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "source_method",
+   "fieldtype": "Select",
+   "label": "Source Method",
+   "options": "BUYOUT\nDEFERRED_PURCHASE\nCOMMISSION\nCONSIGNMENT",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "relationship_model",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Relationship Model",
+   "options": "OWN\nCOMMISSION\nCONSIGNMENT",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Link",
+   "label": "Serial No",
+   "options": "Serial No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch",
+   "options": "Batch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "partner_section",
+   "fieldtype": "Section Break",
+   "label": "Partner Obligation Source"
+  },
+  {
+   "fieldname": "partner_profile",
+   "fieldtype": "Link",
+   "label": "CC Partner Profile",
+   "options": "CC Partner Profile",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contract",
+   "fieldtype": "Link",
+   "label": "CC Contract",
+   "options": "CC Contract",
+   "read_only": 1
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Supplier",
+   "options": "Supplier",
+   "read_only": 1
+  },
+  {
+   "fieldname": "financial_section",
+   "fieldtype": "Section Break",
+   "label": "Income and Partner Debt Snapshot"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "conversion_rate",
+   "fieldtype": "Float",
+   "label": "Conversion Rate",
+   "precision": "9",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "sold_qty",
+   "fieldtype": "Float",
+   "label": "Sold Quantity",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "net_rate",
+   "fieldtype": "Currency",
+   "label": "Net Sale Rate",
+   "options": "currency",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "net_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Net Sale Amount",
+   "options": "currency",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "commission_rate",
+   "fieldtype": "Percent",
+   "label": "Commission Rate",
+   "read_only": 1
+  },
+  {
+   "fieldname": "commission_amount",
+   "fieldtype": "Currency",
+   "label": "Commission Income",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "price_version",
+   "fieldtype": "Link",
+   "label": "CC Price Version",
+   "options": "CC Price Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "partner_unit_rate",
+   "fieldtype": "Currency",
+   "label": "Partner Unit Rate",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "partner_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Partner Amount",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "retained_amount",
+   "fieldtype": "Currency",
+   "label": "Retained Amount",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "base_section",
+   "fieldtype": "Section Break",
+   "label": "Company Currency Snapshot"
+  },
+  {
+   "fieldname": "base_net_amount",
+   "fieldtype": "Currency",
+   "label": "Base Net Amount",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "base_commission_amount",
+   "fieldtype": "Currency",
+   "label": "Base Commission Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "base_partner_amount",
+   "fieldtype": "Currency",
+   "label": "Base Partner Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "base_retained_amount",
+   "fieldtype": "Currency",
+   "label": "Base Retained Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "recognition_journal_entry",
+   "fieldtype": "Link",
+   "label": "Recognition Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "off_balance_amount",
+   "fieldtype": "Currency",
+   "label": "024 Decrease Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "off_balance_entry",
+   "fieldtype": "Link",
+   "label": "024 Decrease Entry",
+   "options": "UA Off Balance Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lifecycle_section",
+   "fieldtype": "Section Break",
+   "label": "Return and Settlement Lifecycle"
+  },
+  {
+   "default": "0",
+   "fieldname": "returned_qty",
+   "fieldtype": "Float",
+   "label": "Returned Quantity",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "settled_partner_amount",
+   "fieldtype": "Currency",
+   "label": "Settled Partner Amount",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "settlement_report",
+   "fieldtype": "Link",
+   "label": "CC Settlement Report",
+   "options": "CC Settlement Report",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cancellation_reason",
+   "fieldtype": "Small Text",
+   "label": "Cancellation Reason",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC Sale Allocation",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade User"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade Auditor"
+  }
+ ],
+ "show_name_in_global_search": 1,
+ "sort_field": "posting_datetime",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

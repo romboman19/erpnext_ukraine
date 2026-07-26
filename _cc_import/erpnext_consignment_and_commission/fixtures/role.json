@@ -1,0 +1,26 @@
+[
+ {
+  "desk_access": 1,
+  "disabled": 0,
+  "doctype": "Role",
+  "is_custom": 1,
+  "name": "Commission Trade Manager",
+  "role_name": "Commission Trade Manager"
+ },
+ {
+  "desk_access": 1,
+  "disabled": 0,
+  "doctype": "Role",
+  "is_custom": 1,
+  "name": "Commission Trade User",
+  "role_name": "Commission Trade User"
+ },
+ {
+  "desk_access": 1,
+  "disabled": 0,
+  "doctype": "Role",
+  "is_custom": 1,
+  "name": "Commission Trade Auditor",
+  "role_name": "Commission Trade Auditor"
+ }
+]

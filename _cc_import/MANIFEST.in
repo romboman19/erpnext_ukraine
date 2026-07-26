@@ -1,0 +1,3 @@
+include README.md
+include license.txt
+recursive-include erpnext_consignment_and_commission *.css *.csv *.html *.js *.json *.md *.py *.txt

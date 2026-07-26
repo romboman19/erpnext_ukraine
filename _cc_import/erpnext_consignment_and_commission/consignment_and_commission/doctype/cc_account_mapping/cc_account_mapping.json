@@ -1,0 +1,158 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "autoname": "field:company",
+ "creation": "2026-07-13 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "off_balance_section",
+  "off_balance_goods_account",
+  "recognition_section",
+  "gross_proceeds_clearing_account",
+  "commission_revenue_account",
+  "principal_proceeds_deduction_account",
+  "unreported_commission_liability_account",
+  "unreported_consignment_liability_account",
+  "consignment_cogs_account",
+  "settlement_section",
+  "default_supplier_payable_account"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "off_balance_section",
+   "fieldtype": "Section Break",
+   "label": "Ukrainian Off-balance Accounting"
+  },
+  {
+   "description": "Disabled class-0 account maintained by erpnext_ua's simple-ledger journal.",
+   "fieldname": "off_balance_goods_account",
+   "fieldtype": "Link",
+   "label": "024 Goods Accepted on Commission",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "recognition_section",
+   "fieldtype": "Section Break",
+   "label": "PSBO Recognition Accounts"
+  },
+  {
+   "fieldname": "gross_proceeds_clearing_account",
+   "fieldtype": "Link",
+   "description": "Account 702. The gross Sales Invoice credit is reclassified by the recognition journal.",
+   "label": "702 Gross Goods Revenue",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "commission_revenue_account",
+   "fieldtype": "Link",
+   "description": "Account 703. Only the commission or consignment service margin remains as revenue.",
+   "label": "703 Commission Service Revenue",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "description": "Account 704. Amounts belonging to the principal are deductions from revenue under Instruction 291.",
+   "fieldname": "principal_proceeds_deduction_account",
+   "fieldtype": "Link",
+   "label": "704 Principal Proceeds Deduction",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "unreported_commission_liability_account",
+   "fieldtype": "Link",
+   "label": "685 Unreported Commission Liability",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "unreported_consignment_liability_account",
+   "fieldtype": "Link",
+   "label": "685 Unreported Consignment Liability",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "description": "Legacy field retained only for upgrade compatibility. Retained-ownership goods never post COGS.",
+   "fieldname": "consignment_cogs_account",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Legacy Consignment COGS Account",
+   "options": "Account",
+   "read_only": 1
+  },
+  {
+   "fieldname": "settlement_section",
+   "fieldtype": "Section Break",
+   "label": "Settlement Accounts"
+  },
+  {
+   "description": "May be overridden by Supplier and contract currency rules.",
+   "fieldname": "default_supplier_payable_account",
+   "fieldtype": "Link",
+   "label": "Default Supplier Payable Account",
+   "options": "Account",
+   "reqd": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC Account Mapping",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade Manager",
+   "write": 1
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade Auditor"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "company",
+ "track_changes": 1
+}

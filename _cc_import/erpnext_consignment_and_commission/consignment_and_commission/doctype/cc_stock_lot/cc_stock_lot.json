@@ -1,0 +1,378 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-07-13 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "lot_status",
+  "source_section",
+  "source_method",
+  "receipt",
+  "receipt_item_row",
+  "stock_entry",
+  "stock_entry_detail",
+  "own_source_section",
+  "ownership_conversion",
+  "own_receipt",
+  "own_receipt_item_row",
+  "purchase_invoice",
+  "purchase_invoice_item",
+  "ownership_section",
+  "partner_profile",
+  "contract",
+  "company",
+  "location",
+  "supplier",
+  "relationship_model",
+  "stock_section",
+  "item_code",
+  "stock_uom",
+  "tracking_type",
+  "batch_no",
+  "serial_numbers",
+  "received_qty",
+  "reserved_qty",
+  "received_datetime",
+  "warehouse",
+  "off_balance_section",
+  "off_balance_account",
+  "off_balance_unit_value",
+  "off_balance_amount",
+  "off_balance_currency",
+  "off_balance_entry",
+  "block_section",
+  "blocked_reason"
+ ],
+ "fields": [
+  {
+   "default": "CC-LOT-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "CC-LOT-.YYYY.-.#####",
+   "reqd": 1
+  },
+  {
+   "default": "PENDING",
+   "fieldname": "lot_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lot Status",
+   "options": "PENDING\nOPEN\nBLOCKED\nEXHAUSTED\nCANCELLED",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "source_section",
+   "fieldtype": "Section Break",
+   "label": "Stock Source"
+  },
+  {
+   "fieldname": "source_method",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Source Method",
+   "options": "BUYOUT\nDEFERRED_PURCHASE\nCOMMISSION\nCONSIGNMENT",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "receipt",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "CC Receipt",
+   "options": "CC Receipt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "receipt_item_row",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "CC Receipt Item Row",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_entry_detail",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Stock Entry Detail Row",
+   "read_only": 1
+  },
+  {
+   "fieldname": "own_source_section",
+   "fieldtype": "Section Break",
+   "label": "OWN Purchase Source"
+  },
+  {
+   "fieldname": "ownership_conversion",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "CC Ownership Conversion",
+   "options": "CC Ownership Conversion",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "own_receipt",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "CC Own Receipt",
+   "options": "CC Own Receipt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "own_receipt_item_row",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "CC Own Receipt Item Row",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "purchase_invoice",
+   "fieldtype": "Link",
+   "label": "Purchase Invoice",
+   "options": "Purchase Invoice",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purchase_invoice_item",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Purchase Invoice Item Row",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ownership_section",
+   "fieldtype": "Section Break",
+   "label": "Ownership"
+  },
+  {
+   "fieldname": "partner_profile",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "CC Partner Profile",
+   "options": "CC Partner Profile",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contract",
+   "fieldtype": "Link",
+   "label": "CC Contract",
+   "options": "CC Contract",
+   "read_only": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "CC Location",
+   "options": "CC Location",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "relationship_model",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Relationship Model",
+   "options": "OWN\nCOMMISSION\nCONSIGNMENT",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "stock_section",
+   "fieldtype": "Section Break",
+   "label": "Stock Identity"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Item",
+   "options": "Item",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "stock_uom",
+   "fieldtype": "Link",
+   "label": "Stock UOM",
+   "options": "UOM",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "NONE",
+   "fieldname": "tracking_type",
+   "fieldtype": "Select",
+   "label": "Tracking Type",
+   "options": "NONE\nBATCH\nSERIAL",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch",
+   "options": "Batch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "serial_numbers",
+   "fieldtype": "Small Text",
+   "label": "Serial Numbers",
+   "read_only": 1
+  },
+  {
+   "fieldname": "received_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Received Quantity",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "reserved_qty",
+   "fieldtype": "Float",
+   "label": "Reserved Quantity",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "received_datetime",
+   "fieldtype": "Datetime",
+   "in_standard_filter": 1,
+   "label": "Received At",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Technical Warehouse",
+   "options": "Warehouse",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "off_balance_section",
+   "fieldtype": "Section Break",
+   "label": "UA Account 024 Snapshot"
+  },
+  {
+   "fieldname": "off_balance_account",
+   "fieldtype": "Link",
+   "label": "024 Off-balance Account",
+   "options": "Account",
+   "read_only": 1
+  },
+  {
+   "fieldname": "off_balance_unit_value",
+   "fieldtype": "Currency",
+   "label": "024 Unit Value (Company Currency)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "off_balance_amount",
+   "fieldtype": "Currency",
+   "label": "024 Original Amount (Company Currency)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "off_balance_currency",
+   "fieldtype": "Link",
+   "label": "024 Currency",
+   "options": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "off_balance_entry",
+   "fieldtype": "Link",
+   "label": "024 Receipt Entry",
+   "options": "UA Off Balance Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "block_section",
+   "fieldtype": "Section Break",
+   "label": "Operational Block"
+  },
+  {
+   "depends_on": "eval:doc.lot_status == 'BLOCKED'",
+   "fieldname": "blocked_reason",
+   "fieldtype": "Small Text",
+   "label": "Blocked Reason",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC Stock Lot",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade User"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade Auditor"
+  }
+ ],
+ "show_name_in_global_search": 1,
+ "sort_field": "received_datetime",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

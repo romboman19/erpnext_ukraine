@@ -1,0 +1,1 @@
+"""CC Stock Lot DocType."""

@@ -1,0 +1,39 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-07-14 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status", "idempotency_key", "route", "sales_invoice", "print_kind",
+  "attempts", "provider_reference", "last_error", "completed_at"
+ ],
+ "fields": [
+  {"default":"PENDING","fieldname":"status","fieldtype":"Select","in_list_view":1,"in_standard_filter":1,"label":"Status","options":"PENDING\nPROCESSING\nSUCCEEDED\nFAILED\nCANCELLED","read_only":1,"reqd":1},
+  {"fieldname":"idempotency_key","fieldtype":"Data","label":"Idempotency Key","read_only":1,"reqd":1,"unique":1},
+  {"fieldname":"route","fieldtype":"Link","in_list_view":1,"in_standard_filter":1,"label":"CC POS Route","options":"CC POS Route","read_only":1,"reqd":1,"unique":1},
+  {"fieldname":"sales_invoice","fieldtype":"Link","label":"Sales Invoice","options":"Sales Invoice","read_only":1,"reqd":1},
+  {"fieldname":"print_kind","fieldtype":"Select","label":"Print Kind","options":"FISCAL_RECEIPT\nNON_FISCAL_GOODS_RECEIPT","read_only":1,"reqd":1},
+  {"default":"0","fieldname":"attempts","fieldtype":"Int","label":"Attempts","read_only":1},
+  {"fieldname":"provider_reference","fieldtype":"Data","label":"Provider Reference","read_only":1},
+  {"fieldname":"last_error","fieldtype":"Small Text","label":"Last Error","read_only":1},
+  {"fieldname":"completed_at","fieldtype":"Datetime","label":"Completed At","read_only":1}
+ ],
+ "links": [],
+ "modified": "2026-07-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC POS Print Job",
+ "owner": "Administrator",
+ "permissions": [
+  {"export":1,"read":1,"report":1,"role":"System Manager"},
+  {"export":1,"read":1,"report":1,"role":"Commission Trade Manager"},
+  {"read":1,"report":1,"role":"Commission Trade User"},
+  {"export":1,"read":1,"report":1,"role":"Commission Trade Auditor"}
+ ],
+ "show_name_in_global_search": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

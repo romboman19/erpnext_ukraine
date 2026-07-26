@@ -1,0 +1,51 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-07-14 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status", "checkout", "group_id", "route_section", "company", "location",
+  "legal_entity_type", "legal_entity_name", "fiscal_route", "customer",
+  "posting_date", "currency", "conversion_rate", "items", "payments",
+  "total_amount", "sales_invoice", "print_job", "last_error"
+ ],
+ "fields": [
+  {"default":"PLANNED","fieldname":"status","fieldtype":"Select","in_list_view":1,"in_standard_filter":1,"label":"Status","options":"PLANNED\nDRAFT\nSUBMITTED\nPRINT_PENDING\nCOMPLETED\nCOMPENSATED\nFAILED","read_only":1,"reqd":1},
+  {"fieldname":"checkout","fieldtype":"Link","in_standard_filter":1,"label":"CC POS Checkout","options":"CC POS Checkout","read_only":1,"reqd":1},
+  {"fieldname":"group_id","fieldtype":"Data","in_list_view":1,"label":"Stable Group ID","read_only":1,"reqd":1},
+  {"fieldname":"route_section","fieldtype":"Section Break","label":"Split Route"},
+  {"fieldname":"company","fieldtype":"Link","in_standard_filter":1,"label":"Company","options":"Company","read_only":1,"reqd":1},
+  {"fieldname":"location","fieldtype":"Link","label":"CC Location","options":"CC Location","read_only":1,"reqd":1},
+  {"fieldname":"legal_entity_type","fieldtype":"Data","label":"Legal Entity Type","read_only":1,"reqd":1},
+  {"fieldname":"legal_entity_name","fieldtype":"Data","label":"Legal Entity","read_only":1,"reqd":1},
+  {"fieldname":"fiscal_route","fieldtype":"Select","in_standard_filter":1,"label":"Fiscal Route","options":"FISCAL\nNON_FISCAL","read_only":1,"reqd":1},
+  {"fieldname":"customer","fieldtype":"Link","label":"Customer","options":"Customer","read_only":1,"reqd":1},
+  {"fieldname":"posting_date","fieldtype":"Date","label":"Posting Date","read_only":1,"reqd":1},
+  {"fieldname":"currency","fieldtype":"Link","label":"Currency","options":"Currency","read_only":1,"reqd":1},
+  {"fieldname":"conversion_rate","fieldtype":"Float","label":"Conversion Rate","precision":"9","read_only":1,"reqd":1},
+  {"fieldname":"items","fieldtype":"Table","label":"Reserved Allocations","options":"CC POS Route Item","read_only":1,"reqd":1},
+  {"fieldname":"payments","fieldtype":"Table","label":"Allocated Payment Plan","options":"CC POS Route Payment","read_only":1,"reqd":1},
+  {"fieldname":"total_amount","fieldtype":"Currency","in_list_view":1,"label":"Route Total","options":"currency","read_only":1,"reqd":1},
+  {"fieldname":"sales_invoice","fieldtype":"Link","label":"Sales Invoice","options":"Sales Invoice","read_only":1},
+  {"fieldname":"print_job","fieldtype":"Link","label":"CC POS Print Job","options":"CC POS Print Job","read_only":1},
+  {"fieldname":"last_error","fieldtype":"Small Text","label":"Last Error","read_only":1}
+ ],
+ "links": [],
+ "modified": "2026-07-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC POS Route",
+ "owner": "Administrator",
+ "permissions": [
+  {"export":1,"read":1,"report":1,"role":"System Manager"},
+  {"export":1,"read":1,"report":1,"role":"Commission Trade Manager"},
+  {"read":1,"report":1,"role":"Commission Trade User"},
+  {"export":1,"read":1,"report":1,"role":"Commission Trade Auditor"}
+ ],
+ "show_name_in_global_search": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

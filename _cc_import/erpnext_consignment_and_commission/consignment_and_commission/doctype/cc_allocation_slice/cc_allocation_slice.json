@@ -1,0 +1,118 @@
+{
+ "actions": [],
+ "creation": "2026-07-13 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "sequence",
+  "stock_lot",
+  "warehouse",
+  "source_method",
+  "relationship_model",
+  "qty",
+  "serial_no",
+  "batch_no",
+  "fifo_datetime",
+  "receipt_name",
+  "receipt_row_index"
+ ],
+ "fields": [
+  {
+   "fieldname": "sequence",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Sequence",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "stock_lot",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "CC Stock Lot",
+   "options": "CC Stock Lot",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "source_method",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Source Method",
+   "options": "BUYOUT\nDEFERRED_PURCHASE\nCOMMISSION\nCONSIGNMENT",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "relationship_model",
+   "fieldtype": "Select",
+   "label": "Relationship Model",
+   "options": "OWN\nCOMMISSION\nCONSIGNMENT",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Reserved Quantity",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Link",
+   "label": "Serial No",
+   "options": "Serial No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch",
+   "options": "Batch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fifo_datetime",
+   "fieldtype": "Datetime",
+   "label": "FIFO Received At",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "receipt_name",
+   "fieldtype": "Data",
+   "label": "Receipt",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "receipt_row_index",
+   "fieldtype": "Int",
+   "label": "Receipt Row Index",
+   "read_only": 1,
+   "reqd": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC Allocation Slice",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
+}

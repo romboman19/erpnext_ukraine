@@ -1,0 +1,156 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "field:location_name",
+ "creation": "2026-07-13 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "location_name",
+  "company",
+  "disabled",
+  "legal_entity_section",
+  "legal_entity_type",
+  "legal_entity_name",
+  "legal_entity_label",
+  "warehouse_section",
+  "own_warehouse",
+  "commission_warehouse",
+  "consignment_warehouse",
+  "address"
+ ],
+ "fields": [
+  {
+   "fieldname": "location_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Location Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Disabled"
+  },
+  {
+   "fieldname": "legal_entity_section",
+   "fieldtype": "Section Break",
+   "label": "Legal Entity"
+  },
+  {
+   "default": "Company",
+   "fieldname": "legal_entity_type",
+   "fieldtype": "Select",
+   "label": "Legal Entity Type",
+   "options": "Company\nFOP Profile",
+   "reqd": 1
+  },
+  {
+   "fieldname": "legal_entity_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Legal Entity",
+   "options": "legal_entity_type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "legal_entity_label",
+   "fieldtype": "Data",
+   "label": "Legal Entity Label",
+   "read_only": 1
+  },
+  {
+   "fieldname": "warehouse_section",
+   "fieldtype": "Section Break",
+   "label": "Technical Warehouses"
+  },
+  {
+   "fieldname": "own_warehouse",
+   "fieldtype": "Link",
+   "label": "OWN Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "commission_warehouse",
+   "fieldtype": "Link",
+   "label": "COMMISSION Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "consignment_warehouse",
+   "fieldtype": "Link",
+   "label": "CONSIGNMENT Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "address",
+   "fieldtype": "Link",
+   "label": "Address",
+   "options": "Address"
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC Location",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade User"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade Auditor"
+  }
+ ],
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "location_name"
+}

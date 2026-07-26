@@ -1,0 +1,34 @@
+# Test-only compose overlay. It must be combined with the isolated
+# frappe-test compose file; do not use it with the production stack.
+services:
+  configurator:
+    volumes:
+      - ${CONSIGNMENT_APP_SOURCE:-/home/romboman19/erpnext_consignment_and_commission}:/home/frappe/frappe-bench/apps/erpnext_consignment_and_commission:ro
+
+  backend:
+    environment:
+      PYTHONPATH: /home/frappe/frappe-bench/apps/erpnext_consignment_and_commission
+    volumes:
+      - ${CONSIGNMENT_APP_SOURCE:-/home/romboman19/erpnext_consignment_and_commission}:/home/frappe/frappe-bench/apps/erpnext_consignment_and_commission:ro
+
+  worker:
+    environment:
+      PYTHONPATH: /home/frappe/frappe-bench/apps/erpnext_consignment_and_commission
+    volumes:
+      - ${CONSIGNMENT_APP_SOURCE:-/home/romboman19/erpnext_consignment_and_commission}:/home/frappe/frappe-bench/apps/erpnext_consignment_and_commission:ro
+
+  scheduler:
+    image: erpnext-huntervua:v16.26.2-2
+    platform: linux/amd64
+    command: ["bench", "schedule"]
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+    environment:
+      PYTHONPATH: /home/frappe/frappe-bench/apps/erpnext_consignment_and_commission
+    restart: unless-stopped
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - ${CONSIGNMENT_APP_SOURCE:-/home/romboman19/erpnext_consignment_and_commission}:/home/frappe/frappe-bench/apps/erpnext_consignment_and_commission:ro
+      - /home/romboman19/erpnext_ua/erpnext_ua:/home/frappe/frappe-bench/apps/erpnext_ua/erpnext_ua:ro
+      - /home/romboman19/erpnext_ukrainian_integrations/ukrainian_integrations:/home/frappe/frappe-bench/apps/ukrainian_integrations/ukrainian_integrations:ro

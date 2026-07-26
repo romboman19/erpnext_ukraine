@@ -1,0 +1,1 @@
+"""CC Price Version DocType."""

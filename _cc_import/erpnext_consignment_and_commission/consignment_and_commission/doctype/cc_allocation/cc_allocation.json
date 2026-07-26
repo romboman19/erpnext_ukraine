@@ -1,0 +1,244 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-07-13 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "status",
+  "identity_section",
+  "idempotency_key",
+  "request_fingerprint",
+  "request_section",
+  "company",
+  "location",
+  "item_code",
+  "requested_qty",
+  "serial_no",
+  "batch_no",
+  "fiscal_policy",
+  "allowed_warehouses",
+  "reservation_section",
+  "reserved_at",
+  "expires_at",
+  "completed_at",
+  "total_reserved_qty",
+  "slices",
+  "consumer_section",
+  "consumer_doctype",
+  "consumer_document",
+  "release_reason"
+ ],
+ "fields": [
+  {
+   "default": "CC-ALLOC-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "CC-ALLOC-.YYYY.-.#####",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "PENDING",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "PENDING\nRESERVED\nCONSUMED\nRELEASED\nEXPIRED",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "identity_section",
+   "fieldtype": "Section Break",
+   "label": "Idempotent Request Identity"
+  },
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Idempotency Key",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "request_fingerprint",
+   "fieldtype": "Data",
+   "label": "Request Fingerprint",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "request_section",
+   "fieldtype": "Section Break",
+   "label": "Allocation Request"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "CC Location",
+   "options": "CC Location",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Item",
+   "options": "Item",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "requested_qty",
+   "fieldtype": "Float",
+   "label": "Requested Quantity",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Link",
+   "label": "Requested Serial No",
+   "options": "Serial No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Requested Batch",
+   "options": "Batch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fiscal_policy",
+   "fieldtype": "Select",
+   "label": "Fiscal Policy",
+   "options": "\nAUTO\nFISCAL\nNON_FISCAL",
+   "read_only": 1
+  },
+  {
+   "fieldname": "allowed_warehouses",
+   "fieldtype": "Small Text",
+   "label": "Allowed Warehouses",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "reservation_section",
+   "fieldtype": "Section Break",
+   "label": "Reserved FIFO Slices"
+  },
+  {
+   "fieldname": "reserved_at",
+   "fieldtype": "Datetime",
+   "in_standard_filter": 1,
+   "label": "Reserved At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "in_standard_filter": 1,
+   "label": "Expires At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Completed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_reserved_qty",
+   "fieldtype": "Float",
+   "label": "Total Reserved Quantity",
+   "read_only": 1
+  },
+  {
+   "fieldname": "slices",
+   "fieldtype": "Table",
+   "label": "Allocation Slices",
+   "options": "CC Allocation Slice",
+   "read_only": 1
+  },
+  {
+   "fieldname": "consumer_section",
+   "fieldtype": "Section Break",
+   "label": "Consumption or Release"
+  },
+  {
+   "fieldname": "consumer_doctype",
+   "fieldtype": "Link",
+   "label": "Consumer DocType",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "consumer_document",
+   "fieldtype": "Dynamic Link",
+   "label": "Consumer Document",
+   "options": "consumer_doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "release_reason",
+   "fieldtype": "Small Text",
+   "label": "Release Reason",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Consignment and Commission",
+ "name": "CC Allocation",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade User"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Commission Trade Auditor"
+  }
+ ],
+ "show_name_in_global_search": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
