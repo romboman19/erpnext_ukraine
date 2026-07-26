@@ -1,0 +1,18 @@
+{
+ "doctype": "DocType",
+ "name": "UA Item Group Specification",
+ "module": "UA Item Specs",
+ "istable": 1,
+ "field_order": [
+  "specification",
+  "field_type",
+  "is_mandatory",
+  "default_value"
+ ],
+ "fields": [
+  {"fieldname": "specification", "fieldtype": "Link", "label": "Характеристика", "options": "UA Item Specification", "reqd": 1, "in_list_view": 1, "columns": 4},
+  {"fieldname": "field_type", "fieldtype": "Data", "label": "Тип", "fetch_from": "specification.field_type", "read_only": 1, "in_list_view": 1, "columns": 2},
+  {"fieldname": "is_mandatory", "fieldtype": "Check", "label": "Обов'язкова", "default": "0", "in_list_view": 1, "columns": 2},
+  {"fieldname": "default_value", "fieldtype": "Data", "label": "Значення за замовчуванням", "in_list_view": 1, "columns": 3}
+ ]
+}

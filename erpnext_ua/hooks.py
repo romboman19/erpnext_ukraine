@@ -59,6 +59,8 @@ after_install = [
 	"erpnext_ua.install.ensure_pos_page",
 	"erpnext_ua.install.ensure_price_tag_doctypes",
 	"erpnext_ua.install.ensure_price_tag_setup",
+	"erpnext_ua.install.ensure_item_spec_doctypes",
+	"erpnext_ua.install.ensure_item_spec_setup",
 	"erpnext_ua.print_designer_setup.ensure_print_designer_formats",
 	"erpnext_ua.consignment_and_commission.setup.ownership_dimension.ensure_ownership_dimension",
 	"erpnext_ua.integrations.install.after_install",
@@ -77,6 +79,8 @@ after_migrate = [
 	"erpnext_ua.install.ensure_pos_page",
 	"erpnext_ua.install.ensure_price_tag_doctypes",
 	"erpnext_ua.install.ensure_price_tag_setup",
+	"erpnext_ua.install.ensure_item_spec_doctypes",
+	"erpnext_ua.install.ensure_item_spec_setup",
 	"erpnext_ua.print_designer_setup.ensure_print_designer_formats",
 	"erpnext_ua.consignment_and_commission.setup.ownership_dimension.ensure_ownership_dimension",
 	"erpnext_ua.consignment_and_commission.setup.financial_backfill.backfill_financial_snapshots",
@@ -97,7 +101,7 @@ doctype_js = {
 	"Purchase Invoice": "public/js/purchase_vat.js",
 	"Stock Entry": "public/js/price_tag_source.js",
 	"Delivery Note": "public/js/price_tag_source.js",
-	"Item": "public/js/price_tag_source.js",
+	"Item": ["public/js/price_tag_source.js", "public/js/item_specifications.js"],
 	"Customer": "public/js/customer_vitalpbx_actions.js",
 	"Notification": "public/js/notification_telegram.js",
 	"Notification Settings": "public/js/notification_settings_browser.js",
@@ -160,6 +164,13 @@ doc_events = {
     },
 	"Employee": {
 		"before_validate": "erpnext_ua.ua_pos.employee_barcode.assign_employee_barcode",
+	},
+	"Item": {
+		"validate": "erpnext_ua.ua_item_specs.item_hooks.validate_specifications",
+	},
+	"Item Group": {
+		"validate": "erpnext_ua.ua_item_specs.item_hooks.validate_group_specifications",
+		"on_update": "erpnext_ua.ua_item_specs.item_hooks.clear_specification_cache",
 	},
 	"Purchase Receipt": {
 		"before_validate": "erpnext_ua.ua_receiving.pricing.apply_supplier_price_vat",

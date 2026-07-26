@@ -1,0 +1,53 @@
+{
+ "doctype": "DocType",
+ "name": "UA Item Specification",
+ "module": "UA Item Specs",
+ "autoname": "field:spec_name",
+ "title_field": "spec_name",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1,
+ "field_order": [
+  "basic_section",
+  "spec_name",
+  "fieldname",
+  "spec_group",
+  "field_type",
+  "basic_column",
+  "unit",
+  "is_active",
+  "allow_in_filters",
+  "validation_section",
+  "spec_precision",
+  "min_value",
+  "max_value",
+  "options_section",
+  "options",
+  "help_section",
+  "description"
+ ],
+ "fields": [
+  {"fieldname": "basic_section", "fieldtype": "Section Break", "label": "Характеристика"},
+  {"fieldname": "spec_name", "fieldtype": "Data", "label": "Назва", "reqd": 1, "unique": 1, "in_list_view": 1},
+  {"fieldname": "fieldname", "fieldtype": "Data", "label": "Технічний слаг", "reqd": 1, "unique": 1, "in_list_view": 1, "description": "Латиниця, цифри й підкреслення, напр. blade_length. Використовується в API та імпорті; після створення не змінюється."},
+  {"fieldname": "spec_group", "fieldtype": "Link", "label": "Група", "options": "UA Item Specification Group", "in_list_view": 1},
+  {"fieldname": "field_type", "fieldtype": "Select", "label": "Тип значення", "options": "Data\nText\nHTML\nInt\nFloat\nSelect\nMultiSelect\nCheck\nDate", "default": "Data", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "basic_column", "fieldtype": "Column Break"},
+  {"fieldname": "unit", "fieldtype": "Data", "label": "Одиниця виміру", "description": "см, мм, г, Дж. Показується поряд зі значенням, у самій назві дублювати не треба."},
+  {"fieldname": "is_active", "fieldtype": "Check", "label": "Активна", "default": "1", "in_list_view": 1, "description": "Неактивна не пропонується до додавання; уже введені значення зберігаються."},
+  {"fieldname": "allow_in_filters", "fieldtype": "Check", "label": "Доступна у фільтрах", "default": "0"},
+  {"fieldname": "validation_section", "fieldtype": "Section Break", "label": "Валідація", "depends_on": "eval:['Int','Float'].includes(doc.field_type)"},
+  {"fieldname": "spec_precision", "fieldtype": "Int", "label": "Знаків після коми", "depends_on": "eval:doc.field_type=='Float'", "description": "0 — не округлювати."},
+  {"fieldname": "min_value", "fieldtype": "Float", "label": "Мінімум", "description": "0 — не обмежено."},
+  {"fieldname": "max_value", "fieldtype": "Float", "label": "Максимум", "description": "0 — не обмежено."},
+  {"fieldname": "options_section", "fieldtype": "Section Break", "label": "Дозволені значення", "depends_on": "eval:['Select','MultiSelect'].includes(doc.field_type)"},
+  {"fieldname": "options", "fieldtype": "Table", "label": "Значення", "options": "UA Item Specification Option"},
+  {"fieldname": "help_section", "fieldtype": "Section Break", "label": "Підказка"},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Опис для користувача"}
+ ],
+ "permissions": [
+  {"role": "Item Manager", "read": 1},
+  {"role": "Specification Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1}
+ ]
+}

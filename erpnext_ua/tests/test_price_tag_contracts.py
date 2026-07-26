@@ -18,9 +18,10 @@ APP = Path(__file__).resolve().parents[1]
 class TestPriceTagContracts(unittest.TestCase):
 	def test_module_and_source_buttons_are_registered(self):
 		self.assertIn("UA Price Tags", (APP / "modules.txt").read_text(encoding="utf-8"))
-		for doctype in ("Stock Entry", "Delivery Note", "Item"):
-			self.assertEqual(hooks.doctype_js[doctype], "public/js/price_tag_source.js")
-		self.assertIn("public/js/price_tag_source.js", hooks.doctype_js["Purchase Receipt"])
+		# The contract is that the source-button script is registered, not that it is the
+		# only one: Item and Purchase Receipt carry several form scripts.
+		for doctype in ("Stock Entry", "Delivery Note", "Item", "Purchase Receipt"):
+			self.assertIn("public/js/price_tag_source.js", hooks.doctype_js[doctype])
 		self.assertIn("erpnext_ua.install.ensure_price_tag_setup", hooks.after_install)
 		self.assertIn("erpnext_ua.install.ensure_price_tag_setup", hooks.after_migrate)
 		self.assertIn(

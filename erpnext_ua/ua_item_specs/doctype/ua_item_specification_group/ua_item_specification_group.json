@@ -1,0 +1,23 @@
+{
+ "doctype": "DocType",
+ "name": "UA Item Specification Group",
+ "module": "UA Item Specs",
+ "autoname": "field:group_name",
+ "title_field": "group_name",
+ "sort_field": "display_order",
+ "sort_order": "ASC",
+ "track_changes": 1,
+ "field_order": [
+  "group_name",
+  "display_order"
+ ],
+ "fields": [
+  {"fieldname": "group_name", "fieldtype": "Data", "label": "Назва групи", "reqd": 1, "unique": 1, "in_list_view": 1},
+  {"fieldname": "display_order", "fieldtype": "Int", "label": "Порядок відображення", "in_list_view": 1, "description": "Менше значення — вище в картці товару."}
+ ],
+ "permissions": [
+  {"role": "Item Manager", "read": 1},
+  {"role": "Specification Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1}
+ ]
+}

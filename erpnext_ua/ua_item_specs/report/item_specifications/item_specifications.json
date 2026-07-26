@@ -1,0 +1,32 @@
+{
+ "add_total_row": 0,
+ "columns": [],
+ "creation": "2026-07-26 00:00:00.000000",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [
+  {"fieldname":"item_group","fieldtype":"Link","label":"Категорія (з підкатегоріями)","options":"Item Group"},
+  {"fieldname":"specification","fieldtype":"Link","label":"Характеристика","options":"UA Item Specification"},
+  {"fieldname":"number_from","fieldtype":"Float","label":"Число від"},
+  {"fieldname":"number_to","fieldtype":"Float","label":"Число до"},
+  {"fieldname":"value_contains","fieldtype":"Data","label":"Значення містить"},
+  {"fieldname":"mandatory_only","fieldtype":"Check","label":"Лише обов'язкові"},
+  {"default":"0","fieldname":"include_disabled","fieldtype":"Check","label":"Разом із вимкненими товарами"}
+ ],
+ "is_standard": "Yes",
+ "modified": "2026-07-26 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "UA Item Specs",
+ "name": "Item Specifications",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Item",
+ "report_name": "Item Specifications",
+ "report_type": "Script Report",
+ "roles": [
+  {"role":"System Manager"},
+  {"role":"Item Manager"},
+  {"role":"Specification Manager"}
+ ]
+}

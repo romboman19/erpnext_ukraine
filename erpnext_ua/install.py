@@ -70,6 +70,83 @@ APP_MODULES = _app_modules()
 
 
 PRICE_TAG_ROLES = ("Price Tag User", "Price Tag Manager")
+ITEM_SPEC_ROLES = ("Specification Manager",)
+# Child tables come before the DocTypes that link them, so a clean import never
+# lands on a missing `options` target.
+ITEM_SPEC_DOCTYPES = (
+	("UA Item Specification Group", "ua_item_specification_group"),
+	("UA Item Specification Option", "ua_item_specification_option"),
+	("UA Item Specification", "ua_item_specification"),
+	("UA Item Group Specification", "ua_item_group_specification"),
+	("UA Item Specification Value", "ua_item_specification_value"),
+)
+
+
+def ensure_item_spec_doctypes():
+	"""Import the specification DocTypes on upgrades that predate the module."""
+	if not frappe.db.table_exists("DocType"):
+		return
+	ensure_app_modules()
+	# A long-lived worker can still hold the pre-upgrade modules.txt mapping.
+	frappe.clear_cache()
+	frappe.setup_module_map()
+	from frappe.modules.import_file import import_file_by_path
+
+	for name, folder in ITEM_SPEC_DOCTYPES:
+		if frappe.db.exists("DocType", name):
+			continue
+		path = frappe.get_app_path("erpnext_ua", "ua_item_specs", "doctype", folder, f"{folder}.json")
+		import_file_by_path(path, force=True)
+	frappe.clear_cache()
+	frappe.db.commit()
+
+
+def ensure_item_spec_setup():
+	"""Create the specification role and attach the tables to Item and Item Group."""
+	for role in ITEM_SPEC_ROLES:
+		if not frappe.db.exists("Role", role):
+			frappe.get_doc({"doctype": "Role", "role_name": role}).insert(ignore_permissions=True)
+
+	if not frappe.db.exists("DocType", "UA Item Specification Value"):
+		return
+
+	create_custom_fields(
+		{
+			"Item Group": [
+				{
+					"fieldname": "ua_specifications_section",
+					"label": "Характеристики товарів",
+					"fieldtype": "Section Break",
+					"insert_after": "image",
+				},
+				{
+					"fieldname": "ua_specifications",
+					"label": "Набір характеристик",
+					"fieldtype": "Table",
+					"options": "UA Item Group Specification",
+					"insert_after": "ua_specifications_section",
+					"description": "Успадковується підкатегоріями; у дочірній категорії запис перевизначає батьківський. Обов'язкові підставляються в кожен товар категорії.",
+				},
+			],
+			"Item": [
+				{
+					"fieldname": "ua_specifications_section",
+					"label": "Характеристики",
+					"fieldtype": "Section Break",
+					"insert_after": "description",
+				},
+				{
+					"fieldname": "ua_specifications",
+					"label": "Характеристики",
+					"fieldtype": "Table",
+					"options": "UA Item Specification Value",
+					"insert_after": "ua_specifications_section",
+				},
+			],
+		},
+		update=True,
+	)
+	frappe.db.commit()
 
 
 def ensure_price_tag_doctypes():
