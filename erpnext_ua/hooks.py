@@ -131,6 +131,7 @@ override_doctype_class = {
 permission_query_conditions = {
 	"UA Integration Operation": "erpnext_ua.integrations.utils.operations.get_permission_query_conditions",
 	"VitalPBX Call Log": "erpnext_ua.integrations.pbx_sms.vitalpbx.events.get_permission_query_conditions",
+	"Customer Telegram Link": "erpnext_ua.integrations.customer_identification.telegram_link.get_permission_query_conditions",
 }
 
 has_permission = {
@@ -193,6 +194,9 @@ doc_events = {
     "Serial No": {
         "validate": f"{CC}.tracking.validate_tracking_owner_immutability",
         "on_trash": f"{CC}.tracking.guard_owned_tracking_deletion",
+    },
+    "Customer": {
+        "after_insert": "erpnext_ua.integrations.customer_identification.telegram_link.on_customer_insert",
     },
 }
 

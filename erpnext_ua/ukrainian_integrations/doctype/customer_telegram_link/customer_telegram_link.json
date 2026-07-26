@@ -1,0 +1,32 @@
+{
+ "doctype": "DocType",
+ "name": "Customer Telegram Link",
+ "module": "Ukrainian Integrations",
+ "autoname": "hash",
+ "title_field": "customer",
+ "search_fields": "customer,chat_id,telegram_user_id",
+ "field_order": [
+  "customer", "phone", "chat_id", "telegram_user_id", "status",
+  "verification_count", "last_verified_at", "stop_reason"
+ ],
+ "fields": [
+  {"fieldname": "customer", "fieldtype": "Link", "label": "Покупець", "options": "Customer", "reqd": 1, "unique": 1, "read_only": 1},
+  {"fieldname": "phone", "fieldtype": "Data", "label": "Телефон", "read_only": 1},
+  {"fieldname": "chat_id", "fieldtype": "Data", "label": "Telegram Chat ID", "read_only": 1, "no_copy": 1},
+  {"fieldname": "telegram_user_id", "fieldtype": "Data", "label": "Telegram User ID", "read_only": 1, "no_copy": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Статус", "options": "Active\nStopped\nUnmatched", "default": "Active", "reqd": 1},
+  {"fieldname": "verification_count", "fieldtype": "Int", "label": "Кількість підтверджень", "default": "0", "read_only": 1},
+  {"fieldname": "last_verified_at", "fieldtype": "Datetime", "label": "Останнє підтвердження", "read_only": 1},
+  {"fieldname": "stop_reason", "fieldtype": "Small Text", "label": "Причина зупинки", "read_only": 1}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Sales Manager", "read": 1},
+  {"role": "Sales User", "read": 1},
+  {"role": "POS Manager", "read": 1},
+  {"role": "POS User", "read": 1}
+ ],
+ "engine": "InnoDB",
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}

@@ -50,7 +50,17 @@ def ensure_telegram_customizations() -> None:
             }
         ],
         "User": [_party_chat_field("mobile_no")],
-        "Customer": [_party_chat_field("mobile_no")],
+        "Customer": [
+            _party_chat_field("mobile_no"),
+            {
+                "fieldname": "ua_telegram_status",
+                "fieldtype": "Data",
+                "label": "Telegram Status",
+                "insert_after": "ua_telegram_chat_id",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+        ],
         "Supplier": [_party_chat_field("mobile_no")],
         "Employee": [_party_chat_field("cell_number")],
     }

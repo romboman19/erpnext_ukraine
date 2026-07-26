@@ -7,6 +7,10 @@ import uuid
 import frappe
 from frappe import _
 
+from erpnext_ua.integrations.communication.telegram.profile import get_enabled_bot_profile
+from erpnext_ua.integrations.customer_identification.telegram_link import (
+    ensure_telegram_link,
+)
 from erpnext_ua.integrations.pbx_sms.sms.turbosms import _send_sms_internal
 from erpnext_ua.integrations.utils.security import SALES_ROLES, permitted_doc, require_roles
 
@@ -46,6 +50,17 @@ def _setting(settings, fieldname: str, default=None):
     getter = getattr(settings, "get", None)
     value = getter(fieldname) if callable(getter) else getattr(settings, fieldname, None)
     return default if value in (None, "") else value
+
+
+def _telegram_bot_username(settings) -> str:
+    profile_name = str(settings.get('telegram_bot_profile') or '').strip()
+    if not profile_name:
+        return ''
+    try:
+        profile = get_enabled_bot_profile(profile_name)
+    except Exception:
+        return ''
+    return str(profile.bot_username or '').strip()
 
 
 def _canonical_channel(channel: str | None) -> str:
@@ -178,10 +193,12 @@ def _public_result(doc, *, debug_code: str | None = None) -> dict:
         "customer": _customer_payload(doc.customer) if doc.status == "Verified" else None,
         "instructions": doc.instructions or "",
     }
-    if doc.channel == "Telegram" and settings.telegram_bot_username:
-        result["deep_link"] = (
-            f"https://t.me/{settings.telegram_bot_username}?start=cid_{doc.request_token}"
-        )
+    if doc.channel == "Telegram":
+        telegram_bot_username = _telegram_bot_username(settings)
+        if telegram_bot_username:
+            result["deep_link"] = (
+                f"https://t.me/{telegram_bot_username}?start=cid_{doc.request_token}"
+            )
     if (
         debug_code
         and settings.test_mode
@@ -264,7 +281,11 @@ def get_config() -> dict:
         ),
         "ttl_minutes": int(settings.ttl_minutes or 5),
         "call_verification_number": settings.call_verification_number or "",
-        "telegram_bot_username": settings.telegram_bot_username or "",
+        "telegram_bot_username": (
+            _telegram_bot_username(settings)
+            if _channel_enabled("Telegram", settings)
+            else ""
+        ),
         "test_mode": bool(settings.test_mode),
     }
 
@@ -615,6 +636,18 @@ def quick_create(
 
     request.customer = customer_doc.name
     request.save(ignore_permissions=True)
+
+    if request.channel == "Telegram":
+        chat_id = str(request.external_reference or "").strip()
+        if chat_id:
+            ensure_telegram_link(
+                customer=customer_doc.name,
+                phone=request.phone,
+                chat_id=chat_id,
+                telegram_user_id=str(request.telegram_user_id or "").strip() or None,
+                status="Active",
+            )
+
     frappe.db.commit()
     return _customer_payload(customer_doc.name)
 

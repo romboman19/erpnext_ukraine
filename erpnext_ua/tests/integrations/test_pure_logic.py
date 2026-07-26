@@ -21,6 +21,9 @@ except ModuleNotFoundError:
     frappe.db = types.SimpleNamespace(exists=lambda *args, **kwargs: False)
     sys.modules["frappe"] = frappe
 
+from erpnext_ua.integrations.communication.telegram.client import (
+    TelegramAPIError as ClientTelegramAPIError,
+)
 from erpnext_ua.integrations.communication.telegram.client import TelegramClient, is_valid_chat_id
 from erpnext_ua.integrations.customer_identification.service import _select_channel
 from erpnext_ua.integrations.customer_identification.telegram import (
@@ -585,10 +588,11 @@ class PureLogicTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             _assert_call_accepted({"message": "received"})
 
+    @patch("erpnext_ua.integrations.customer_identification.telegram.get_enabled_bot_profile")
     @patch("erpnext_ua.integrations.customer_identification.telegram._settings")
     @patch("erpnext_ua.integrations.customer_identification.telegram.requests.post")
-    def test_telegram_client_rejects_redirects_and_bounds_requests(self, post, settings):
-        settings.return_value.get_password.return_value = "123456:abcdefghijklmnopqrstuvwxyzABCDE_1234"
+    def test_telegram_client_rejects_redirects_and_bounds_requests(self, post, settings, get_profile):
+        get_profile.return_value.get_password.return_value = "123456:abcdefghijklmnopqrstuvwxyzABCDE_1234"
         raw = b'{"ok":true,"result":{"message_id":1}}'
         response = Mock(status_code=200, headers={"Content-Length": str(len(raw))})
         response.iter_content.return_value = [raw]
@@ -598,10 +602,11 @@ class PureLogicTest(unittest.TestCase):
         self.assertTrue(post.call_args.kwargs["stream"])
         self.assertEqual(post.call_args.kwargs["timeout"], (10, 20))
 
+    @patch("erpnext_ua.integrations.customer_identification.telegram.get_enabled_bot_profile")
     @patch("erpnext_ua.integrations.customer_identification.telegram._settings")
     @patch("erpnext_ua.integrations.customer_identification.telegram.requests.post")
-    def test_telegram_server_error_is_ambiguous(self, post, settings):
-        settings.return_value.get_password.return_value = "123456:abcdefghijklmnopqrstuvwxyzABCDE_1234"
+    def test_telegram_server_error_is_ambiguous(self, post, settings, get_profile):
+        get_profile.return_value.get_password.return_value = "123456:abcdefghijklmnopqrstuvwxyzABCDE_1234"
         raw = b'{"ok":false}'
         response = Mock(status_code=503, headers={"Content-Length": str(len(raw))})
         response.iter_content.return_value = [raw]
@@ -649,7 +654,7 @@ class PureLogicTest(unittest.TestCase):
         post = Mock(return_value=response)
         client = TelegramClient("123456:abcdefghijklmnopqrstuvwxyzABCDE_1234", post=post)
 
-        with self.assertRaises(TelegramAPIError) as raised:
+        with self.assertRaises(ClientTelegramAPIError) as raised:
             client.send_message(chat_id="123", text="test")
 
         self.assertTrue(raised.exception.definite)

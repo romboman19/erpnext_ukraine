@@ -4,6 +4,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from erpnext_ua.integrations.communication.telegram.profile import get_enabled_bot_profile
 from erpnext_ua.integrations.pbx_sms.sms.turbosms import (
     _get_turbosms_settings,
     configured_sender_names,
@@ -77,15 +78,68 @@ class CustomerIdentificationSettings(Document):
                     frappe.throw(_(str(exc)))
 
         if self.telegram_enabled:
-            if not str(self.telegram_bot_username or "").strip():
-                frappe.throw(_("Потрібно вказати ім’я користувача Telegram-бота"))
-            if not self.get_password("telegram_bot_token", raise_exception=False):
-                frappe.throw(_("Потрібно вказати токен Telegram-бота"))
+            profile = get_enabled_bot_profile(self.telegram_bot_profile)
+            if not str(profile.bot_username or "").strip():
+                frappe.throw(_("У вибраному профілі немає username Telegram-бота"))
             if not self.get_password(
                 "telegram_webhook_secret",
                 raise_exception=False,
             ):
                 frappe.throw(_("Потрібно вказати секрет webhook Telegram"))
+
+            ttl = int(self.telegram_ttl_minutes or 0)
+            if ttl < 1 or ttl > 15:
+                frappe.throw(
+                    _("Хвилин на push-підтвердження: значення має бути від 1 до 15")
+                )
+            for fieldname, label in (
+                ("telegram_confirm_button", _("Текст кнопки підтвердження")),
+                ("telegram_cancel_button", _("Текст кнопки скасування")),
+            ):
+                if not str(self.get(fieldname) or "").strip():
+                    frappe.throw(_("{0}: поле не може бути порожнім").format(label))
+            for fieldname, label, required_placeholders in (
+                (
+                    "telegram_confirm_template",
+                    _("Шаблон push-підтвердження"),
+                    {"phone"},
+                ),
+                (
+                    "telegram_linked_template",
+                    _("Шаблон успішного підключення"),
+                    {"phone"},
+                ),
+                (
+                    "telegram_unmatched_template",
+                    _("Шаблон невідомого номера"),
+                    {"phone"},
+                ),
+                (
+                    "telegram_consent_template",
+                    _("Шаблон згоди на обробку контакту"),
+                    set(),
+                ),
+                (
+                    "telegram_welcome_template",
+                    _("Шаблон вітання /start"),
+                    set(),
+                ),
+            ):
+                template = str(self.get(fieldname) or "").strip()
+                if not template:
+                    frappe.throw(_("{0}: шаблон не може бути порожнім").format(label))
+                placeholders = {
+                    field_name
+                    for _, field_name, _, _ in string.Formatter().parse(template)
+                    if field_name
+                }
+                if required_placeholders and not required_placeholders.issubset(placeholders):
+                    frappe.throw(
+                        _("{0}: шаблон має містити {1}").format(
+                            label,
+                            ", ".join(f"{{{p}}}" for p in sorted(required_placeholders)),
+                        )
+                    )
 
         if self.call_enabled and not str(
             self.call_verification_number or ""

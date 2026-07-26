@@ -89,6 +89,7 @@ class ProductionStaticContractsTest(unittest.TestCase):
             "Customer Birthday Greeting Log",
             "Customer Identification Request",
             "Customer Identification Settings",
+            "Customer Telegram Link",
             "Ecommerce Channel",
             "Ecommerce Customer Mapping",
             "Ecommerce File Field",
@@ -520,6 +521,57 @@ class ProductionStaticContractsTest(unittest.TestCase):
                 for link in workspace["links"]
             )
         )
+
+    def test_customer_telegram_link_doctype_is_shipped_with_required_fields(self):
+        path = (
+            UI_MODULE
+            / "doctype"
+            / "customer_telegram_link"
+            / "customer_telegram_link.json"
+        )
+        self.assertTrue(path.is_file())
+        definition = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(definition.get("autoname"), "hash")
+        self.assertEqual(definition.get("title_field"), "customer")
+        fieldnames = {field["fieldname"] for field in definition["fields"]}
+        required_fields = {
+            "customer",
+            "chat_id",
+            "telegram_user_id",
+            "status",
+            "verification_count",
+            "last_verified_at",
+            "stop_reason",
+        }
+        self.assertTrue(required_fields.issubset(fieldnames), required_fields - fieldnames)
+
+    def test_customer_telegram_link_hooks_are_wired(self):
+        hooks = (APP / "hooks.py").read_text(encoding="utf-8")
+        self.assertIn('"Customer": {', hooks)
+        self.assertIn("telegram_link.on_customer_insert", hooks)
+        self.assertIn('"Customer Telegram Link"', hooks)
+
+    def test_telegram_bot_supports_standalone_commands_and_push_methods(self):
+        telegram = (INTEGRATIONS / "customer_identification" / "telegram.py").read_text(
+            encoding="utf-8"
+        )
+        for method in ("sendMessage", "answerCallbackQuery", "editMessageText"):
+            self.assertIn(f'"{method}"', telegram)
+        for command in ("/start", "/stop", "/status"):
+            self.assertIn(f'text == "{command}"', telegram)
+        self.assertIn("request_contact", telegram)
+        self.assertIn("_handle_callback_query", telegram)
+        self.assertIn("_handle_welcome_start", telegram)
+        self.assertIn("_handle_stop", telegram)
+
+    def test_customer_telegram_link_is_used_by_quick_create(self):
+        service = (INTEGRATIONS / "customer_identification" / "service.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "from erpnext_ua.integrations.customer_identification.telegram_link", service
+        )
+        self.assertIn("ensure_telegram_link(", service)
 
     def test_telegram_channel_uses_v16_notification_extension_and_no_guest_document_url(self):
         hooks = (APP / "hooks.py").read_text(encoding="utf-8")
