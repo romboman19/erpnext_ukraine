@@ -77,6 +77,16 @@ def _switch_price_tag_defaults():
 		return
 
 	settings = frappe.get_single("Price Tag Settings")
+	# `default_price_list` is mandatory on the single and is resolved from Selling Settings,
+	# so a site that has no selling price list yet cannot save it at all. Repointing print
+	# formats must not take the whole migration down with it: skip, and let a later
+	# after_migrate do the switch once the site is configured.
+	if not (
+		settings.default_price_list
+		or frappe.get_single_value("Selling Settings", "selling_price_list")
+	):
+		return
+
 	changed = False
 	for fieldname, (legacy_name, designer_name) in PRICE_TAG_FORMAT_FIELDS.items():
 		if settings.get(fieldname) not in (None, "", legacy_name):

@@ -37,6 +37,19 @@ class TestPriceTagContracts(unittest.TestCase):
 			),
 		)
 
+	def test_format_switch_cannot_break_migrate_on_an_unconfigured_site(self):
+		# Price Tag Settings requires default_price_list, which is resolved from Selling
+		# Settings. On a site with no selling price list the single cannot be saved, so the
+		# format switch has to bail out instead of failing after_migrate.
+		source = (APP / "print_designer_setup.py").read_text(encoding="utf-8")
+		switch = source[source.index("def _switch_price_tag_defaults(") :]
+		self.assertIn('frappe.get_single_value("Selling Settings", "selling_price_list")', switch)
+		self.assertLess(
+			switch.index("selling_price_list"),
+			switch.index("settings.save("),
+			"перевірка прайс-листа має стояти до save()",
+		)
+
 	def test_print_job_contains_immutable_snapshot_fields(self):
 		path = APP / "ua_price_tags" / "doctype" / "price_tag_print_job" / "price_tag_print_job.json"
 		doctype = json.loads(path.read_text(encoding="utf-8"))
