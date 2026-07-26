@@ -4,6 +4,7 @@ import frappe
 
 _UPGRADE_STABLE_FIELDTYPES = {
     ("Sales Invoice", "np_sender_profile"),
+    ("Sales Order", "ua_ecommerce_channel"),
     ("Sales Invoice", "up_sender_profile"),
 }
 
