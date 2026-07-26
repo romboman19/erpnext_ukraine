@@ -41,6 +41,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     layout: loadLayout(),
     lastItem: null,
     birthdayPromptKey: null,
+    lastCompletedOrder: null,
   };
   wrapper.uaPosState = state;
 
@@ -61,8 +62,13 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     "Manual Review": "Потрібна перевірка",
     Cancelled: "Скасовано",
   };
+  // A finished sale must clear the cart the same way everywhere a checkout can complete
+  // (cash/cashless payment, mixed payment, return payout, resolved "Payment Unknown") —
+  // finishOrderFlow() below is the single place that decides "final" and resets to a new order.
+  const FINAL_ORDER_STATUSES = new Set(["Completed", "Completed Print Error"]);
   const esc = (value) => frappe.utils.escape_html(String(value ?? ""));
   const money = (value) => format_number(flt(value || 0), null, 2);
+  const formatDateTime = (value) => (value ? new Intl.DateTimeFormat("uk-UA", { dateStyle: "short", timeStyle: "medium" }).format(new Date(value)) : "—");
   const idem = () => {
     if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
     const random = globalThis.crypto?.getRandomValues
@@ -162,6 +168,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
             <button class="ua-pos-action js-fiscal-menu">▣ Фіскальне меню</button>
             <button class="ua-pos-action primary js-retry-fiscal" style="display:none">↻ Відновити фіскалізацію</button>
             <button class="ua-pos-action js-reports">▤ Звіти</button>
+            <button class="ua-pos-action js-daily-report">▤ Звіт за день</button>
             <button class="ua-pos-action danger js-cancel">× Скасувати чек</button>
           </div>
         </section>
@@ -350,7 +357,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     $root.find(".js-pay-cash").prop("disabled", !payable || !hasCashMethod);
     $root.find(".js-pay-card").prop("disabled", !payable || !hasCashlessMethod);
     $root.find(".js-pay-mixed").prop("disabled", !payable || order?.fiscal_mode !== "Fiscal");
-    $root.find(".js-print").prop("disabled", !order || !["Completed", "Completed Print Error"].includes(order.status));
+    $root.find(".js-print").prop("disabled", !(order && FINAL_ORDER_STATUSES.has(order.status)) && !state.lastCompletedOrder);
     $root.find(".js-retry-fiscal").toggle(Boolean(order && ["Fiscal Pending", "Posted", "Manual Review"].includes(order.status)));
     $root.find(".js-hold").prop("disabled", !order || !["Building", "Held"].includes(order.status));
     const customerActionAvailable = Boolean(state.session?.shift && (!order || (editable && order?.order_type !== "Return")));
@@ -363,6 +370,21 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     }
     applyLayout();
     setTimeout(() => $root.find(".ua-pos-scan").focus(), 0);
+  }
+
+  // Single place every checkout path (cash/cashless/mixed payment, return payout, a
+  // resolved "Payment Unknown") routes through once a chek is final: remember it for
+  // "Друк чека" and immediately hand the cashier a clean chek for the next customer,
+  // instead of leaving the paid-off items sitting on screen.
+  async function finishOrderFlow(completedOrder) {
+    if (!FINAL_ORDER_STATUSES.has(completedOrder.status)) {
+      renderOrder(completedOrder);
+      if (completedOrder.status === "Payment Unknown") resolveUnknownPayment(completedOrder);
+      return false;
+    }
+    state.lastCompletedOrder = completedOrder;
+    await newOrder();
+    return true;
   }
 
   async function refreshSession() {
@@ -414,27 +436,52 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     }
   }
 
+  // Shared "покупюрна перевірка" (denomination count) widget: the bill list, table markup,
+  // running-total recalculation, and row extraction are used identically by shift open/close
+  // and by cash operations (incassation/expense) so the counting UX never diverges between them.
+  const CASH_DENOMINATIONS = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.25, 0.1];
+  const DENOMINATION_RECOUNT_MOVEMENT_TYPES = new Set(["Incassation Out", "Expense"]);
+
+  function denominationTableHtml() {
+    const rows = CASH_DENOMINATIONS.map((value) => `<tr><td>${money(value)} грн</td><td><input type="number" min="0" step="1" value="0" data-denomination="${value}"></td><td class="js-row-total">0,00 грн</td></tr>`).join("");
+    return `<table class="ua-pos-denoms"><thead><tr><th>Номінал</th><th>Кількість</th><th>Сума</th></tr></thead><tbody>${rows}</tbody></table><div class="ua-pos-denom-total">Разом: <span>0,00</span> грн</div>`;
+  }
+
+  function bindDenominationTable($wrapper, onTotal) {
+    const recalc = () => {
+      let total = 0;
+      $wrapper.find("[data-denomination]").each(function () { const rowTotal = flt(this.dataset.denomination) * Math.max(0, parseInt(this.value || "0", 10)); total += rowTotal; $(this).closest("tr").find(".js-row-total").text(`${money(rowTotal)} грн`); });
+      $wrapper.find(".ua-pos-denom-total span").text(money(total));
+      if (onTotal) onTotal(total);
+      return total;
+    };
+    $wrapper.on("input", "[data-denomination]", recalc);
+    return recalc;
+  }
+
+  function readDenominationRows($wrapper) {
+    const counted = [];
+    $wrapper.find("[data-denomination]").each(function () { const qty = Math.max(0, parseInt(this.value || "0", 10)); if (qty) counted.push({ currency: "UAH", denomination: flt(this.dataset.denomination), qty }); });
+    return counted;
+  }
+
   function denominationDialog({ title, expected = null, onSubmit }) {
-    const denominations = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.25, 0.1];
-    const rows = denominations.map((value) => `<tr><td>${money(value)} грн</td><td><input type="number" min="0" step="1" value="0" data-denomination="${value}"></td><td class="js-row-total">0,00 грн</td></tr>`).join("");
     const dialog = new frappe.ui.Dialog({
       title,
       size: "large",
       fields: [
-        { fieldname: "info", fieldtype: "HTML", options: `${expected === null ? "" : `<div class="ua-pos-modal-note">Очікуваний залишок: <b>${money(expected)} грн</b></div>`}<table class="ua-pos-denoms"><thead><tr><th>Номінал</th><th>Кількість</th><th>Сума</th></tr></thead><tbody>${rows}</tbody></table><div class="ua-pos-denom-total">Разом: <span>0,00</span> грн</div>` },
+        { fieldname: "info", fieldtype: "HTML", options: `${expected === null ? "" : `<div class="ua-pos-modal-note">Очікуваний залишок: <b>${money(expected)} грн</b></div>`}${denominationTableHtml()}` },
         ...(expected === null ? [] : [{ fieldname: "comment", fieldtype: "Small Text", label: "Коментар касира" }]),
       ],
       primary_action_label: "Підтвердити перерахунок",
       primary_action: async (values) => {
-        const counted = [];
-        dialog.$wrapper.find("[data-denomination]").each(function () { const qty = Math.max(0, parseInt(this.value || "0", 10)); if (qty) counted.push({ currency: "UAH", denomination: flt(this.dataset.denomination), qty }); });
+        const counted = readDenominationRows(dialog.$wrapper);
         dialog.get_primary_btn().prop("disabled", true);
         try { await onSubmit(counted, values.comment || ""); dialog.hide(); } finally { dialog.get_primary_btn().prop("disabled", false); }
       },
     });
     dialog.show();
-    const recalc = () => { let total = 0; dialog.$wrapper.find("[data-denomination]").each(function () { const rowTotal = flt(this.dataset.denomination) * Math.max(0, parseInt(this.value || "0", 10)); total += rowTotal; $(this).closest("tr").find(".js-row-total").text(`${money(rowTotal)} грн`); }); dialog.$wrapper.find(".ua-pos-denom-total span").text(money(total)); };
-    dialog.$wrapper.on("input", "[data-denomination]", recalc);
+    bindDenominationTable(dialog.$wrapper);
     dialog.$wrapper.find("[data-denomination]").first().focus();
   }
 
@@ -504,9 +551,9 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
 		  const payment = { mode_of_payment: method.mode_of_payment, payment_form: method.payment_form, amount: total, currency: "UAH" };
 		  if (group === "cash") payment.tendered_amount = flt(values.received);
           const completed = await api("checkout_start", { pos_session_token: state.token, order: state.order.name, payments: JSON.stringify([payment]), idem_key: idem() });
-          renderOrder(completed); dialog.hide();
-          if (completed.status === "Payment Unknown") resolveUnknownPayment(completed);
+          dialog.hide();
           frappe.show_alert({ message: `${completed.name}: ${statusLabels[completed.status] || completed.status}`, indicator: completed.status === "Completed" ? "green" : "orange" });
+          await finishOrderFlow(completed);
         } finally { dialog.get_primary_btn().prop("disabled", false); }
       },
     });
@@ -523,29 +570,56 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
       primary_action_label: "Перевірити стан термінала",
       primary_action: async () => {
         const result = await api("card_status", { pos_session_token: state.token, attempt });
-        renderOrder(result.order);
         dialog.$wrapper.find(".js-terminal-state").text(`Стан: ${statusLabels[result.order.status] || result.order.status}`);
-        if (result.order.status !== "Payment Unknown") dialog.hide();
+        if (result.order.status === "Payment Unknown") return renderOrder(result.order);
+        dialog.hide();
+        await finishOrderFlow(result.order);
       },
     });
     dialog.show();
   }
 
   function cashOperationDialog(movementType, title) {
+    const canRecount = DENOMINATION_RECOUNT_MOVEMENT_TYPES.has(movementType);
     const dialog = new frappe.ui.Dialog({
       title,
       fields: [
         { fieldname: "amount", fieldtype: "Currency", label: "Сума, грн", reqd: 1 },
+        ...(canRecount ? [
+          { fieldname: "recount", fieldtype: "Check", label: "Виконати покупюрний перерахунок" },
+          { fieldname: "denoms", fieldtype: "HTML", options: denominationTableHtml(), depends_on: "eval:doc.recount" },
+        ] : []),
         { fieldname: "notes", fieldtype: "Small Text", label: "Підстава / коментар", reqd: movementType !== "Cash In" },
       ],
       primary_action_label: "Провести операцію",
       primary_action: async (values) => {
-        const result = await api("cash_operation", { pos_session_token: state.token, movement_type: movementType, amount: values.amount, notes: values.notes || "", idem_key: idem() });
-        dialog.hide();
-        frappe.show_alert({ message: `${title}: ${money(values.amount)} грн · залишок ${money(result.cash_balance)} грн`, indicator: "green" });
+        const rows = canRecount && values.recount ? readDenominationRows(dialog.$wrapper) : [];
+        if (canRecount && values.recount && !rows.length) return frappe.msgprint("Вкажіть кількість купюр для перерахунку.");
+        const amount = rows.length ? rows.reduce((sum, row) => sum + row.denomination * row.qty, 0) : flt(values.amount);
+        dialog.get_primary_btn().prop("disabled", true);
+        try {
+          const result = await api("cash_operation", {
+            pos_session_token: state.token,
+            movement_type: movementType,
+            amount,
+            ...(rows.length ? { denominations: JSON.stringify(rows) } : {}),
+            notes: values.notes || "",
+            idem_key: idem(),
+          });
+          dialog.hide();
+          frappe.show_alert({ message: `${title}: ${money(amount)} грн · залишок ${money(result.cash_balance)} грн`, indicator: "green" });
+        } finally { dialog.get_primary_btn().prop("disabled", false); }
       },
     });
     dialog.show();
+    if (canRecount) {
+      const recalc = bindDenominationTable(dialog.$wrapper, (total) => { if (dialog.get_value("recount")) dialog.set_value("amount", total); });
+      dialog.fields_dict.recount.$input.on("change", () => {
+        const checked = Boolean(dialog.get_value("recount"));
+        dialog.set_df_property("amount", "read_only", checked);
+        if (checked) { recalc(); dialog.$wrapper.find("[data-denomination]").first().focus(); }
+      });
+    }
     dialog.fields_dict.amount.$input.focus();
   }
 
@@ -735,16 +809,49 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
         if (cash) payments.push({ mode_of_payment: cashMethod.mode_of_payment, payment_form: cashMethod.payment_form, amount: cash, tendered_amount: cash, currency: "UAH" });
         if (card) payments.push({ mode_of_payment: cashlessMethod.mode_of_payment, payment_form: cashlessMethod.payment_form, amount: card, currency: "UAH" });
         const completed = await api("checkout_start", { pos_session_token: state.token, order: state.order.name, payments: JSON.stringify(payments), idem_key: idem() });
-        renderOrder(completed); dialog.hide(); if (completed.status === "Payment Unknown") resolveUnknownPayment(completed);
+        dialog.hide();
+        await finishOrderFlow(completed);
       },
     });
     dialog.show();
   }
 
+  // Shared chek-list widget: shift report and daily report both render "Час / Чек /
+  // Покупець / Сума / Фіскалізація", expandable to line items, with a per-row reprint
+  // button — one implementation so the two reports never drift apart.
+  function orderRowsHtml(orders) {
+    if (!orders.length) return '<tr><td colspan="6">Чеків немає</td></tr>';
+    return orders.map((order) => {
+      const itemRows = (order.items || []).map((row) => `<tr><td style="text-align:left">${esc(row.item_name || row.item_code)}<br><small>${esc(row.item_code)}</small></td><td>${money(row.qty)}</td><td>${money(row.amount)} грн</td></tr>`).join("") || '<tr><td colspan="3">Немає позицій</td></tr>';
+      return `<tr class="js-order-row" data-order="${esc(order.name)}" style="cursor:pointer">
+          <td style="text-align:left">${esc(formatDateTime(order.modified))}</td>
+          <td style="text-align:left">${order.order_type === "Return" ? "Повернення" : "Чек"} ${esc(order.name)}</td>
+          <td style="text-align:left">${esc(order.customer || "—")}</td>
+          <td>${money(order.grand_total)} грн</td>
+          <td>${order.fiscal_mode === "Fiscal" ? "Фіскальний" : "Нефіскальний"}</td>
+          <td><button type="button" class="btn btn-xs btn-default js-print-order" data-order="${esc(order.name)}">Друкувати</button></td>
+        </tr>
+        <tr class="js-order-items" data-order="${esc(order.name)}" style="display:none"><td colspan="6" style="padding:0">
+          <table class="ua-pos-denoms" style="margin:0"><thead><tr><th>Товар</th><th>Кількість</th><th>Сума</th></tr></thead><tbody>${itemRows}</tbody></table>
+        </td></tr>`;
+    }).join("");
+  }
+
+  function bindOrderRowsHandlers(dialog) {
+    dialog.$wrapper.on("click", ".js-order-row", function () {
+      const order = this.dataset.order;
+      dialog.$wrapper.find(".js-order-items").filter(function () { return this.dataset.order === order; }).toggle();
+    });
+    dialog.$wrapper.on("click", ".js-print-order", function (event) {
+      event.stopPropagation();
+      printReceipt(this.dataset.order);
+    });
+  }
+
   function reportHtml(report) {
     const movementRows = (report.movements || []).map((row) => `<tr><td style="text-align:left">${esc(row.movement_type)}</td><td>${esc(row.direction === "In" ? "Надходження" : "Видача")}</td><td>${money(row.amount)} ${esc(row.currency)}</td><td style="text-align:left">${esc(row.notes || "—")}</td></tr>`).join("");
     const itemRows = (report.item_totals || []).map((row) => `<tr><td style="text-align:left">${esc(row.item_name)}<br><small>${esc(row.item_code)}</small></td><td>${money(row.qty)}</td><td>${money(row.amount)} грн</td></tr>`).join("");
-    return `<div class="ua-pos-modal-note"><b>Зміна ${esc(report.shift.name)}</b><br>Продажі: ${money(report.sales_total)} грн · Повернення: ${money(report.returns_total)} грн · Чистий продаж: ${money(report.net_sales)} грн · Готівка в касі: ${money(report.cash_balance)} грн</div><h5>Рух готівки</h5><table class="ua-pos-denoms"><thead><tr><th>Операція</th><th>Напрям</th><th>Сума</th><th>Коментар</th></tr></thead><tbody>${movementRows || '<tr><td colspan="4">Операцій немає</td></tr>'}</tbody></table><h5 style="margin-top:18px">Товарний звіт</h5><table class="ua-pos-denoms"><thead><tr><th>Товар</th><th>Кількість</th><th>Сума</th></tr></thead><tbody>${itemRows || '<tr><td colspan="3">Продажів немає</td></tr>'}</tbody></table>`;
+    return `<div class="ua-pos-modal-note"><b>Зміна ${esc(report.shift.name)}</b><br>Продажі: ${money(report.sales_total)} грн · Повернення: ${money(report.returns_total)} грн · Чистий продаж: ${money(report.net_sales)} грн · Готівка в касі: ${money(report.cash_balance)} грн</div><h5>Чеки зміни <small class="text-muted">(клік по рядку — позиції чека)</small></h5><table class="ua-pos-denoms"><thead><tr><th>Час</th><th>Чек</th><th>Покупець</th><th>Сума</th><th>Фіскалізація</th><th></th></tr></thead><tbody>${orderRowsHtml(report.orders || [])}</tbody></table><h5 style="margin-top:18px">Рух готівки</h5><table class="ua-pos-denoms"><thead><tr><th>Операція</th><th>Напрям</th><th>Сума</th><th>Коментар</th></tr></thead><tbody>${movementRows || '<tr><td colspan="4">Операцій немає</td></tr>'}</tbody></table><h5 style="margin-top:18px">Товарний звіт</h5><table class="ua-pos-denoms"><thead><tr><th>Товар</th><th>Кількість</th><th>Сума</th></tr></thead><tbody>${itemRows || '<tr><td colspan="3">Продажів немає</td></tr>'}</tbody></table>`;
   }
 
   async function showReports() {
@@ -753,6 +860,23 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     const html = reportHtml(report);
     const dialog = new frappe.ui.Dialog({ title: "Касовий і товарний звіт зміни", size: "extra-large", fields: [{ fieldname: "report", fieldtype: "HTML", options: html }], primary_action_label: "Друкувати", primary_action: () => printHtml(`Звіт зміни ${report.shift.name}`, html) });
     dialog.show();
+    bindOrderRowsHandlers(dialog);
+  }
+
+  function dailyReportHtml(report) {
+    const paymentRows = (report.payment_totals || []).map((row) => `<tr><td style="text-align:left">${esc(row.mode_of_payment || row.kind)}</td><td>${money(row.amount)} грн</td></tr>`).join("");
+    const day = (report.date || "").split("-").reverse().join(".");
+    return `<div class="ua-pos-modal-note"><b>Звіт за ${esc(day)} · каса ${esc(report.cash_desk)}</b><br>Змін за день: ${esc((report.shifts || []).length)} · Продажі: ${money(report.sales_total)} грн · Повернення: ${money(report.returns_total)} грн · Чистий продаж: ${money(report.net_sales)} грн</div><h5>Чеки за день <small class="text-muted">(клік по рядку — позиції чека)</small></h5><table class="ua-pos-denoms"><thead><tr><th>Час</th><th>Чек</th><th>Покупець</th><th>Сума</th><th>Фіскалізація</th><th></th></tr></thead><tbody>${orderRowsHtml(report.orders || [])}</tbody></table><h5 style="margin-top:18px">По способах оплати</h5><table class="ua-pos-denoms"><thead><tr><th>Спосіб оплати</th><th>Сума</th></tr></thead><tbody>${paymentRows || '<tr><td colspan="2">Оплат немає</td></tr>'}</tbody></table>`;
+  }
+
+  async function showDailyReport() {
+    if (!state.session?.cash_desk) return showNotice("Каса не визначена.", "error");
+    const report = await api("daily_report", { pos_session_token: state.token });
+    const html = dailyReportHtml(report);
+    const day = (report.date || "").split("-").reverse().join(".");
+    const dialog = new frappe.ui.Dialog({ title: `Звіт за ${day}`, size: "extra-large", fields: [{ fieldname: "report", fieldtype: "HTML", options: html }], primary_action_label: "Друкувати", primary_action: () => printHtml(`Звіт за ${day} · ${report.cash_desk}`, html) });
+    dialog.show();
+    bindOrderRowsHandlers(dialog);
   }
 
   function printHtml(title, body, targetWindow = null, hideTitle = false) {
@@ -763,10 +887,18 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     win.focus();
   }
 
-  async function printReceiptBrowser() {
-	if (!state.order) return;
+  // The cart may already have moved on to the next chek (finishOrderFlow starts a new
+  // order right after checkout), so "Друк чека" must still target the chek that was just
+  // paid — not whatever is currently being built — until a newer chek is completed.
+  function printableOrderName() {
+    if (state.order && FINAL_ORDER_STATUSES.has(state.order.status)) return state.order.name;
+    return state.lastCompletedOrder?.name || null;
+  }
+
+  async function printReceiptBrowser(orderName = printableOrderName()) {
+    if (!orderName) return;
     const win = window.open("", "_blank", "width=520,height=760");
-    const data = await api("receipt_data", { pos_session_token: state.token, order: state.order.name });
+    const data = await api("receipt_data", { pos_session_token: state.token, order: orderName });
     const order = data.order;
     const fiscal = data.fiscal_receipt;
 	let body;
@@ -775,18 +907,18 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
 	} else {
 	  const items = (order.items || []).map((row) => `<tr><td>${esc(row.item_name || row.item_code)} × ${esc(row.qty)}</td><td>${money(row.amount)} грн</td></tr>`).join("");
 	  const payments = (order.payments_plan || []).filter((row) => row.status === "Confirmed").map((row) => `<tr><td>${esc(row.prro_payment_means || row.mode_of_payment)}</td><td>${money(row.amount)} грн</td></tr>`).join("");
-	  body = `<div class="center"><b>${esc(data.company.company_name || "")}</b><br>${esc(data.cash_desk)}<br><span class="muted">Касир: ${esc(data.employee_name)}</span></div><p class="center"><b>НЕФІСКАЛЬНИЙ ТОВАРНИЙ ЧЕК</b></p><p><b>ЧЕК ${esc(order.name)}</b></p><table>${items}</table><p class="total">Разом: ${money(order.grand_total)} грн</p><table>${payments}</table>${order.change_amount ? `<p>Решта: ${money(order.change_amount)} грн</p>` : ""}<p class="center muted">Код чека для повернення:<br><img class="lookup-barcode" src="${esc(data.lookup_barcode_svg)}" alt="Штрихкод повернення"><b>${esc(data.lookup_barcode)}</b><br>${esc(data.printed_at)}</p>`;
+	  body = `<div class="center"><b>${esc(data.company.company_name || "")}</b><br>${esc(data.cash_desk)}<br><span class="muted">Касир: ${esc(data.employee_name)}</span></div><p class="center"><b>НЕФІСКАЛЬНИЙ ТОВАРНИЙ ЧЕК</b></p><p><b>ЧЕК ${esc(order.name)}</b><br><small class="muted">${esc(formatDateTime(data.completed_at))}</small></p><table>${items}</table><p class="total">Разом: ${money(order.grand_total)} грн</p><table>${payments}</table>${order.change_amount ? `<p>Решта: ${money(order.change_amount)} грн</p>` : ""}<p class="center muted">Код чека для повернення:<br><img class="lookup-barcode" src="${esc(data.lookup_barcode_svg)}" alt="Штрихкод повернення"><b>${esc(data.lookup_barcode)}</b><br>Надруковано: ${esc(formatDateTime(data.printed_at))}</p>`;
 	}
 	printHtml(`${order.order_type === "Return" ? "Повернення" : "Чек"} ${order.name}`, body, win, Boolean(fiscal));
   }
 
-  async function printReceipt() {
-    if (!state.order) return;
-    if (!state.session?.desk?.receipt_printer) return printReceiptBrowser();
-    const result = await api("queue_receipt_print", { pos_session_token: state.token, order: state.order.name, idem_key: idem() });
-    if (result.fallback_browser) return printReceiptBrowser();
+  async function printReceipt(orderName = printableOrderName()) {
+    if (!orderName) return;
+    if (!state.session?.desk?.receipt_printer) return printReceiptBrowser(orderName);
+    const result = await api("queue_receipt_print", { pos_session_token: state.token, order: orderName, idem_key: idem() });
+    if (result.fallback_browser) return printReceiptBrowser(orderName);
     frappe.show_alert({ message: result.is_copy ? "Копію чека поставлено в чергу друку" : "Чек поставлено в чергу друку", indicator: "green" });
-    renderOrder(await api("get_order", { pos_session_token: state.token, order: state.order.name }));
+    if (state.order?.name === orderName) renderOrder(await api("get_order", { pos_session_token: state.token, order: orderName }));
   }
 
   function returnPaymentDialog(returnOrder, limits) {
@@ -801,7 +933,9 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
         dialog.$wrapper.find("[data-kind]").each(function () { const amount = flt(this.value); if (amount > 0) payments.push({ mode_of_payment: this.dataset.mode, payment_form: this.dataset.form, amount, currency: "UAH" }); });
         if (Math.abs(payments.reduce((sum, row) => sum + row.amount, 0) - flt(returnOrder.grand_total)) > 0.01) return frappe.msgprint("Розподіл виплати має дорівнювати сумі повернення.");
         const completed = await api("checkout_start", { pos_session_token: state.token, order: returnOrder.name, payments: JSON.stringify(payments), idem_key: idem() });
-        renderOrder(completed); dialog.hide(); if (completed.status === "Payment Unknown") resolveUnknownPayment(completed); else frappe.show_alert({ message: "Повернення проведено", indicator: "green" });
+        dialog.hide();
+        if (FINAL_ORDER_STATUSES.has(completed.status)) frappe.show_alert({ message: "Повернення проведено", indicator: "green" });
+        await finishOrderFlow(completed);
       },
     });
     dialog.show();
@@ -1145,6 +1279,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   });
   $root.on("click", ".js-stock", stockSearch);
   $root.on("click", ".js-reports", showReports);
+  $root.on("click", ".js-daily-report", showDailyReport);
   $root.on("click", ".js-return", startReturn);
 
   $(document).off("keydown.ua_pos").on("keydown.ua_pos", (event) => {

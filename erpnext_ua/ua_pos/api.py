@@ -208,6 +208,12 @@ def stock_search(pos_session_token: str, query: str, limit: int = 30) -> list[di
 	return rows
 
 
+DENOMINATION_CONTEXT_BY_MOVEMENT_TYPE = {
+	"Expense": "Expense",
+	"Incassation Out": "Incassation",
+}
+
+
 @frappe.whitelist()
 def cash_operation(
 	pos_session_token: str,
@@ -215,6 +221,7 @@ def cash_operation(
 	amount: float,
 	idem_key: str,
 	notes: str = "",
+	denominations=None,
 ) -> dict:
 	session = get_session(pos_session_token)
 	shift = _require_shift(session)
@@ -230,6 +237,11 @@ def cash_operation(
 	amount = frappe.utils.flt(amount, 2)
 	if amount <= 0:
 		frappe.throw(_("Сума має бути більшою за нуль"))
+	rows = parse_rows(denominations) if denominations else []
+	if rows and movement_type not in DENOMINATION_CONTEXT_BY_MOVEMENT_TYPE:
+		frappe.throw(_("Покупюрний перерахунок недоступний для цієї операції"))
+	if rows and abs(_count_total(rows) - amount) > 0.01:
+		frappe.throw(_("Сума покупюрного перерахунку не збігається із сумою операції"))
 	existing = frappe.db.get_value("POS Cash Movement", {"idem_key": idem_key}, "name")
 	if existing:
 		return frappe.get_doc("POS Cash Movement", existing).as_dict()
@@ -248,6 +260,9 @@ def cash_operation(
 			"is_cash_drawer": 1,
 			"idem_key": idem_key,
 			"notes": (notes or "").strip(),
+			"denomination_counts": [
+				{**row, "context": DENOMINATION_CONTEXT_BY_MOVEMENT_TYPE.get(movement_type)} for row in rows
+			],
 		}
 	).insert(ignore_permissions=True)
 	doc.submit()
@@ -279,6 +294,44 @@ def cash_operation(
 	return {**doc.as_dict(), "cash_balance": _cash_balance(shift)}
 
 
+def _payment_totals_by_method(order_names: tuple) -> list[dict]:
+	"""Payment totals per method, net of returns (a return payout offsets the sale it reverses)."""
+	if not order_names:
+		return []
+	return frappe.db.sql(
+		"""select p.kind, p.mode_of_payment,
+			sum(case when o.order_type='Return' then -p.amount else p.amount end) as amount
+		from `tabPOS Order Payment` p join `tabPOS Order` o on o.name=p.parent
+		where p.parent in %(orders)s and p.status='Confirmed'
+		group by p.kind, p.mode_of_payment order by p.kind, p.mode_of_payment""",
+		{"orders": order_names},
+		as_dict=True,
+	)
+
+
+def _attach_order_items(orders: list, order_names: tuple) -> None:
+	"""Mutate `orders` in place, adding each order's own line items (for an expandable chek list)."""
+	if not order_names:
+		return
+	order_items = frappe.db.sql(
+		"""select i.parent as `order`, i.item_code, i.item_name, i.qty, i.amount
+		from `tabPOS Order Item` i where i.parent in %(orders)s order by i.idx""",
+		{"orders": order_names},
+		as_dict=True,
+	)
+	items_by_order = defaultdict(list)
+	for row in order_items:
+		items_by_order[row.pop("order")].append(row)
+	for order in orders:
+		order["items"] = items_by_order.get(order.name, [])
+
+
+def _sales_and_returns_totals(orders: list) -> tuple[float, float]:
+	sales_total = sum(frappe.utils.flt(row.grand_total) for row in orders if row.order_type != "Return")
+	returns_total = sum(frappe.utils.flt(row.grand_total) for row in orders if row.order_type == "Return")
+	return sales_total, returns_total
+
+
 @frappe.whitelist()
 def shift_report(pos_session_token: str) -> dict:
 	session = get_session(pos_session_token)
@@ -287,28 +340,18 @@ def shift_report(pos_session_token: str) -> dict:
 	orders = frappe.get_all(
 		"POS Order",
 		filters={"operational_shift": shift, "status": ("in", tuple(FINAL_ORDER_STATUSES))},
-		fields=["name", "order_type", "grand_total", "sales_invoice", "customer", "modified"],
+		fields=["name", "order_type", "grand_total", "sales_invoice", "customer", "modified", "fiscal_mode"],
 		order_by="creation",
 	)
-	order_names = [row.name for row in orders]
+	order_names = tuple(row.name for row in orders)
 	movements = frappe.get_all(
 		"POS Cash Movement",
 		filters={"operational_shift": shift, "docstatus": 1},
 		fields=["name", "direction", "movement_type", "amount", "currency", "notes", "creation"],
 		order_by="creation",
 	)
-	payment_totals = []
 	item_totals = []
 	if order_names:
-		order_names = tuple(order_names)
-		payment_totals = frappe.db.sql(
-			"""select p.kind, p.mode_of_payment, sum(p.amount) as amount
-			from `tabPOS Order Payment` p
-			where p.parent in %(orders)s and p.status='Confirmed'
-			group by p.kind, p.mode_of_payment order by p.kind, p.mode_of_payment""",
-			{"orders": order_names},
-			as_dict=True,
-		)
 		item_totals = frappe.db.sql(
 			"""select i.item_code, max(i.item_name) as item_name,
 				sum(case when o.order_type='Return' then -i.qty else i.qty end) as qty,
@@ -318,18 +361,57 @@ def shift_report(pos_session_token: str) -> dict:
 			{"orders": order_names},
 			as_dict=True,
 		)
-	sales_total = sum(frappe.utils.flt(row.grand_total) for row in orders if row.order_type != "Return")
-	returns_total = sum(frappe.utils.flt(row.grand_total) for row in orders if row.order_type == "Return")
+	_attach_order_items(orders, order_names)
+	sales_total, returns_total = _sales_and_returns_totals(orders)
 	return {
 		"shift": shift_doc.as_dict(),
 		"orders": orders,
 		"movements": movements,
-		"payment_totals": payment_totals,
+		"payment_totals": _payment_totals_by_method(order_names),
 		"item_totals": item_totals,
 		"sales_total": sales_total,
 		"returns_total": returns_total,
 		"net_sales": sales_total - returns_total,
 		"cash_balance": _cash_balance(shift),
+	}
+
+
+@frappe.whitelist()
+def daily_report(pos_session_token: str, report_date: str | None = None) -> dict:
+	"""Cross-shift summary for one cash desk on one calendar day, for the office printer:
+	every chek with its fiscalization mark, plus totals by payment method."""
+	session = get_session(pos_session_token)
+	day = frappe.utils.getdate(report_date) if report_date else frappe.utils.today()
+	shifts = frappe.get_all(
+		"POS Operational Shift",
+		filters={
+			"cash_desk": session["cash_desk"],
+			"opened_at": ("between", [f"{day} 00:00:00", f"{day} 23:59:59"]),
+		},
+		fields=["name", "responsible_employee", "opened_at", "closed_at", "status"],
+		order_by="opened_at",
+	)
+	shift_names = tuple(row.name for row in shifts)
+	orders = []
+	if shift_names:
+		orders = frappe.get_all(
+			"POS Order",
+			filters={"operational_shift": ("in", shift_names), "status": ("in", tuple(FINAL_ORDER_STATUSES))},
+			fields=["name", "order_type", "grand_total", "customer", "modified", "fiscal_mode", "operational_shift"],
+			order_by="modified",
+		)
+	order_names = tuple(row.name for row in orders)
+	_attach_order_items(orders, order_names)
+	sales_total, returns_total = _sales_and_returns_totals(orders)
+	return {
+		"cash_desk": session["cash_desk"],
+		"date": str(day),
+		"shifts": shifts,
+		"orders": orders,
+		"payment_totals": _payment_totals_by_method(order_names),
+		"sales_total": sales_total,
+		"returns_total": returns_total,
+		"net_sales": sales_total - returns_total,
 	}
 
 
@@ -2045,6 +2127,7 @@ def receipt_data(pos_session_token: str, order: str) -> dict:
 		"fiscal_receipt": fiscal_receipt,
 		"lookup_barcode": lookup_barcode,
 		"lookup_barcode_svg": code128_svg_data_uri(lookup_barcode),
+		"completed_at": str(doc.modified),
 		"printed_at": str(frappe.utils.now_datetime()),
 	}
 

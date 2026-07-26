@@ -25,7 +25,7 @@ PRRO_SOFTWARE_PRODUCT = "ПРРО ERPNext Україна"
 
 
 class EscPosReceipt:
-	def __init__(self, *, width: int = 48, encoding: str = "cp1251", code_page: int = 46):
+	def __init__(self, *, width: int = 48, encoding: str = "cp866", code_page: int = 17):
 		self.width = max(16, min(int(width), 96))
 		self.encoding = encoding
 		self.parts = [b"\x1b@", b"\x1bt" + bytes([max(0, min(int(code_page), 255))])]
@@ -562,7 +562,11 @@ def render_order_receipt(order, printer, *, is_copy: bool = False) -> bytes:
 	output.barcode_code128(lookup_barcode)
 	output.text(lookup_barcode, align="center", bold=True)
 	if not receipt:
-		output.text(str(frappe.utils.now_datetime()), align="center")
+		# order.modified is the moment checkout_start completed the (immutable) order — the
+		# actual sale time, not "now"; "now" only belongs on a copy, printed separately below.
+		output.text(frappe.utils.format_datetime(order.modified, "dd.MM.yyyy HH:mm:ss"), align="center")
+		if is_copy:
+			output.text(f"Копія: {frappe.utils.format_datetime(frappe.utils.now_datetime(), 'dd.MM.yyyy HH:mm:ss')}", align="center")
 	payload = output.finish()
 	if len(payload) > MAX_PRINT_PAYLOAD:
 		frappe.throw("Сформований чек перевищує ліміт друку 128 KiB")

@@ -1,6 +1,6 @@
 {
  "doctype":"DocType","name":"POS Cash Movement","module":"UA POS","autoname":"POS-MOV-.YYYY.-.#####","is_submittable":1,
- "field_order":["cash_desk","operational_shift","employee","direction","movement_type","amount","currency","mode_of_payment","is_cash_drawer","fop_profile","basis_doctype","basis_name","reversal_of","idem_key","prro_receipt","fiscal_status","notes"],
+ "field_order":["cash_desk","operational_shift","employee","direction","movement_type","amount","denomination_counts","currency","mode_of_payment","is_cash_drawer","fop_profile","basis_doctype","basis_name","reversal_of","idem_key","prro_receipt","fiscal_status","notes"],
  "fields":[
   {"fieldname":"cash_desk","fieldtype":"Link","label":"Cash Desk","options":"POS Cash Desk","reqd":1},
   {"fieldname":"operational_shift","fieldtype":"Link","label":"Operational Shift","options":"POS Operational Shift","reqd":1},
@@ -8,6 +8,7 @@
   {"fieldname":"direction","fieldtype":"Select","label":"Direction","options":"In\nOut","reqd":1},
   {"fieldname":"movement_type","fieldtype":"Select","label":"Movement Type","options":"Opening Float\nCash In\nSale Cash\nRefund Cash\nDeposit\nIncassation Out\nIncassation In\nExpense\nTransfer Out\nTransfer In\nCorrection","reqd":1},
   {"fieldname":"amount","fieldtype":"Currency","label":"Amount","reqd":1},
+  {"fieldname":"denomination_counts","fieldtype":"Table","label":"Denomination Count","options":"POS Denomination Count"},
   {"fieldname":"currency","fieldtype":"Link","label":"Currency","options":"Currency","default":"UAH","reqd":1},
   {"fieldname":"mode_of_payment","fieldtype":"Link","label":"Mode of Payment","options":"Mode of Payment"},
   {"fieldname":"is_cash_drawer","fieldtype":"Check","label":"Affects Cash Drawer","default":"1"},
