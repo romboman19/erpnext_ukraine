@@ -114,6 +114,31 @@ def check_modules() -> list[tuple[str, str]]:
 	return failures
 
 
+def check_workspace_sidebars() -> list[tuple[str, str]]:
+	"""Every public Workspace needs a matching Workspace Sidebar fixture.
+
+	Frappe generates a Desktop Icon for each public Workspace by ``name``, and
+	that icon links to a ``Workspace Sidebar`` doc of the same name. A Workspace
+	shipped without its sidebar fixture passes ``bench migrate`` silently and
+	only breaks the very first `after_install`/`after_migrate` run on a clean
+	site, when Frappe tries to create that icon and fails.
+	"""
+	import json
+
+	workspace_names = set()
+	for path in REPO_ROOT.glob(f"{APP}/**/workspace/*/*.json"):
+		workspace_names.add(json.loads(path.read_text(encoding="utf-8"))["name"])
+
+	sidebar_names = set()
+	for path in (REPO_ROOT / APP / "workspace_sidebar").glob("*.json"):
+		sidebar_names.add(json.loads(path.read_text(encoding="utf-8"))["name"])
+
+	return [
+		(name, "no matching file under workspace_sidebar/")
+		for name in sorted(workspace_names - sidebar_names)
+	]
+
+
 def defined_names(module_path: Path) -> set[str]:
 	tree = ast.parse(module_path.read_text(encoding="utf-8"))
 	names = set()
@@ -149,6 +174,7 @@ def main() -> int:
 	failures += [(asset, reason) for asset in assets if (reason := missing_asset(asset))]
 	failures += check_patches()
 	failures += check_modules()
+	failures += check_workspace_sidebars()
 
 	for subject, reason in failures:
 		print(f"BROKEN {subject}: {reason}", file=sys.stderr)
