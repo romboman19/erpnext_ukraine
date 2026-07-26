@@ -83,3 +83,48 @@ class TestUAChartSetup(IntegrationTestCase):
 
 	def test_apply_full_chart_to_unused_ukrainian_company(self):
 		self._apply_and_assert("full_291")
+
+	def test_apply_chart_works_for_a_non_administrator_accounts_manager(self):
+		"""ERPNext's own set_default_accounts()/unset_existing_data() query the
+		permission-less child doctype "Party Account" without ignore_permissions,
+		so calling apply_chart as anyone other than Administrator used to fail
+		with "Insufficient Permission for Party Account" even with the System
+		Manager and Accounts Manager roles that _only_accounting_administrators()
+		requires. Reproduces the real-world session, not just the role check.
+		"""
+		suffix = uuid4().hex[:5].upper()
+		user_email = f"_ua_chart_accountant_{suffix.lower()}@example.com"
+		frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": user_email,
+				"first_name": "UA Chart Test Accountant",
+				"send_welcome_email": 0,
+				"roles": [{"role": "Accounts Manager"}],
+			}
+		).insert(ignore_permissions=True)
+
+		company = frappe.get_doc(
+			{
+				"doctype": "Company",
+				"company_name": f"_UA Chart Perm Test {suffix}",
+				"abbr": f"P{suffix[:4]}",
+				"country": "Ukraine",
+				"default_currency": "UAH",
+				"create_chart_of_accounts_based_on": "Standard Template",
+				"chart_of_accounts": "Standard",
+			}
+		).insert(ignore_permissions=True)
+
+		self.addCleanup(frappe.set_user, frappe.session.user)
+		frappe.set_user(user_email)
+		self.assertEqual(frappe.session.user, user_email)
+
+		result = apply_chart(company.name, "simplified_186", company.name)
+
+		self.assertGreater(result["created_account_count"], 0)
+		self.assertEqual(
+			frappe.session.user,
+			user_email,
+			"apply_chart must restore the caller's session, not leak the internal Administrator elevation",
+		)

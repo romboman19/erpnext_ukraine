@@ -197,6 +197,7 @@ def apply_chart(company: str, template_value: str, confirmation: str) -> dict:
 	savepoint = "ua_chart_of_accounts_apply"
 	frappe.db.savepoint(savepoint)
 	previous_flag = getattr(frappe.local.flags, "ignore_root_company_validation", None)
+	acting_user = frappe.session.user
 	try:
 		from erpnext.accounts.doctype.account.chart_of_accounts.chart_of_accounts import create_charts
 		from erpnext.accounts.doctype.chart_of_accounts_importer.chart_of_accounts_importer import (
@@ -204,16 +205,28 @@ def apply_chart(company: str, template_value: str, confirmation: str) -> dict:
 			unset_existing_data,
 		)
 
-		unset_existing_data(company)
 		frappe.local.flags.ignore_root_company_validation = True
+		# unset_existing_data() explicitly deletes from "Party Account" with
+		# ignore_permissions=False, and set_default_accounts() queries it too.
+		# That doctype ships with zero DocPerm rows of its own, so both calls
+		# 403 for every non-Administrator session regardless of role. The caller
+		# is already authorized by _only_accounting_administrators() above plus
+		# the typed company-name confirmation; briefly acting as Administrator
+		# for these ERPNext-core calls works around that core gap instead of
+		# widening what this endpoint itself allows.
+		frappe.set_user("Administrator")
+		unset_existing_data(company)
 		create_charts(company, custom_chart=tree)
 		set_default_accounts(company)
+		frappe.set_user(acting_user)
+
 		defaults = _set_company_defaults(company, template)
 		_mark_accounts(company, template)
 	except Exception:
 		frappe.db.rollback(save_point=savepoint)
 		raise
 	finally:
+		frappe.set_user(acting_user)
 		frappe.local.flags.ignore_root_company_validation = previous_flag
 
 	return {
