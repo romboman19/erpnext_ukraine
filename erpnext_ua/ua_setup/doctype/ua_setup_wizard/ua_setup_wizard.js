@@ -95,6 +95,12 @@ function run_step(frm, check) {
 		return;
 	}
 
+	if (!frm.doc.chart_template) {
+		frappe.msgprint(__("Спершу оберіть шаблон плану рахунків у полі вище."));
+		frm.scroll_to_field("chart_template");
+		return;
+	}
+
 	frappe.call({
 		method: "erpnext_ua.ua_setup.service.chart_preflight",
 		args: { company: frm.doc.company, chart_template: frm.doc.chart_template },

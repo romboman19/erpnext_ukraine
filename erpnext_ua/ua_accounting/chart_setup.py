@@ -38,8 +38,13 @@ def _count(doctype: str, filters: dict | None = None) -> int:
 def preflight(company: str, template_value: str) -> dict:
 	if not frappe.db.exists("Company", company):
 		frappe.throw(_("Компанію {0} не знайдено").format(frappe.bold(company)))
+	if not (template_value or "").strip():
+		frappe.throw(_("Оберіть шаблон плану рахунків: 291 (повний) або 186 (спрощений)"))
 
-	template = load_template(template_value)
+	try:
+		template = load_template(template_value)
+	except ValueError:
+		frappe.throw(_("Невідомий шаблон плану рахунків: {0}").format(frappe.bold(template_value)))
 	company_country = frappe.db.get_value("Company", company, "country")
 	blockers = []
 	warnings = []
