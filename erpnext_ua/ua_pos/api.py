@@ -17,6 +17,7 @@ from erpnext_ua.ua_fiscal.payment import (
 	fiscal_payform_name,
 	resolve_payment_method,
 )
+from erpnext_ua.ua_pos.employee_barcode import is_valid_employee_barcode
 from erpnext_ua.ua_pos.services.common import (
 	SESSION_TTL,
 	active_shift,
@@ -87,7 +88,7 @@ def list_cash_desks() -> list[dict]:
 	)
 
 
-@frappe.whitelist(allow_guest=False)
+@frappe.whitelist(allow_guest=False, methods=["POST"])
 @rate_limit(key="cash_desk", limit=10, seconds=300, methods="POST", ip_based=True)
 def login_by_barcode(cash_desk: str, barcode: str, device_token: str | None = None) -> dict:
 	cash_desk = (cash_desk or "").strip()
@@ -96,7 +97,9 @@ def login_by_barcode(cash_desk: str, barcode: str, device_token: str | None = No
 		frappe.throw(_("Cash desk and employee barcode are required"))
 	if frappe.db.get_value("POS Cash Desk", cash_desk, "status") != "Active":
 		frappe.throw("Cash desk is inactive")
-	employee = frappe.db.get_value("Employee", {"ua_pos_barcode_hash": digest(barcode)}, "name")
+	employee = None
+	if is_valid_employee_barcode(barcode):
+		employee = frappe.db.get_value("Employee", {"ua_pos_barcode": barcode}, "name")
 	if not employee:
 		audit("failed_access", {"cash_desk": cash_desk}, details={"device": device_token}, reason="unknown_barcode")
 		frappe.throw(_("Employee barcode is not recognized"), frappe.PermissionError)

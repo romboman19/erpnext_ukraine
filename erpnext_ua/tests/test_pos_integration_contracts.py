@@ -39,6 +39,24 @@ class TestPOSIntegrationContracts(unittest.TestCase):
         self.assertIn("config.allow_pos_channel_selection", source)
         self.assertNotIn('identificationApi("begin",', source)
 
+    def test_employee_login_uses_plain_auto_generated_ean13(self):
+        install = (APP / "install.py").read_text(encoding="utf-8")
+        api = (APP / "ua_pos" / "api.py").read_text(encoding="utf-8")
+        barcode = (APP / "ua_pos" / "employee_barcode.py").read_text(encoding="utf-8")
+
+        self.assertIn('"fieldname": "ua_pos_barcode"', install)
+        self.assertIn('"label": "Штрихкод касира (EAN-13)"', install)
+        self.assertIn('"read_only": 1', install)
+        self.assertIn("backfill_employee_barcodes()", install)
+        self.assertIn('"ua_pos_barcode": barcode', api)
+        self.assertNotIn('"ua_pos_barcode_hash": digest(barcode)', api)
+        self.assertIn('EAN13_PREFIX = "9910"', barcode)
+        self.assertIn('NAMING_SERIES = f"{EAN13_PREFIX}.{SEQUENCE_DIGITS *', barcode)
+        self.assertEqual(
+            hooks.doc_events["Employee"]["before_validate"],
+            "erpnext_ua.ua_pos.employee_barcode.assign_employee_barcode",
+        )
+
     def test_pos_login_has_no_test_cashier_and_uses_a_dark_heading(self):
         source = (APP / "ua_pos" / "page" / "ua_pos" / "ua_pos.js").read_text(
             encoding="utf-8"

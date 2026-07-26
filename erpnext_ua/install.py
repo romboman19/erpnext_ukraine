@@ -508,8 +508,34 @@ def ensure_pos_setup():
 	create_custom_fields(
 		{
 			"Employee": [
-				{"fieldname": "ua_pos_barcode_hash", "label": "POS Barcode Hash", "fieldtype": "Data", "unique": 1},
-				{"fieldname": "ua_pos_pin_hash", "label": "POS PIN Hash", "fieldtype": "Password"},
+				{
+					"fieldname": "ua_pos_barcode",
+					"label": "Штрихкод касира (EAN-13)",
+					"fieldtype": "Data",
+					"unique": 1,
+					"read_only": 1,
+					"no_copy": 1,
+					"print_hide": 1,
+					"insert_after": "attendance_device_id",
+					"description": "Генерується автоматично з внутрішнім префіксом 9910.",
+				},
+				{
+					"fieldname": "ua_pos_barcode_hash",
+					"label": "Застарілий хеш штрихкоду POS",
+					"fieldtype": "Data",
+					"unique": 1,
+					"hidden": 1,
+					"read_only": 1,
+					"insert_after": "ua_pos_barcode",
+				},
+				{
+					"fieldname": "ua_pos_pin_hash",
+					"label": "Застарілий хеш PIN POS",
+					"fieldtype": "Password",
+					"hidden": 1,
+					"read_only": 1,
+					"insert_after": "ua_pos_barcode_hash",
+				},
 			],
 			"Sales Invoice": [
 				{"fieldname": "ua_pos_order", "label": "POS Order", "fieldtype": "Link", "options": "POS Order"},
@@ -560,6 +586,9 @@ def ensure_pos_setup():
 		},
 		update=True,
 	)
+	from erpnext_ua.ua_pos.employee_barcode import backfill_employee_barcodes
+
+	backfill_employee_barcodes()
 	ensure_payment_method_catalog()
 	frappe.db.commit()
 

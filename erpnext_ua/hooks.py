@@ -158,6 +158,9 @@ doc_events = {
         "on_cancel": f"{CC}.sales_invoice.on_cancel_managed_sales_invoice",
         "on_trash": f"{CC}.sales_invoice.release_draft_sales_invoice_allocations",
     },
+	"Employee": {
+		"before_validate": "erpnext_ua.ua_pos.employee_barcode.assign_employee_barcode",
+	},
 	"Purchase Receipt": {
 		"before_validate": "erpnext_ua.ua_receiving.pricing.apply_supplier_price_vat",
 		"before_submit": "erpnext_ua.ua_receiving.service.validate_purchase_receipt",
