@@ -8,10 +8,18 @@ from erpnext_ua.ua_setup import service
 
 
 class UASetupWizard(Document):
-	"""Форма-майстер: збирає дані платника й делегує роботу сервісам.
+	"""Стан налаштування для однієї компанії. Нічого не зберігає постійно.
 
-	Самі кроки живуть у ``erpnext_ua.ua_setup.service`` і не залежать від цієї
-	форми — ту саму послідовність можна виконати з bench або з API.
+	Це Single DocType, тобто один рядок на весь сайт — тому поле ``company`` і
+	результати кроків ніколи не проходять через ``self.save()``. Раніше форма
+	зберігала введені дані ФОП/каси при кожному кроці; для другої компанії
+	лишалися значення від першої, бо запис один на сайт, а не на компанію.
+
+	Кроки, у яких є власний повноцінний DocType (``FOP Profile``,
+	``UA Chart of Accounts Setup``, ``PRRO Cash Register``), майстер більше не
+	дублює: кнопка веде на форму створення. Тут лишається лише те, що не має
+	власної форми або отримує реальну користь від об'єднання кількох дій
+	(``apply_cash_desk`` заразом створює роздрібного покупця).
 	"""
 
 	def onload(self):
@@ -19,80 +27,24 @@ class UASetupWizard(Document):
 			self.company = service._default_company()
 
 	@frappe.whitelist()
-	def run_step(self, step: str) -> dict:
+	def run_step(self, step: str, args: dict | None = None) -> dict:
 		self.check_permission("write")
 		handler = getattr(self, f"_step_{step}", None)
 		if handler is None:
 			frappe.throw(_("Невідомий крок налаштування: {0}").format(step))
-		result = handler()
-		self.save(ignore_permissions=True)
-		return result
+		return handler(frappe.parse_json(args) if isinstance(args, str) else (args or {}))
 
-	def _require(self, *fieldnames: str) -> None:
-		missing = [
-			_(self.meta.get_label(fieldname)) for fieldname in fieldnames if not (self.get(fieldname) or "").strip()
-		]
-		if missing:
-			frappe.throw(_("Заповніть обов'язкові поля кроку: {0}").format(", ".join(missing)))
-
-	def _step_apply_language(self) -> dict:
+	def _step_apply_language(self, args: dict) -> dict:
 		return service.apply_language()
 
-	def _step_apply_tax_parameters(self) -> dict:
+	def _step_apply_tax_parameters(self, args: dict) -> dict:
 		return service.apply_tax_parameters()
 
-	def _step_apply_payment_methods(self) -> dict:
+	def _step_apply_payment_methods(self, args: dict) -> dict:
 		return service.apply_payment_methods()
 
-	def _step_apply_chart(self) -> dict:
-		self._require("company", "chart_template")
-		return service.apply_chart(self.company, self.chart_template)
-
-	def _step_apply_fop_profile(self) -> dict:
-		self._require(
-			"company",
-			"fop_full_name",
-			"prro_registered_name",
-			"tax_id",
-			"single_tax_group",
-			"tax_rate_mode",
-		)
-		result = service.apply_fop_profile(
-			company=self.company,
-			fop_full_name=self.fop_full_name,
-			prro_registered_name=self.prro_registered_name,
-			tax_id=self.tax_id,
-			single_tax_group=self.single_tax_group,
-			tax_rate_mode=self.tax_rate_mode,
-			kved_main=self.kved_main,
-			registration_address=self.registration_address,
-			iban=self.iban,
-			vat_payer=self.vat_payer,
-			vat_number=self.vat_number,
-		)
-		self.fop_profile = result["fop_profile"]
-		return result
-
-	def _step_apply_cash_desk(self) -> dict:
-		self._require("company")
-		result = service.apply_cash_desk(self.company, self.warehouse, self.desk_name)
-		self.warehouse = frappe.db.get_value("POS Cash Desk", result["cash_desk"], "warehouse")
-		return result
-
-	def _step_apply_prro_register(self) -> dict:
-		self._require(
-			"fop_profile",
-			"register_name",
-			"fiscal_number",
-			"register_local_number",
-			"unit_name",
-			"unit_address",
-		)
-		return service.apply_prro_register(
-			fop_profile=self.fop_profile,
-			register_name=self.register_name,
-			fiscal_number=self.fiscal_number,
-			register_local_number=self.register_local_number,
-			unit_name=self.unit_name,
-			unit_address=self.unit_address,
-		)
+	def _step_apply_cash_desk(self, args: dict) -> dict:
+		company = args.get("company") or self.company
+		if not company:
+			frappe.throw(_("Спершу оберіть компанію"))
+		return service.apply_cash_desk(company, args.get("warehouse"), args.get("desk_name"))

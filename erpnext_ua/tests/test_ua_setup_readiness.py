@@ -138,22 +138,31 @@ class TestSetupReadiness(unittest.TestCase):
 		self.assertIs(check.status, Status.PENDING)
 		self.assertFalse(can_fiscalize(evaluate(state)))
 
-	def test_every_fix_action_matches_a_wizard_step(self):
-		# Read the controller as text: importing it needs Frappe, and this is a
-		# contract between two files, not runtime behaviour.
-		wizard_source = (
-			Path(__file__).resolve().parents[1]
-			/ "ua_setup"
-			/ "doctype"
-			/ "ua_setup_wizard"
-			/ "ua_setup_wizard.py"
-		).read_text(encoding="utf-8")
+	def test_every_fix_action_is_wired_to_a_step_or_a_navigation_target(self):
+		# Read both controllers as text: importing them needs Frappe, and this is
+		# a contract between files, not runtime behaviour. A fix_action either
+		# runs server-side (_step_<action> in the .py, for actions with no
+		# dedicated DocType of their own) or routes to a real form that already
+		# exists for that data (NAVIGATE_ACTIONS in the .js) — never both, and
+		# never neither.
+		wizard_dir = Path(__file__).resolve().parents[1] / "ua_setup" / "doctype" / "ua_setup_wizard"
+		wizard_py = (wizard_dir / "ua_setup_wizard.py").read_text(encoding="utf-8")
+		wizard_js = (wizard_dir / "ua_setup_wizard.js").read_text(encoding="utf-8")
 
 		for check in evaluate(CLEAN_SITE) + evaluate(READY_TO_SELL):
 			if not check.fix_action:
 				continue
 			with self.subTest(step=check.step):
-				self.assertIn(f"def _step_{check.fix_action}(", wizard_source)
+				has_step = f"def _step_{check.fix_action}(" in wizard_py
+				has_navigation = f"{check.fix_action}: {{" in wizard_js
+				self.assertTrue(
+					has_step or has_navigation,
+					f"{check.fix_action} has neither a wizard step nor a navigation target",
+				)
+				self.assertFalse(
+					has_step and has_navigation,
+					f"{check.fix_action} is wired both as a step and as navigation",
+				)
 
 
 if __name__ == "__main__":

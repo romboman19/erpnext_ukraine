@@ -1,5 +1,12 @@
-// Майстер показує стан налаштування і дає запустити лише ті кроки, які ще не
-// закриті. Кожен крок ідемпотентний, тому повторний запуск нічого не зламає.
+// Майстер показує стан налаштування і не зберігає жодних власних даних:
+// це Single DocType (один рядок на весь сайт), тому будь-яке збережене тут
+// поле лишалося б на екрані для наступної компанії, яку тут переглядатимуть.
+//
+// Кроки, для яких вже є повноцінний DocType (FOP Profile, UA Chart of
+// Accounts Setup, PRRO Cash Register), ведуть саме туди — з передзаповненою
+// компанією/ФОП, без дублювання полів. Лише "Каса" лишається діалогом: він
+// заразом створює роздрібного покупця, чого звичайна форма POS Cash Desk не
+// робить.
 
 const STATUS_INDICATOR = {
 	done: "green",
@@ -11,6 +18,26 @@ const SEVERITY_LABEL = {
 	required: "обов'язково",
 	fiscal: "для фіскальних чеків",
 	recommended: "рекомендовано",
+};
+
+// fix_action -> куди вести. Кожен запис або відкриває нову форму
+// (route: doctype, args: {}), або є суто клієнтською дією без сервера.
+const NAVIGATE_ACTIONS = {
+	apply_fop_profile: {
+		doctype: "FOP Profile",
+		args: (frm) => ({ company: frm.doc.company }),
+	},
+	apply_chart: {
+		doctype: "UA Chart of Accounts Setup",
+		args: (frm) => ({ company: frm.doc.company }),
+	},
+	apply_prro_register: {
+		doctype: "PRRO Cash Register",
+		args: async (frm) => ({
+			fop_profile: await frappe.db.get_value("FOP Profile", { company: frm.doc.company }, "name")
+				.then((r) => r.message && r.message.name),
+		}),
+	},
 };
 
 frappe.ui.form.on("UA Setup Wizard", {
@@ -75,52 +102,67 @@ function draw(frm, report) {
 	frm.get_field("readiness_html").refresh();
 }
 
-function run_step(frm, check) {
-	const run = () =>
-		frm.call({
-			doc: frm.doc,
-			method: "run_step",
-			args: { step: check.fix_action },
-			freeze: true,
-			freeze_message: __("Виконується крок: {0}", [check.title]),
-		}).then(() => {
-			frappe.show_alert({ message: __("Крок виконано: {0}", [check.title]), indicator: "green" });
-			frm.reload_doc().then(() => render_readiness(frm));
-		});
-
-	// Заміна плану рахунків видаляє наявні рахунки компанії. Це єдиний
-	// незворотний крок майстра, тому він питає окремо.
-	if (check.fix_action !== "apply_chart") {
-		run();
+async function run_step(frm, check) {
+	if (!frm.doc.company) {
+		frappe.msgprint(__("Спершу оберіть компанію."));
 		return;
 	}
 
-	if (!frm.doc.chart_template) {
-		frappe.msgprint(__("Спершу оберіть шаблон плану рахунків у полі вище."));
-		frm.scroll_to_field("chart_template");
+	const navigate = NAVIGATE_ACTIONS[check.fix_action];
+	if (navigate) {
+		const args = await navigate.args(frm);
+		frappe.new_doc(navigate.doctype, args);
 		return;
 	}
 
-	frappe.call({
-		method: "erpnext_ua.ua_setup.service.chart_preflight",
-		args: { company: frm.doc.company, chart_template: frm.doc.chart_template },
-		callback: ({ message }) => {
-			if (!message) return;
-			const blockers = (message.blockers || []).map(frappe.utils.escape_html);
-			if (blockers.length) {
-				frappe.msgprint({
-					title: __("Заміна плану рахунків неможлива"),
-					message: `<ul><li>${blockers.join("</li><li>")}</li></ul>`,
-					indicator: "red",
-				});
-				return;
-			}
-			const warnings = (message.warnings || []).map(frappe.utils.escape_html);
-			frappe.confirm(
-				`${__("План рахунків компанії {0} буде замінено.", [frappe.utils.escape_html(frm.doc.company)])}
-				 <ul><li>${warnings.join("</li><li>")}</li></ul>`,
-				run
-			);
+	if (check.fix_action === "apply_cash_desk") {
+		open_cash_desk_dialog(frm, check);
+		return;
+	}
+
+	// Кроки без додаткових даних: apply_language, apply_tax_parameters,
+	// apply_payment_methods. Компанія в них не потрібна, окрім факту, що вона
+	// обрана (перевірено вище).
+	call_step(frm, check, {});
+}
+
+function open_cash_desk_dialog(frm, check) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Каса"),
+		fields: [
+			{
+				fieldname: "warehouse",
+				fieldtype: "Link",
+				label: __("Склад каси"),
+				options: "Warehouse",
+				get_query: () => ({ filters: { company: frm.doc.company, is_group: 0, disabled: 0 } }),
+			},
+			{
+				fieldname: "desk_name",
+				fieldtype: "Data",
+				label: __("Назва каси"),
+				default: "Каса 1",
+				reqd: 1,
+			},
+		],
+		primary_action_label: __("Створити"),
+		primary_action: (values) => {
+			dialog.hide();
+			call_step(frm, check, { company: frm.doc.company, ...values });
 		},
+	});
+	dialog.show();
+}
+
+function call_step(frm, check, args) {
+	frm.call({
+		doc: frm.doc,
+		method: "run_step",
+		args: { step: check.fix_action, args },
+		freeze: true,
+		freeze_message: __("Виконується крок: {0}", [check.title]),
+	}).then(() => {
+		frappe.show_alert({ message: __("Крок виконано: {0}", [check.title]), indicator: "green" });
+		render_readiness(frm);
 	});
 }
