@@ -4,14 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "erpnext_ua"
-version = "0.9.0"
-description = "ERPNext Ukraine business layer: FOP, POS, PRRO, accounting, documents, price tags, translations and commission trade"
+version = "0.10.0"
+description = "ERPNext Ukraine: FOP, POS, PRRO, accounting, documents, price tags, translations, commission trade, delivery, banking, payments, marketplaces and communications"
 requires-python = ">=3.14"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "HUNTER.rv", email = "it@hunter.rv.ua" }]
 dependencies = [
     "qrcode>=8.0,<9",
+    # Конектори інтеграцій: XML маркетплейсів, SFTP-обмін файлами, HTTP-клієнти.
+    "defusedxml>=0.7.1,<1",
+    "paramiko>=3.5.1,<6",
+    "requests>=2.33,<3",
 ]
 
 [tool.setuptools]
@@ -43,10 +47,26 @@ target-version = "py314"
 
 # Лінтер поки застосовується лише до консолідованого комісійного модуля:
 # решта дерева писалася без ruff і має бути приведена окремим проходом.
-include = ["erpnext_ua/consignment_and_commission/**/*.py"]
+include = [
+    "erpnext_ua/consignment_and_commission/**/*.py",
+    "erpnext_ua/integrations/**/*.py",
+    "erpnext_ua/ecommerce/**/*.py",
+    "erpnext_ua/ukrainian_integrations/**/*.py",
+    "erpnext_ua/patches/**/*.py",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Код інтеграцій прийшов із власного репозиторію, де E501 був вимкнений.
+# Переносити 130 рядків заради ліміту довжини — зайвий шум у diff; правило
+# лишається активним для нового коду цих же дерев через ruff format при потребі.
+"erpnext_ua/integrations/**/*.py" = ["E501"]
+"erpnext_ua/ecommerce/**/*.py" = ["E501"]
+"erpnext_ua/ukrainian_integrations/**/*.py" = ["E501"]
+"erpnext_ua/patches/v0_5/**/*.py" = ["E501"]
+"erpnext_ua/patches/v0_6/**/*.py" = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["erpnext_ua"]

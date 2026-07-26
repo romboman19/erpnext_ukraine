@@ -2,7 +2,11 @@ APP_NAME = "erpnext_ua"
 MODULE_NAME = "Consignment and Commission"
 
 REQUIRED_APPS = frozenset({"frappe", "erpnext", "erpnext_ua"})
-OPTIONAL_APPS = frozenset({"ukrainian_integrations"})
+# The integrations domain used to be the optional app `ukrainian_integrations`.
+# It now ships inside `erpnext_ua`, so app-level detection would always report
+# it as present; whether a connector is usable is a question for its own
+# settings DocType, not for the installed-apps list.
+OPTIONAL_APPS: frozenset[str] = frozenset()
 
 DIAGNOSTIC_DOCTYPES = (
     "Sales Invoice",

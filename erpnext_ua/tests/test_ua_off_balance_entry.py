@@ -3,17 +3,17 @@ from __future__ import annotations
 import unittest
 from uuid import uuid4
 
+# See test_ua_chart_setup: a stub `frappe` may already be in sys.modules.
 try:
 	import frappe
-except ModuleNotFoundError:
-	frappe = None
-	IntegrationTestCase = unittest.TestCase
-else:
 	from frappe.tests import IntegrationTestCase
 
 	from erpnext_ua.install import ensure_accounting_setup
 	from erpnext_ua.ua_accounting.chart_setup import apply_chart
 	from erpnext_ua.ua_accounting.off_balance import create_off_balance_entry
+except ModuleNotFoundError:
+	frappe = None
+	IntegrationTestCase = unittest.TestCase
 
 
 @unittest.skipIf(frappe is None, "requires a Frappe test site")

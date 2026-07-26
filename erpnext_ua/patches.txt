@@ -1,0 +1,13 @@
+# Патчі схеми/даних ідемпотентні. Ті, що прийшли з `ukrainian_integrations`,
+# зберігають порядок виконання; переіменування шляхів обробляє
+# `rename_integration_patch_log`, який мусить іти першим.
+
+[pre_model_sync]
+erpnext_ua.patches.consolidation.rename_integration_patch_log
+erpnext_ua.patches.v0_5.move_ecommerce_item_mapping_to_module
+erpnext_ua.patches.v0_5.convert_ecommerce_channel_custom_field_to_data
+erpnext_ua.patches.v0_6.register_ecommerce_module_and_sync_mapping
+
+[post_model_sync]
+erpnext_ua.patches.v0_5.backfill_ecommerce_item_mapping
+erpnext_ua.patches.v0_6.create_ocstore_defaults_and_migrate_channels

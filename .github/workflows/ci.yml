@@ -24,7 +24,7 @@ jobs:
           node-version: "24"
 
       - name: Install package and test tools
-        run: python -m pip install --disable-pip-version-check -e . ruff pytest build
+        run: python -m pip install --disable-pip-version-check -e . ruff pytest build pip-audit
 
       - name: Validate source and metadata
         run: |
@@ -33,8 +33,11 @@ jobs:
           find erpnext_ua -name '*.js' -print0 | xargs -0 -n1 node --check
           git diff --check
 
-      - name: Lint commission trade module
-        run: ruff check erpnext_ua/consignment_and_commission
+      - name: Lint linted trees
+        run: ruff check
+
+      - name: Dependency vulnerability audit
+        run: pip-audit --strict --progress-spinner off .
 
       - name: Verify hook targets resolve
         run: python tools/check_hooks.py
@@ -66,3 +69,34 @@ jobs:
               raise SystemExit(f"Wheel is missing package data: {missing}")
           assert sum(name.endswith(".xsd") for name in names) == 3, "PRRO schemas are missing from the wheel"
           PY
+
+  frappe-integration:
+    name: ERPNext v16 clean install and migrate
+    needs: static-and-package
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: frappe/erpnext:v16.26.2
+      options: --user root
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: admin
+          MARIADB_ROOT_HOST: "%"
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+      redis:
+        image: redis:6.2-alpine
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install the app on a clean ERPNext site
+        run: tools/ci_frappe_integration.sh

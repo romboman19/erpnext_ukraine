@@ -101,7 +101,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     return error?.message || "Операцію не виконано. Перевірте журнал помилок ПРРО.";
   };
   const identificationApi = (method, args = {}) =>
-    frappe.call({ method: `ukrainian_integrations.customer_identification.service.${method}`, args }).then((response) => response.message);
+    frappe.call({ method: `erpnext_ua.integrations.customer_identification.service.${method}`, args }).then((response) => response.message);
 
   const styles = `<style id="ua-pos-v2-styles">
     .layout-main-section-wrapper{margin-bottom:0!important}.layout-main-section{padding:0!important}.page-head{display:none!important}

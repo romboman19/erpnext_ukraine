@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.10.0 — 2026-07-26
+
+- застосунок `ukrainian_integrations` (release `0.6.3`, commit `7487742`) влито
+  в цей репозиторій: модулі `Ukrainian Integrations` та `Ecommerce` лежать у
+  корені застосунку, решта пакетів конекторів — під `erpnext_ua/integrations/`;
+  імпорти `ukrainian_integrations.*` → `erpnext_ua.*`, бізнес-логіка не
+  змінювалася;
+- уся українська логіка тепер в одному застосунку: ФОП, каса, ПРРО, облік,
+  цінники, комісійна торгівля, доставка, банки, платежі, маркетплейси та
+  комунікації ставляться однією командою `bench install-app erpnext_ua`;
+- два каталоги перекладів зведені в один: додано 633 записи, 3 перевірені
+  переклади desk-інтерфейсу підвищено до центрального каталогу, виправлено
+  зламану Jinja-підстановку `{{ subject }}`; 72 розбіжності зафіксовано в
+  `docs/integrations/translation-conflicts.md` без автоматичної зміни;
+- `erpnext_ua.patches.consolidation.rename_integration_patch_log` переносить
+  `Patch Log`, `Module Def.app_name` і `Workspace.app` зі старого застосунку,
+  щоб уже виконані патчі не запускалися вдруге на бойовому сайті;
+- CI отримав job `frappe-integration`: чисте встановлення ERPNext v16, подвійна
+  міграція, `run_installation_checks` і `bench run-tests`, плюс `pip-audit` та
+  лінт усіх злитих дерев.
+
 ## 0.9.0 — 2026-07-26
 
 - застосунок `erpnext_consignment_and_commission` (release `1.1.0`, commit

@@ -3,16 +3,18 @@ from __future__ import annotations
 import unittest
 from uuid import uuid4
 
+# Pure-logic tests elsewhere in the suite install a stub `frappe` module, so a
+# successful `import frappe` is not proof of a test site. Importing the site-only
+# parts inside the same `try` keeps the skip working either way.
 try:
 	import frappe
-except ModuleNotFoundError:
-	frappe = None
-	IntegrationTestCase = unittest.TestCase
-else:
 	from frappe.tests import IntegrationTestCase
 
 	from erpnext_ua.ua_accounting.chart_of_accounts import load_template
 	from erpnext_ua.ua_accounting.chart_setup import apply_chart, preflight
+except ModuleNotFoundError:
+	frappe = None
+	IntegrationTestCase = unittest.TestCase
 
 
 @unittest.skipIf(frappe is None, "requires a Frappe test site")

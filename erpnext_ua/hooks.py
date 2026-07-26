@@ -20,6 +20,11 @@ add_to_apps_screen = [
     }
 ]
 
+app_include_js = [
+    "/assets/erpnext_ua/js/vitalpbx_popup_listener.js",
+    "/assets/erpnext_ua/js/notification_realtime_listener.js",
+]
+
 fixtures = [
     {
         "dt": "Role",
@@ -56,6 +61,7 @@ after_install = [
 	"erpnext_ua.install.ensure_price_tag_setup",
 	"erpnext_ua.print_designer_setup.ensure_print_designer_formats",
 	"erpnext_ua.consignment_and_commission.setup.ownership_dimension.ensure_ownership_dimension",
+	"erpnext_ua.integrations.install.after_install",
 ]
 
 after_migrate = [
@@ -73,10 +79,17 @@ after_migrate = [
 	"erpnext_ua.print_designer_setup.ensure_print_designer_formats",
 	"erpnext_ua.consignment_and_commission.setup.ownership_dimension.ensure_ownership_dimension",
 	"erpnext_ua.consignment_and_commission.setup.financial_backfill.backfill_financial_snapshots",
+	"erpnext_ua.integrations.migrations.after_migrate",
 ]
 
+before_uninstall = "erpnext_ua.integrations.uninstall.before_uninstall"
+
 doctype_js = {
-	"Sales Invoice": "ua_fiscal/doctype_js/sales_invoice_fiscal.js",
+	"Sales Invoice": [
+		"ua_fiscal/doctype_js/sales_invoice_fiscal.js",
+		"public/js/sales_invoice_shipment_actions.js",
+		"public/js/sales_invoice_vitalpbx_actions.js",
+	],
 	"PB POS Terminal": "ua_pos/public/js/pb_pos_terminal.js",
 	"PRRO Receipt": "ua_fiscal/doctype_js/prro_receipt.js",
 	"Purchase Receipt": ["public/js/price_tag_source.js", "public/js/purchase_vat.js"],
@@ -84,6 +97,44 @@ doctype_js = {
 	"Stock Entry": "public/js/price_tag_source.js",
 	"Delivery Note": "public/js/price_tag_source.js",
 	"Item": "public/js/price_tag_source.js",
+	"Customer": "public/js/customer_vitalpbx_actions.js",
+	"Notification": "public/js/notification_telegram.js",
+	"Notification Settings": "public/js/notification_settings_browser.js",
+	"NP Sender Profile": "public/js/np_sender_profile_actions.js",
+	"UP Sender Profile": "public/js/up_sender_profile_actions.js",
+	"RZ Delivery Sender Profile": "public/js/rz_delivery_sender_profile_actions.js",
+	"TurboSMS Settings": "public/js/turbosms_settings_actions.js",
+	"Monobank Settings": "public/js/monobank_settings_actions.js",
+	"PrivatBank Settings": "public/js/privatbank_settings_actions.js",
+	"LiqPay Settings": "public/js/liqpay_settings_actions.js",
+	"Telegram Bot Profile": "public/js/telegram_bot_profile.js",
+}
+
+doctype_list_js = {
+	"NP Sender Profile": "public/js/np_sender_profile_list.js",
+	"UP Sender Profile": "public/js/up_sender_profile_list.js",
+}
+
+extend_doctype_class = {
+	"Notification": [
+		"erpnext_ua.integrations.communication.telegram.notification.TelegramNotificationMixin",
+	],
+}
+
+override_doctype_class = {
+	"System Health Report": (
+		"erpnext_ua.integrations.monitoring.system_health.ContainerAwareSystemHealthReport"
+	),
+}
+
+permission_query_conditions = {
+	"UA Integration Operation": "erpnext_ua.integrations.utils.operations.get_permission_query_conditions",
+	"VitalPBX Call Log": "erpnext_ua.integrations.pbx_sms.vitalpbx.events.get_permission_query_conditions",
+}
+
+has_permission = {
+	"UA Integration Operation": "erpnext_ua.integrations.utils.operations.has_permission",
+	"VitalPBX Call Log": "erpnext_ua.integrations.pbx_sms.vitalpbx.events.has_permission",
 }
 
 CC = "erpnext_ua.consignment_and_commission.integrations"
@@ -157,11 +208,28 @@ scheduler_events = {
 		],
 		"* * * * *": [
 			"erpnext_ua.ua_pos.print_service.process_print_queue",
+			"erpnext_ua.integrations.monitoring.system_health.update_scheduler_heartbeat",
+			"erpnext_ua.ecommerce.scheduler.dispatch",
+		],
+		"*/10 * * * *": [
+			"erpnext_ua.ecommerce.providers.prom_ua.service.pull_orders",
+			"erpnext_ua.integrations.customer_identification.service.expire_pending",
+		],
+		"*/20 * * * *": [
+			"erpnext_ua.ecommerce.providers.prom_ua.service.push_stock",
+		],
+		"*/30 * * * *": [
+			"erpnext_ua.integrations.shipment.nova_poshta.scheduler.sync_ttn_statuses",
+			"erpnext_ua.integrations.shipment.ukr_poshta.scheduler.sync_ttn_statuses",
+			"erpnext_ua.integrations.shipment.rozetka_delivery.scheduler.sync_track_statuses",
+			"erpnext_ua.integrations.payments.core.bank_import_scheduler.run_all_bank_imports",
 		],
 	},
     "daily": [
         "erpnext_ua.ua_fop.tax_calendar.update_statuses_and_notify",
         "erpnext_ua.ua_fop.income_monitor.check_income_limits",
+        "erpnext_ua.integrations.customer_identification.birthday.send_scheduled_greetings",
+        "erpnext_ua.integrations.utils.logger.purge_old_logs",
     ],
     "monthly": [
         "erpnext_ua.ua_fop.tax_calendar.generate_for_all_fops",
