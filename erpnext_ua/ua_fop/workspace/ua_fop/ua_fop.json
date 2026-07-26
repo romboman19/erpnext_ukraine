@@ -1,7 +1,7 @@
 {
  "app": "erpnext_ua",
  "charts": [],
- "content": "[{\"id\":\"ua-fop-header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Sole Proprietor</b></span>\",\"col\":12}},{\"id\":\"ua-fop-profiles\",\"type\":\"card\",\"data\":{\"card_name\":\"Profiles & Taxes\",\"col\":4}},{\"id\":\"ua-fop-calendar\",\"type\":\"card\",\"data\":{\"card_name\":\"Tax Calendar\",\"col\":4}}]",
+ "content": "[{\"id\":\"ua-fop-header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Sole Proprietor</b></span>\",\"col\":12}},{\"id\":\"ua-fop-setup\",\"type\":\"card\",\"data\":{\"card_name\":\"Setup\",\"col\":4}},{\"id\":\"ua-fop-profiles\",\"type\":\"card\",\"data\":{\"card_name\":\"Profiles & Taxes\",\"col\":4}},{\"id\":\"ua-fop-calendar\",\"type\":\"card\",\"data\":{\"card_name\":\"Tax Calendar\",\"col\":4}}]",
  "creation": "2026-07-15 13:30:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -13,12 +13,80 @@
  "is_hidden": 0,
  "label": "UA FOP",
  "links": [
-  {"hidden": 0, "is_query_report": 0, "label": "Profiles & Taxes", "link_count": 0, "onboard": 0, "type": "Card Break"},
-  {"hidden": 0, "is_query_report": 0, "label": "FOP Profiles", "link_count": 0, "link_to": "FOP Profile", "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "KVED Directory", "link_count": 0, "link_to": "UA KVED", "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Tax Parameters", "link_count": 0, "link_to": "UA Tax Parameters", "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Tax Calendar", "link_count": 0, "onboard": 0, "type": "Card Break"},
-  {"hidden": 0, "is_query_report": 0, "label": "Tax Deadlines", "link_count": 0, "link_to": "UA Tax Deadline", "link_type": "DocType", "onboard": 0, "type": "Link"}
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Setup",
+   "link_count": 0,
+   "onboard": 1,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "UA Setup Wizard",
+   "link_count": 0,
+   "link_to": "UA Setup Wizard",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Profiles & Taxes",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "FOP Profiles",
+   "link_count": 0,
+   "link_to": "FOP Profile",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "KVED Directory",
+   "link_count": 0,
+   "link_to": "UA KVED",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Tax Parameters",
+   "link_count": 0,
+   "link_to": "UA Tax Parameters",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Tax Calendar",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Tax Deadlines",
+   "link_count": 0,
+   "link_to": "UA Tax Deadline",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
  ],
  "modified": "2026-07-15 13:30:00.000000",
  "modified_by": "Administrator",

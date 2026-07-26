@@ -7,3 +7,4 @@ UA Receiving
 Consignment and Commission
 Ukrainian Integrations
 Ecommerce
+UA Setup

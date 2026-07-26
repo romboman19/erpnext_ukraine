@@ -53,6 +53,7 @@ include = [
     "erpnext_ua/ecommerce/**/*.py",
     "erpnext_ua/ukrainian_integrations/**/*.py",
     "erpnext_ua/patches/**/*.py",
+    "erpnext_ua/ua_setup/**/*.py",
 ]
 
 [tool.ruff.lint]

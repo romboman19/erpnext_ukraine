@@ -1,0 +1,238 @@
+{
+ "actions": [],
+ "creation": "2026-07-26 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "readiness_section",
+  "company",
+  "readiness_html",
+  "fop_section",
+  "fop_full_name",
+  "prro_registered_name",
+  "tax_id",
+  "column_break_fop",
+  "single_tax_group",
+  "tax_rate_mode",
+  "vat_payer",
+  "vat_number",
+  "fop_details_section",
+  "kved_main",
+  "registration_address",
+  "column_break_fop_details",
+  "iban",
+  "chart_section",
+  "chart_template",
+  "cash_desk_section",
+  "warehouse",
+  "column_break_cash_desk",
+  "desk_name",
+  "prro_section",
+  "prro_intro",
+  "fop_profile",
+  "register_name",
+  "fiscal_number",
+  "column_break_prro",
+  "register_local_number",
+  "unit_name",
+  "unit_address"
+ ],
+ "fields": [
+  {
+   "fieldname": "readiness_section",
+   "fieldtype": "Section Break",
+   "label": "Готовність"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Компанія",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "readiness_html",
+   "fieldtype": "HTML",
+   "label": "Стан налаштування"
+  },
+  {
+   "fieldname": "fop_section",
+   "fieldtype": "Section Break",
+   "label": "Профіль ФОП"
+  },
+  {
+   "description": "Як у реєстраційних даних платника",
+   "fieldname": "fop_full_name",
+   "fieldtype": "Data",
+   "label": "ПІБ підприємця"
+  },
+  {
+   "description": "Назва, під якою касу зареєстровано в ДПС; вона друкується у фіскальному чеку",
+   "fieldname": "prro_registered_name",
+   "fieldtype": "Data",
+   "label": "Назва для ПРРО"
+  },
+  {
+   "description": "РНОКПП або ЄДРПОУ",
+   "fieldname": "tax_id",
+   "fieldtype": "Data",
+   "label": "Податковий номер"
+  },
+  {
+   "fieldname": "column_break_fop",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "single_tax_group",
+   "fieldtype": "Select",
+   "label": "Група єдиного податку",
+   "options": "\n1\n2\n3"
+  },
+  {
+   "fieldname": "tax_rate_mode",
+   "fieldtype": "Select",
+   "label": "Ставка",
+   "options": "\nФіксована ставка\n5% без ПДВ\n3% з ПДВ"
+  },
+  {
+   "default": "0",
+   "fieldname": "vat_payer",
+   "fieldtype": "Check",
+   "label": "Платник ПДВ"
+  },
+  {
+   "depends_on": "vat_payer",
+   "fieldname": "vat_number",
+   "fieldtype": "Data",
+   "label": "Номер платника ПДВ"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "fop_details_section",
+   "fieldtype": "Section Break",
+   "label": "Реквізити (необов'язково)"
+  },
+  {
+   "fieldname": "kved_main",
+   "fieldtype": "Link",
+   "label": "Основний КВЕД",
+   "options": "UA KVED"
+  },
+  {
+   "fieldname": "registration_address",
+   "fieldtype": "Small Text",
+   "label": "Адреса реєстрації"
+  },
+  {
+   "fieldname": "column_break_fop_details",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "iban",
+   "fieldtype": "Data",
+   "label": "IBAN"
+  },
+  {
+   "fieldname": "chart_section",
+   "fieldtype": "Section Break",
+   "label": "План рахунків"
+  },
+  {
+   "description": "291 — повний План рахунків; 186 — спрощений для суб'єктів малого підприємництва. Заміна дозволена лише компанії без проводок.",
+   "fieldname": "chart_template",
+   "fieldtype": "Select",
+   "label": "Шаблон",
+   "options": "\nfull_291\nsimplified_186"
+  },
+  {
+   "fieldname": "cash_desk_section",
+   "fieldtype": "Section Break",
+   "label": "Каса"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Склад каси",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "column_break_cash_desk",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Каса 1",
+   "fieldname": "desk_name",
+   "fieldtype": "Data",
+   "label": "Назва каси"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "prro_section",
+   "fieldtype": "Section Break",
+   "label": "ПРРО"
+  },
+  {
+   "fieldname": "prro_intro",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted\">Дані беруться з реєстраційних документів ДПС. Крок нічого не надсилає до ДПС: ключ КЕП і сервіс підпису налаштовуються окремо.</p>"
+  },
+  {
+   "fieldname": "fop_profile",
+   "fieldtype": "Link",
+   "label": "Профіль ФОП",
+   "options": "FOP Profile"
+  },
+  {
+   "fieldname": "register_name",
+   "fieldtype": "Data",
+   "label": "Назва каси ПРРО"
+  },
+  {
+   "fieldname": "fiscal_number",
+   "fieldtype": "Data",
+   "label": "Фіскальний номер"
+  },
+  {
+   "fieldname": "column_break_prro",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "register_local_number",
+   "fieldtype": "Data",
+   "label": "Локальний номер"
+  },
+  {
+   "fieldname": "unit_name",
+   "fieldtype": "Data",
+   "label": "Назва точки"
+  },
+  {
+   "fieldname": "unit_address",
+   "fieldtype": "Small Text",
+   "label": "Адреса точки"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-26 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "UA Setup",
+ "name": "UA Setup Wizard",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

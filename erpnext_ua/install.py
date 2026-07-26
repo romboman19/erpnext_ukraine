@@ -1,6 +1,7 @@
 import hashlib
 import re
 import uuid
+from pathlib import Path
 
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
@@ -53,15 +54,19 @@ def ensure_tax_parameters():
 
 
 POS_ROLES = ["POS Cashier", "POS Senior Cashier", "POS Manager", "POS Administrator", "PRRO Operator"]
-APP_MODULES = (
-	"UA FOP",
-	"UA Fiscal",
-	"UA POS",
-	"UA Accounting",
-	"UA Price Tags",
-	"UA Receiving",
-	"Consignment and Commission",
-)
+
+
+def _app_modules() -> tuple[str, ...]:
+	"""Modules of this app, read from the manifest Frappe itself uses.
+
+	Keeping a second hand-written list here is how a module ends up registered
+	on a clean install but missing after an upgrade.
+	"""
+	manifest = Path(__file__).parent / "modules.txt"
+	return tuple(line.strip() for line in manifest.read_text(encoding="utf-8").splitlines() if line.strip())
+
+
+APP_MODULES = _app_modules()
 
 
 PRICE_TAG_ROLES = ("Price Tag User", "Price Tag Manager")

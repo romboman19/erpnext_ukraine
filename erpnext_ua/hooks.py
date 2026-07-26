@@ -2,8 +2,8 @@ app_name = "erpnext_ua"
 app_title = "ERPNext Україна"
 app_publisher = "HUNTER.rv"
 app_description = (
-    "Український бізнес-модуль ERPNext: ФОП, каса, ПРРО, облік, документи, цінники "
-    "та комісійно-консигнаційна торгівля"
+    "Українська прикладна логіка ERPNext: ФОП, каса, ПРРО, облік, документи, цінники, "
+    "комісійно-консигнаційна торгівля, доставка, банки, платежі, маркетплейси та комунікації"
 )
 app_email = "it@hunter.rv.ua"
 app_license = "MIT"
@@ -62,6 +62,7 @@ after_install = [
 	"erpnext_ua.print_designer_setup.ensure_print_designer_formats",
 	"erpnext_ua.consignment_and_commission.setup.ownership_dimension.ensure_ownership_dimension",
 	"erpnext_ua.integrations.install.after_install",
+	"erpnext_ua.ua_setup.service.report_readiness",
 ]
 
 after_migrate = [
