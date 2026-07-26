@@ -1,1 +1,0 @@
-"""Frappe Desk configuration package."""

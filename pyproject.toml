@@ -4,10 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "erpnext_ua"
-version = "0.8.0"
-description = "ERPNext Ukraine business layer: FOP, POS, PRRO, accounting, documents, price tags and translations"
+version = "0.9.0"
+description = "ERPNext Ukraine business layer: FOP, POS, PRRO, accounting, documents, price tags, translations and commission trade"
 requires-python = ">=3.14"
 readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "HUNTER.rv", email = "it@hunter.rv.ua" }]
 dependencies = [
     "qrcode>=8.0,<9",
 ]
@@ -34,3 +36,17 @@ exclude = ["public*", "docs*", "tests*"]
 
 [tool.black]
 line-length = 120
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+# Лінтер поки застосовується лише до консолідованого комісійного модуля:
+# решта дерева писалася без ruff і має бути приведена окремим проходом.
+include = ["erpnext_ua/consignment_and_commission/**/*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["erpnext_ua"]

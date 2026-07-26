@@ -1,0 +1,36 @@
+# Test-only compose overlay. It must be combined with the isolated
+# frappe-test compose file; do not use it with the production stack.
+#
+# One repository checkout is mounted as the single `erpnext_ua` app: the
+# Ukrainian business layer and the commission trade module now ship together.
+x-app-source: &app_source
+  - ${UA_APP_SOURCE:-/home/romboman19/erpnext_ukraine}:/home/frappe/frappe-bench/apps/erpnext_ua:ro
+
+services:
+  configurator:
+    volumes: *app_source
+
+  backend:
+    environment:
+      PYTHONPATH: /home/frappe/frappe-bench/apps/erpnext_ua
+    volumes: *app_source
+
+  worker:
+    environment:
+      PYTHONPATH: /home/frappe/frappe-bench/apps/erpnext_ua
+    volumes: *app_source
+
+  scheduler:
+    image: erpnext-huntervua:v16.26.2-2
+    platform: linux/amd64
+    command: ["bench", "schedule"]
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+    environment:
+      PYTHONPATH: /home/frappe/frappe-bench/apps/erpnext_ua
+    restart: unless-stopped
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - ${UA_APP_SOURCE:-/home/romboman19/erpnext_ukraine}:/home/frappe/frappe-bench/apps/erpnext_ua:ro
+      - /home/romboman19/erpnext_ukrainian_integrations/ukrainian_integrations:/home/frappe/frappe-bench/apps/ukrainian_integrations/ukrainian_integrations:ro

@@ -1,0 +1,125 @@
+name: Frappe Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  clean-site:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install system and bench dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mariadb-client libmariadb-dev pkg-config
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+          python -m pip install --disable-pip-version-check frappe-bench
+
+      - name: Initialize Frappe v16 bench
+        run: >-
+          bench init
+          --skip-assets
+          --skip-redis-config-generation
+          --frappe-branch version-16
+          --python "$(command -v python)"
+          frappe-bench
+
+      - name: Install integration test reporter
+        working-directory: frappe-bench
+        run: bench pip install unittest-xml-reporting
+
+      - name: Install ERPNext and the application source
+        working-directory: frappe-bench
+        run: |
+          bench get-app --skip-assets --branch version-16 erpnext https://github.com/frappe/erpnext
+          bench get-app --skip-assets erpnext_ua "$GITHUB_WORKSPACE"
+          bench set-config -g redis_cache redis://127.0.0.1:6379
+          bench set-config -g redis_queue redis://127.0.0.1:6379
+          bench set-config -g redis_socketio redis://127.0.0.1:6379
+
+      - name: Create clean site and install the application
+        working-directory: frappe-bench
+        run: |
+          bench new-site integration.local \
+            --db-host 127.0.0.1 \
+            --db-port 3306 \
+            --mariadb-root-password root \
+            --admin-password admin \
+            --no-mariadb-socket
+          bench --site integration.local install-app erpnext
+          bench --site integration.local install-app erpnext_ua
+          bench --site integration.local set-config allow_tests true
+
+      - name: Verify repeatable migration
+        working-directory: frappe-bench
+        run: |
+          bench --site integration.local migrate
+          bench --site integration.local migrate
+
+      - name: Verify every module is registered to this app
+        working-directory: frappe-bench
+        run: >-
+          bench --site integration.local execute
+          erpnext_ua.install.assert_modules_registered
+
+      - name: Run Ukrainian accounting integration tests
+        working-directory: frappe-bench
+        run: |
+          bench --site integration.local run-tests --module erpnext_ua.tests.test_ua_chart_setup
+          bench --site integration.local run-tests --module erpnext_ua.tests.test_ua_off_balance_entry
+
+      - name: Run commission trade integration tests
+        working-directory: frappe-bench
+        run: >-
+          bench --site integration.local run-tests
+          --app erpnext_ua
+          --test-category integration
+          --junit-xml-output integration-test-results.xml
+
+      - name: Upload integration test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frappe-integration-results
+          path: frappe-bench/integration-test-results.xml
+          if-no-files-found: ignore

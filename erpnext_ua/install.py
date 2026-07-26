@@ -53,7 +53,15 @@ def ensure_tax_parameters():
 
 
 POS_ROLES = ["POS Cashier", "POS Senior Cashier", "POS Manager", "POS Administrator", "PRRO Operator"]
-APP_MODULES = ("UA FOP", "UA Fiscal", "UA POS", "UA Accounting", "UA Price Tags", "UA Receiving")
+APP_MODULES = (
+	"UA FOP",
+	"UA Fiscal",
+	"UA POS",
+	"UA Accounting",
+	"UA Price Tags",
+	"UA Receiving",
+	"Consignment and Commission",
+)
 
 
 PRICE_TAG_ROLES = ("Price Tag User", "Price Tag Manager")
@@ -350,6 +358,28 @@ def ensure_app_modules():
 			}
 		).insert(ignore_permissions=True)
 	frappe.db.commit()
+
+
+def assert_modules_registered():
+	"""Fail loudly when a module of this app is missing or owned by another app.
+
+	The commission trade domain used to ship as a separate app, so its Module
+	Def could legitimately point elsewhere.  After the consolidation exactly one
+	app owns every module, and a mismatch means DocTypes would be exported to
+	the wrong package on the next ``bench migrate``.
+	"""
+	problems = []
+	for module_name in APP_MODULES:
+		owner = frappe.db.get_value("Module Def", module_name, "app_name")
+		if owner is None:
+			problems.append(f"{module_name}: no Module Def")
+		elif owner != "erpnext_ua":
+			problems.append(f"{module_name}: owned by {owner}")
+
+	if problems:
+		frappe.throw("Module registration is inconsistent: " + "; ".join(problems))
+
+	print(f"OK: {len(APP_MODULES)} modules registered to erpnext_ua")
 
 
 def ensure_accounting_setup():

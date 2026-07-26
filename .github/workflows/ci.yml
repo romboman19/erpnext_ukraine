@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -11,23 +15,54 @@ jobs:
   static-and-package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
-      - uses: actions/setup-node@v4
+          python-version: "3.14"
+      - uses: actions/setup-node@v6
         with:
-          node-version: "20"
-      - name: Validate Python, DocTypes and browser code
+          node-version: "24"
+
+      - name: Install package and test tools
+        run: python -m pip install --disable-pip-version-check -e . ruff pytest build
+
+      - name: Validate source and metadata
         run: |
           python -m compileall -q erpnext_ua
           find erpnext_ua -name '*.json' -print0 | xargs -0 -n1 jq -e . >/dev/null
-          node --check erpnext_ua/ua_pos/page/ua_pos/ua_pos.js
+          find erpnext_ua -name '*.js' -print0 | xargs -0 -n1 node --check
           git diff --check
-      - name: Validate Ukrainian catalog
-        run: python -m unittest discover -s erpnext_ua/tests -p "test*.py"
-      - name: Build distributable app
+
+      - name: Lint commission trade module
+        run: ruff check erpnext_ua/consignment_and_commission
+
+      - name: Verify hook targets resolve
+        run: python tools/check_hooks.py
+
+      - name: Run framework-independent tests
         run: |
-          python -m pip install --disable-pip-version-check build
+          python -m unittest discover -s erpnext_ua/tests -p "test*.py"
+          pytest -q erpnext_ua/consignment_and_commission/tests
+
+      - name: Build and inspect distributable app
+        run: |
           python -m build
-          python -c "import zipfile,glob; p=glob.glob('dist/*.whl')[0]; n=zipfile.ZipFile(p).namelist(); assert any(x.endswith('translations/uk.csv') for x in n); assert sum(x.endswith('.xsd') for x in n)==3"
+          python - <<'PY'
+          import glob
+          import zipfile
+
+          wheel = glob.glob("dist/*.whl")[0]
+          names = set(zipfile.ZipFile(wheel).namelist())
+          required_suffixes = {
+              "chart_of_accounts/ua_full_291.json",
+              "chart_of_accounts/ua_simplified_186.json",
+              "doctype/ua_off_balance_entry/ua_off_balance_entry.json",
+              "doctype/cc_stock_lot/cc_stock_lot.json",
+              "report/ua_off_balance_statement/ua_off_balance_statement.json",
+              "translations/uk.csv",
+          }
+          missing = sorted(suffix for suffix in required_suffixes if not any(name.endswith(suffix) for name in names))
+          if missing:
+              raise SystemExit(f"Wheel is missing package data: {missing}")
+          assert sum(name.endswith(".xsd") for name in names) == 3, "PRRO schemas are missing from the wheel"
+          PY

@@ -97,6 +97,32 @@ DocType, hooks та API.
 
 Процес і бухгалтерська модель: [docs/receiving.md](docs/receiving.md).
 
+### Комісійна та консигнаційна торгівля
+
+Модуль `Consignment and Commission` (префікс DocType `CC`) до версії 0.9.0
+постачався окремим застосунком `erpnext_consignment_and_commission` і тепер
+входить до цього репозиторію без змін бізнес-логіки.
+
+- чотири методи приймання: `BUYOUT`, `DEFERRED_PURCHASE`, `COMMISSION`,
+  `CONSIGNMENT`, без прихованого пріоритету між ними;
+- immutable `CC Stock Lot` як джерело, власник і точний вимір залишку, поверх
+  стандартної Inventory Dimension;
+- один глобальний FIFO у межах Item/Company/`CC Location`, атомарні
+  резервування з TTL, idempotency, row locks і точним Serial/Batch;
+- сторонній товар не стає активом компанії: рух проводиться zero-value Stock
+  Entry, а вартість ведеться позабалансово на рахунку 024;
+- керований Sales Invoice, незмінні snapshot проданих slices, контрольоване
+  каскадне скасування, повернення до і після settlement;
+- Settlement Report із частковими оплатами, строком боргу й курсом на дату
+  платежу; persistent split POS saga з payment state, чергою друку та
+  manual-review;
+- звіти `CC FIFO Inventory`, `CC Sale Financials`, `CC Partner Balance`,
+  `CC POS Queue`, `CC Financial Integrity`.
+
+Feature gate модуля після встановлення вимкнений: міграція не починає проводити
+комісійні операції без явної активації. Рішення й межі домену:
+[`docs/consignment/`](docs/consignment/) (ADR, контракти, acceptance).
+
 ## Сумісність
 - Frappe / ERPNext v16
 - Python 3.14+
@@ -124,7 +150,10 @@ Production-налаштування, backup/rollback і go-live checklist:
 
 ## Межі відповідальності
 
-- Тут: ФОП, каса/POS, банківські термінали в касовому checkout, ПРРО та український compliance.
+- Тут: ФОП, каса/POS, банківські термінали в касовому checkout, ПРРО, український
+  compliance та комісійно-консигнаційна торгівля. Один репозиторій — один
+  встановлюваний Frappe app `erpnext_ua`; домени розділені модулями, а не
+  застосунками.
 - У [`erpnext_ukraine_integrations`](https://github.com/romboman19/erpnext_ukraine_integrations):
   зовнішні бізнес-конектори — перевізники, банківські виписки, онлайн-еквайринг,
   маркетплейси, PBX і SMS.
