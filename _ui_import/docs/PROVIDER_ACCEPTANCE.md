@@ -1,0 +1,111 @@
+# Provider acceptance checklist
+
+Complete only the sections used by the deployment. Record date, operator, environment, provider account and evidence link/ticket. Never paste secrets into the evidence.
+
+## Common gates
+
+- [ ] TLS certificates and outbound DNS/egress are valid from every worker.
+- [ ] Provider credentials have minimum required permissions and an owner/expiry.
+- [ ] Host allowlists reject an unapproved test hostname.
+- [ ] The same idempotency key returns the cached result or reconciliation error.
+- [ ] Reusing a key with different data is rejected.
+- [ ] A simulated timeout creates `unknown` and does not retry.
+- [ ] Logs redact bearer tokens, API keys, signatures and query tokens.
+
+## Nova Poshta
+
+- [ ] Search settlement and warehouse with each active profile.
+- [ ] Create one TTN, verify number/ref and download the operation-bound PDF label.
+- [ ] Confirm another user without invoice permission cannot download the label.
+- [ ] Confirm tracking scheduler updates the correct Sales Invoice.
+
+## Ukrposhta
+
+- [ ] Confirm 1.25 kg is submitted as 1250 grams.
+- [ ] Create one address/client/shipment chain and verify barcode/status.
+- [ ] Test `RETURN` and, if used, `PROCESS_AS_REFUSAL` in the provider sandbox.
+- [ ] Confirm tracking works with the configured token set.
+
+## Rozetka Delivery
+
+- [ ] Create a static partner token and confirm `Verify Token` succeeds for every active sender profile.
+- [ ] Select the sender city/department through the directory lookup and confirm the department accepts tracks.
+- [ ] Create one controlled `dept-dept` shipment and reconcile `track_id`, shipping cost and estimated delivery date with the partner cabinet.
+- [ ] Test `cost=0` and one controlled COD shipment; confirm the recipient amount and provider payment fee exactly.
+- [ ] Download the PDF label from the Sales Invoice and confirm a user without invoice permission cannot download it.
+- [ ] Simulate an HTTP 400 rejection and a timeout/HTTP 503; verify the operation becomes `failed` and `unknown`, respectively, with no automatic retry.
+- [ ] Run manual and scheduled status synchronization through a terminal status and confirm terminal shipments leave the polling queue.
+- [ ] Confirm a profile assigned to Company A cannot create a shipment for a Company B Sales Invoice.
+
+## Monobank / PrivatBank
+
+- [ ] Import a fixed historical range twice; the second run creates zero transactions.
+- [ ] Reconcile provider count and signed amount total with ERP Bank Transactions.
+- [ ] Test multi-page PrivatBank and multi-day Monobank ranges.
+- [ ] Confirm Bank Account and Company mismatch is rejected.
+- [ ] Confirm a provider/ERP Bank Account currency mismatch is rejected.
+
+## LiqPay
+
+- [ ] A newly decoded checkout payload has `version=7`, and its SHA3-256 signature is accepted by LiqPay sandbox.
+- [ ] Valid signature/amount/currency/action callback succeeds once.
+- [ ] Invalid signature, unknown order, changed amount, reused transaction ID and disallowed sandbox callback fail.
+- [ ] Two concurrent successful callbacks create at most one Payment Entry.
+- [ ] A paid invoice/partial prior reconciliation does not overbook automatically.
+- [ ] A `reversed` callback after success is accepted, changes the operation to `unknown`, and raises a manual accounting-reconciliation signal without auto-cancelling entries.
+
+## PB POS (`erpnext_ua.ua_pos`)
+
+- [ ] Complete the supervised sequence in `docs/privat_pos_flow.md`.
+
+## Customer identification
+
+- [ ] Confirm unauthenticated users cannot call Desk identification APIs or retrieve customer PII.
+- [ ] Confirm the same pending SMS request is reused and does not send a second message after an ambiguous timeout.
+- [ ] Confirm Telegram rejects missing/wrong webhook secrets and accepts the configured secret.
+- [ ] Verify customer data is returned only after SMS, Telegram or inbound-call verification succeeds.
+- [ ] Simulate an ambiguous Telegram birthday send and confirm the `Unknown` log is not retried automatically.
+
+## TurboSMS
+
+- [ ] Send to one controlled number and record returned `message_id`.
+- [ ] Provider HTTP 200 with non-zero `response_code` is recorded as failed.
+- [ ] Timeout remains unknown and the same key is blocked from blind resend.
+
+## Telegram notifications
+
+- [ ] Create a dedicated least-privilege bot profile and confirm its token is a `Password` field unavailable to Sales Manager users.
+- [ ] Send one controlled text notification to a private chat and one to an approved group/channel chat ID.
+- [ ] Resolve recipients through a document User/Customer/Employee/Supplier link and through a role; confirm no unintended recipients are included.
+- [ ] Send one approved print format as PDF and confirm Telegram receives an uploaded document without a public ERPNext URL.
+- [ ] Simulate HTTP 400, timeout and HTTP 503 outcomes; verify `failed`, `unknown` and `unknown` respectively, with no automatic retry.
+- [ ] Confirm the same idempotency key cannot send a second message and cannot be reused with different content.
+- [ ] Confirm a user without reference-document permission cannot call the manual send API or generate its print.
+- [ ] Inspect the related `Communication`, `Hunter Integration Log` and `UA Integration Operation`; confirm tokens, full chat IDs and raw Telegram payloads are absent.
+
+## VitalPBX
+
+- [ ] Missing/wrong webhook key returns unauthorized.
+- [ ] Ringing → answered → completed is monotonic; replaying ringing does not regress it.
+- [ ] Sales users see only logs for their assigned extension.
+- [ ] Click-to-call timeout remains unknown and is not retried.
+
+## Prom.ua
+
+- [ ] Paginate more than one page with `last_id` and import every order once.
+- [ ] An order with no mapped Item creates neither Customer nor Sales Order.
+- [ ] An order containing one mapped and one unmapped Item creates no partial Sales Order.
+- [ ] Stock uses `/products/edit_by_external_id`, and every sent row appears in `processed_ids` with no errors.
+- [ ] Only configured warehouses contribute stock, including the zero/not-available case.
+
+## ocStore 3.0.3.7 (File/XML)
+
+- [ ] Create a separate non-Single `OcStore Settings` record for every shop and verify its Company, currency, selling price list, warehouses and customer defaults.
+- [ ] Allowlist each FTP/SFTP hostname; for SFTP install and verify the expected host key in `known_hosts` on backend, scheduler and every worker. Unknown keys must be rejected.
+- [ ] Run Test FTP Connections for the exchange and photo endpoints without exposing credentials in logs.
+- [ ] Export controlled Products, Prices, Stock and Photos files; reconcile counts and confirm attached Item photos are byte-identical after upload.
+- [ ] Change a field excluded by all active layouts and confirm no scheduled export; then change price, quantity, description or photo included in a layout and confirm export occurs.
+- [ ] Import one XML file containing at least two valid orders twice; the second pass creates no duplicate Sales Order, Sales Invoice or Payment Entry.
+- [ ] Put one invalid order after one valid order in the same file; confirm the complete file transaction rolls back, the FTP file remains and `Ecommerce Sync Log.status` is `Failed`.
+- [ ] Import a fully valid multi-order file; confirm its ERP documents and per-order Success logs are committed before the FTP file disappears.
+- [ ] Simulate ambiguous FTP deletion after commit; confirm the operation is `Unknown`, documents are not duplicated on reconciliation and no blind external retry occurs.

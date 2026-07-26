@@ -1,0 +1,19 @@
+{
+ "app": "ukrainian_integrations",
+ "creation": "2026-07-15 13:30:00.000000",
+ "docstatus": 0,
+ "doctype": "Desktop Icon",
+ "hidden": 0,
+ "icon_type": "App",
+ "idx": 10,
+ "label": "Ukrainian Integrations",
+ "link": "/app/ukrainian-integrations",
+ "link_type": "External",
+ "logo_url": "/assets/ukrainian_integrations/images/app-logo.svg",
+ "modified": "2026-07-15 13:30:00.000000",
+ "modified_by": "Administrator",
+ "name": "Ukrainian Integrations",
+ "owner": "Administrator",
+ "roles": [],
+ "standard": 1
+}

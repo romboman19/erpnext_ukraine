@@ -1,0 +1,13 @@
+{
+  "doctype": "DocType",
+  "name": "NP Sender Branch Row",
+  "module": "Ukrainian Integrations",
+  "istable": 1,
+  "editable_grid": 1,
+  "fields": [
+    {"fieldname": "settlement_ref", "fieldtype": "Data", "label": "Settlement Ref", "reqd": 1, "in_list_view": 1},
+    {"fieldname": "warehouse_ref", "fieldtype": "Data", "label": "Warehouse Ref", "reqd": 1, "in_list_view": 1},
+    {"fieldname": "warehouse_label", "fieldtype": "Data", "label": "Warehouse", "in_list_view": 1},
+    {"fieldname": "is_default", "fieldtype": "Check", "label": "Default", "default": "0", "in_list_view": 1}
+  ]
+}

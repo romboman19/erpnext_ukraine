@@ -1,0 +1,56 @@
+{
+ "doctype": "DocType",
+ "name": "VitalPBX Settings",
+ "module": "Ukrainian Integrations",
+ "issingle": 1,
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "0"
+  },
+  {
+   "fieldname": "base_url",
+   "fieldtype": "Data",
+   "label": "Base URL",
+   "reqd": 1
+  },
+  {
+   "fieldname": "api_key",
+   "fieldtype": "Password",
+   "label": "API Key"
+  },
+  {
+   "fieldname": "webhook_key",
+   "fieldtype": "Password",
+   "label": "Webhook Key",
+   "description": "Secret key for VitalPBX -> ERP webhook auth"
+  },
+  {
+   "fieldname": "default_extension",
+   "fieldtype": "Data",
+   "label": "Default Extension"
+  },
+  {
+   "fieldname": "tenant",
+   "fieldtype": "Data",
+   "label": "Tenant"
+  },
+  {
+   "fieldname": "popup_enabled",
+   "fieldtype": "Check",
+   "label": "Popup Enabled",
+   "default": "1"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1
+  }
+ ],
+ "engine": "InnoDB",
+ "autoname": "prompt"
+}

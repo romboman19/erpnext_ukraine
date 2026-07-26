@@ -1,0 +1,21 @@
+{
+ "doctype": "DocType",
+ "name": "VitalPBX Call Log",
+ "module": "Ukrainian Integrations",
+ "fields": [
+  {"fieldname":"direction","fieldtype":"Select","label":"Direction","options":"inbound\noutbound","reqd":1,"read_only":1},
+  {"fieldname":"status","fieldtype":"Select","label":"Status","options":"ringing\nanswered\nmissed\nfailed\ncompleted","reqd":1,"read_only":1},
+  {"fieldname":"from_number","fieldtype":"Data","label":"From","length":64,"read_only":1},
+  {"fieldname":"to_number","fieldtype":"Data","label":"To","length":64,"read_only":1},
+  {"fieldname":"extension","fieldtype":"Data","label":"Extension","length":32,"read_only":1},
+  {"fieldname":"call_id","fieldtype":"Data","label":"Call ID","unique":1,"reqd":1,"search_index":1,"read_only":1},
+  {"fieldname":"recording_url","fieldtype":"Data","label":"Recording URL","length":1000,"read_only":1},
+  {"fieldname":"duration_sec","fieldtype":"Int","label":"Duration (sec)","read_only":1},
+  {"fieldname":"reference_doctype","fieldtype":"Link","options":"DocType","label":"Reference DocType","read_only":1},
+  {"fieldname":"reference_name","fieldtype":"Dynamic Link","options":"reference_doctype","label":"Reference Name","read_only":1},
+  {"fieldname":"raw_payload","fieldtype":"Long Text","label":"Raw Payload","read_only":1}
+ ],
+ "permissions": [{"role":"System Manager","read":1},{"role":"Sales Manager","read":1},{"role":"Sales User","read":1}],
+ "engine":"InnoDB",
+ "autoname":"autoincrement"
+}

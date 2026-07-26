@@ -1,0 +1,43 @@
+{
+ "doctype": "DocType",
+ "name": "PrivatBank Settings",
+ "module": "Ukrainian Integrations",
+ "issingle": 1,
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1"
+  },
+  {
+   "fieldname": "sec_profiles",
+   "fieldtype": "Section Break",
+   "label": "Profiles"
+  },
+  {
+   "fieldname": "profiles",
+   "fieldtype": "Table",
+   "label": "PrivatBank Profiles",
+   "options": "PrivatBank Profile"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  }
+ ],
+ "engine": "InnoDB",
+ "autoname": "prompt"
+}

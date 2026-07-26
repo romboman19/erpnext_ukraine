@@ -1,0 +1,14 @@
+{
+ "doctype": "DocType",
+ "name": "Ecommerce Warehouse Mapping",
+ "module": "Ukrainian Integrations",
+ "istable": 1,
+ "editable_grid": 1,
+ "field_order": ["warehouse", "external_warehouse_id", "safety_stock"],
+ "fields": [
+  {"fieldname": "warehouse", "fieldtype": "Link", "label": "Warehouse", "options": "Warehouse", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "external_warehouse_id", "fieldtype": "Data", "label": "External Warehouse ID", "in_list_view": 1},
+  {"fieldname": "safety_stock", "fieldtype": "Float", "label": "Safety Stock", "default": "0", "in_list_view": 1}
+ ],
+ "permissions": [{"role": "System Manager", "read": 1, "write": 1}]
+}
