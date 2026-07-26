@@ -59,6 +59,19 @@ class TestItemSpecificationWiring(unittest.TestCase):
 		self.assertIn('"options": "UA Item Specification Value"', install)
 		self.assertIn('ITEM_SPEC_ROLES = ("Specification Manager",)', install)
 
+	def test_item_section_does_not_anchor_on_the_field_before_the_accounting_tab(self):
+		"""Verified live on a site: `insert_after: description` (and `brand`, the field
+		right before it) lands the section on the Accounting tab instead of Details —
+		both are the last standard field before the "Accounting" Tab Break. `item_group`
+		is an anchor confirmed to land inside Details."""
+		install = (APP / "install.py").read_text(encoding="utf-8")
+		item_fields = install[install.index('"Item": [') :]
+		item_fields = item_fields[: item_fields.index("],\n")]
+		section = item_fields[: item_fields.index('"fieldname": "ua_specifications"')]
+		self.assertIn('"insert_after": "item_group"', section)
+		self.assertNotIn('"insert_after": "description"', section)
+		self.assertNotIn('"insert_after": "brand"', section)
+
 
 class TestSpecificationSchema(unittest.TestCase):
 	def test_every_declared_type_has_a_storage_column(self):
@@ -156,6 +169,19 @@ class TestServerSideEnforcement(unittest.TestCase):
 		self.assertIn("_guard_type_change", controller)
 		self.assertIn("def on_trash", controller)
 		self.assertIn("_used_in_items", controller)
+
+
+class TestClientSideRendering(unittest.TestCase):
+	def test_a_manually_added_row_fetches_its_value_field_type(self):
+		"""Found live: a row added through applyCategorySet() carries field_type from
+		get_group_specifications(), but a row added by hand only has the specification
+		link — without fetching field_type client-side, every value field's depends_on
+		stays false and there is nowhere to type the value until the document is saved."""
+		script = (APP / "public" / "js" / "item_specifications.js").read_text(encoding="utf-8")
+		handler = script[script.index("specification(frm, cdt, cdn) {") :]
+		handler = handler[: handler.index("\n\t\t},")]
+		self.assertIn('"UA Item Specification", row.specification, ["spec_name", "field_type", "unit"]', handler)
+		self.assertIn('set_value(cdt, cdn, "field_type"', handler)
 
 
 if __name__ == "__main__":

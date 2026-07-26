@@ -242,6 +242,18 @@
 			}
 			// A hand-added row is Manual until the server confirms it belongs to the category set.
 			frappe.model.set_value(cdt, cdn, "source", "Manual");
+			// field_type drives every value field's depends_on. Rows added through
+			// applyCategorySet() already carry it from get_group_specifications(); a row
+			// added by hand only has the specification link, so without this the value
+			// input never appears until the document is saved and the server fills it in.
+			frappe
+				.db.get_value("UA Item Specification", row.specification, ["spec_name", "field_type", "unit"])
+				.then((response) => {
+					const master = response.message || {};
+					frappe.model.set_value(cdt, cdn, "spec_label", master.spec_name);
+					frappe.model.set_value(cdt, cdn, "field_type", master.field_type);
+					frappe.model.set_value(cdt, cdn, "unit", master.unit);
+				});
 		},
 	});
 })();

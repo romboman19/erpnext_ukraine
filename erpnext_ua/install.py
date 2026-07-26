@@ -133,7 +133,11 @@ def ensure_item_spec_setup():
 					"fieldname": "ua_specifications_section",
 					"label": "Характеристики",
 					"fieldtype": "Section Break",
-					"insert_after": "description",
+					# Anchoring on "description" or "brand" — the two fields right before the
+					# "Accounting" Tab Break — lands the section on the Accounting tab instead
+					# of Details, verified empirically on a live site. "item_group" sits earlier
+					# in the same tab and anchors correctly.
+					"insert_after": "item_group",
 				},
 				{
 					"fieldname": "ua_specifications",
