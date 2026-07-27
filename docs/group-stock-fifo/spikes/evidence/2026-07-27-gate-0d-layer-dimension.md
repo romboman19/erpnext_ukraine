@@ -94,8 +94,9 @@ bench --site postest.local execute erpnext_ua.group_stock_fifo.spikes.gate_0d.ru
 даними — GSF-поле фізично з'являється на `CC Stock Lot`, `CC Allocation`,
 `CC Receipt Item` і ще п'яти комісійних таблицях.
 
-Питання до ADR-002: чи потрібен GSF `apply_to_all_doctypes = 1` взагалі, чи
-достатньо явного переліку складських DocType. Другий варіант прибирає
+[ADR-002](../../adr/0002-inventory-dimension-and-sale-stage-lifecycle.md) фіксує
+порядок дій щодо Sale Stage, але питання `apply_to_all_doctypes` проти явного
+переліку складських DocType лишається в ньому відкритим — другий варіант прибирає
 засівання чужого домену, але вимагає супроводу списку.
 
 ## Стан схеми після гейта
