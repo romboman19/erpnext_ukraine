@@ -16,9 +16,13 @@ Two questions were open going into Phase 0:
    for the ride?
 2. Can one Sale Stage warehouse per selling company serve concurrent
    checkouts, or does it need to be scoped tighter?
+3. `apply_to_all_doctypes = 1` stamped the GSF field onto commission DocTypes
+   that never asked for it. Is a narrower scope available, and if so, which?
 
-These are one decision, not two: the answer to the first question determines
-whether the second is optional or mandatory.
+The first two are one decision: the answer to the first determines whether the
+second is optional or mandatory. The third is a separate, mechanical question
+about the same DocType, decided in this ADR because it concerns the same
+Inventory Dimension record.
 
 ## Evidence
 
@@ -58,6 +62,30 @@ and the COGS both end up attached to the wrong checkout. A warehouse scoped to
 checkouts (a paused sale, a return interleaved with a new sale, a retry after a
 network blip), and the failure mode is identical.
 
+Separately, gate 0d ([evidence](../spikes/evidence/2026-07-27-gate-0d-layer-dimension.md))
+found that `apply_to_all_doctypes = 1` stamped a GSF custom field onto eight
+commission DocTypes (`CC Stock Lot`, `CC Allocation`, `CC Receipt Item` among
+them) that GSF never writes to. A follow-up probe on `postest.local` checked
+whether ERPNext's Inventory Dimension supports a curated multi-DocType scope
+instead of "all or one":
+
+```python
+frappe.get_doc({
+    "doctype": "Inventory Dimension",
+    "dimension_name": "GSF Probe Explicit",
+    "reference_document": "GSF Spike Layer",
+    "apply_to_all_doctypes": 0,
+    "document_type": "Stock Entry Detail",
+}).insert()
+```
+
+`document_type` is a single `Link`, not a list. With `apply_to_all_doctypes = 0`
+the field landed only on `Stock Entry Detail` (plus `Stock Ledger Entry` and
+`Stock Closing Balance`, which ERPNext always tags on regardless of the chosen
+scope) — not on `Sales Invoice Item`, which GSF also needs tagged per gate 0d's
+own chain. **There is no native "these four DocTypes" mode.** The choice is
+between everything that touches stock, or exactly one DocType.
+
 ## Decision
 
 **Sale Stage is scoped to one checkout, not to one company and not to one
@@ -79,6 +107,27 @@ not caution, it is the only correct behavior, because the dimension does not
 participate in valuation selection at all. The dimension exists to (a) let a
 layer be traced through the ledger and (b) let ERPNext's native negative-stock
 check reject overselling a specific layer — nothing more.
+
+**The GSF Inventory Dimension keeps `apply_to_all_doctypes = 1`, and GSF's own
+`after_migrate` hook deletes the custom fields it created on every DocType
+outside its own domain**, immediately after ERPNext finishes registering them.
+The alternative of giving the layer two different field names on two different
+DocTypes (one dimension record per DocType) was rejected: it breaks the one
+property gate 0d proved valuable — a single column name that traces a layer
+through the entire chain from reallocation to sale. Letting the pollution stand
+unremoved was rejected too: "GSF does not write foreign-domain fields" is
+already the rule for behavior; leaving GSF's own field physically present on
+`CC Stock Lot` violates the same rule at the schema level, and a stray column
+that nothing writes to is not free — it is index and migration surface with no
+owner.
+
+The cleanup patch is a known-doctype allowlist inverted into a denylist: it
+removes fields from `CC *` DocTypes (and any future non-stock DocType Frappe's
+scan happens to include) rather than maintaining a positive list of DocTypes
+GSF needs. This is deliberately the opposite shape from the rejected "explicit
+list of several DocTypes" — that shape does not exist in the platform, this one
+does, because deleting a `Custom Field` after the fact is an ordinary write, not
+a mode Inventory Dimension has to support.
 
 ## Consequences
 
@@ -102,6 +151,16 @@ check reject overselling a specific layer — nothing more.
 - No GSF service, report, or reconciliation may compute a cost from the layer
   registry as a substitute for the ledger. Any future code that does so is a
   defect against this ADR, not a valid optimization.
+- The denylist of foreign DocTypes to strip is a maintenance surface: a future
+  ERPNext or Frappe version, or a new commission DocType, can reintroduce
+  pollution the patch does not yet know about. The patch must assert its own
+  result — after running, zero `CC *` DocTypes carry the GSF field — rather
+  than assume the list stays complete, so drift fails the migration instead of
+  passing silently.
+- The patch runs after ERPNext's own dimension registration in the same
+  `after_migrate`, per [ADR-001](0001-domain-ownership-and-warehouse-binding.md)'s
+  requirement that dimension creation order be fixed and explicit, not
+  incidental.
 
 ## Fallback
 
