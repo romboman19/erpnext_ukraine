@@ -109,3 +109,27 @@ python -m pytest -q erpnext_ua/group_stock_fifo/tests
 
 Джоба `static-and-package` у [`ci.yml`](../../../.github/workflows/ci.yml) вже
 виконує цей шлях.
+
+Результат відтворено і в розгорнутому середовищі — контейнер
+`frappe-test-backend-1`, сайт `postest.local`, erpnext_ua 0.9.0, Python 3.14:
+
+```bash
+docker exec frappe-test-backend-1 bash -lc 'cd ~/frappe-bench && env/bin/python -c "
+from decimal import Decimal
+from erpnext_ua.group_stock_fifo.spikes.shared_allocator import three_company_pool, pool_query, total_cost
+p = three_company_pool()
+lines = p.plan(query=pool_query(\"FOP C\", p), qty=Decimal(\"6\"))
+print([(l.layer_name, str(l.qty), l.needs_reallocation) for l in lines], total_cost(lines))
+"'
+```
+
+Вивід: `[('GSF-A', '2', True), ('GSF-B', '3', True), ('GSF-C', '1', False)] 6500`.
+
+## Стан тестового сайту на момент гейта
+
+Клин, без мультиФОПних даних: 1 Company, **0 FOP Profile**, 5 стандартних
+складів, 0 SLE, 0 POS Order, 0 PRRO Cash Register, одна Inventory Dimension
+(`CC Stock Lot`), обидва feature gates вимкнені. Site-гейти хвилі 1 потребують
+окремого фікстур-білдера: три Company з FOP Profile, технічні склади, спільний
+Sale Stage і друга dimension `gsf_stock_layer`. Стек `frappe-test` не має
+scheduler-контейнера, тому все чергове тригериться вручну.
