@@ -158,6 +158,21 @@ def gl_rows(frappe: Any, voucher_no: str) -> list[dict[str, Any]]:
     )
 
 
+def cogs_total(frappe: Any, voucher_no: str) -> float:
+    """What the voucher charged to Cost of Goods Sold."""
+    value = frappe.db.sql(
+        """
+        select coalesce(sum(gl.debit - gl.credit), 0)
+        from `tabGL Entry` gl
+        join `tabAccount` acc on acc.name = gl.account
+        where gl.voucher_no = %s and gl.is_cancelled = 0
+          and acc.account_type = 'Cost of Goods Sold'
+        """,
+        voucher_no,
+    )
+    return float(value[0][0]) if value else 0.0
+
+
 def pnl_total(frappe: Any, voucher_no: str) -> float:
     """Net P&L effect of one voucher. §15 wants this to be exactly zero."""
     value = frappe.db.sql(
