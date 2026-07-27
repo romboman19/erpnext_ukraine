@@ -10,6 +10,7 @@ from typing import Any
 
 SPIKE_MARKER = "GSF-SPIKE"
 CLEARING_ACCOUNT_NAME = "GSF Group Clearing"
+CUSTOMER_NAME = "GSF Phase 0 Покупець"
 
 
 def ensure_clearing_account(frappe: Any, company: str) -> str:
@@ -42,6 +43,30 @@ def ensure_clearing_account(frappe: Any, company: str) -> str:
         }
     ).insert(ignore_permissions=True)
     return name
+
+
+def ensure_customer(frappe: Any) -> str:
+    if not frappe.db.exists("Customer", CUSTOMER_NAME):
+        frappe.get_doc(
+            {
+                "doctype": "Customer",
+                "customer_name": CUSTOMER_NAME,
+                "customer_type": "Individual",
+            }
+        ).insert(ignore_permissions=True)
+    return CUSTOMER_NAME
+
+
+def income_account(frappe: Any, company: str) -> str:
+    account = frappe.db.get_value("Company", company, "default_income_account")
+    if account:
+        return account
+    found = frappe.db.get_value(
+        "Account", {"company": company, "account_name": "Sales", "is_group": 0}, "name"
+    )
+    if not found:
+        raise RuntimeError(f"No income account found for {company}")
+    return found
 
 
 def receive_layer(
@@ -144,21 +169,22 @@ def pnl_total(frappe: Any, voucher_no: str) -> float:
 
 
 def cancel_spike_entries(frappe: Any) -> list[str]:
-    """Cancel and delete every Stock Entry this spike suite created."""
-    names = frappe.db.sql_list(
-        """
-        select name from `tabStock Entry`
-        where remarks like %s order by creation desc
-        """,
-        f"{SPIKE_MARKER}%",
-    )
+    """Cancel and delete every document this spike suite created.
+
+    Sales Invoices go first because they consume the stock the entries created.
+    """
     removed = []
-    for name in names:
-        doc = frappe.get_doc("Stock Entry", name)
-        if doc.docstatus == 1:
-            doc.cancel()
-        frappe.delete_doc("Stock Entry", name, force=True, ignore_permissions=True, delete_permanently=True)
-        removed.append(name)
+    for doctype in ("Sales Invoice", "Stock Entry"):
+        names = frappe.db.sql_list(
+            f"select name from `tab{doctype}` where remarks like %s order by creation desc",
+            f"{SPIKE_MARKER}%",
+        )
+        for name in names:
+            doc = frappe.get_doc(doctype, name)
+            if doc.docstatus == 1:
+                doc.cancel()
+            frappe.delete_doc(doctype, name, force=True, ignore_permissions=True, delete_permanently=True)
+            removed.append(f"{doctype} {name}")
     return removed
 
 
