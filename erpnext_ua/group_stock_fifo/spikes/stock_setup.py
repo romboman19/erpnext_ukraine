@@ -188,6 +188,57 @@ def cancel_spike_entries(frappe: Any) -> list[str]:
     return removed
 
 
+def purge_orphan_ledger_rows(frappe: Any, item_code: str) -> dict[str, int]:
+    """Delete cancelled ledger rows whose parent voucher no longer exists.
+
+    Cancelling a Stock Entry flags its ledger rows instead of removing them, and
+    deleting the entry afterwards leaves those rows orphaned. Scoped to one item
+    so it can never touch anything outside the spike fixture.
+    """
+    orphan_vouchers = frappe.db.sql_list(
+        """
+        select distinct sle.voucher_no
+        from `tabStock Ledger Entry` sle
+        where sle.item_code = %s
+          and sle.is_cancelled = 1
+          and sle.voucher_type = 'Stock Entry'
+          and not exists (select 1 from `tabStock Entry` se where se.name = sle.voucher_no)
+        """,
+        item_code,
+    )
+    if not orphan_vouchers:
+        return {"vouchers": [], "stock_ledger_entries": 0, "gl_entries": 0}
+
+    vouchers = tuple(orphan_vouchers)
+    sle_count = frappe.db.count("Stock Ledger Entry", {"item_code": item_code, "is_cancelled": 1})
+    gl_count = frappe.db.sql(
+        """select count(*) from `tabGL Entry`
+           where is_cancelled = 1 and voucher_type = 'Stock Entry' and voucher_no in %s""",
+        (vouchers,),
+    )[0][0]
+    frappe.db.sql(
+        """delete from `tabStock Ledger Entry`
+           where item_code = %s and is_cancelled = 1 and voucher_no in %s""",
+        (item_code, vouchers),
+    )
+    frappe.db.sql(
+        """delete from `tabGL Entry`
+           where is_cancelled = 1 and voucher_type = 'Stock Entry' and voucher_no in %s""",
+        (vouchers,),
+    )
+    return {"vouchers": orphan_vouchers, "stock_ledger_entries": sle_count, "gl_entries": int(gl_count)}
+
+
+def active_ledger_rows(frappe: Any, item_code: str) -> set[str]:
+    """Names of the live (non-cancelled) stock ledger rows for one item."""
+    return set(
+        frappe.db.sql_list(
+            "select name from `tabStock Ledger Entry` where item_code = %s and is_cancelled = 0",
+            item_code,
+        )
+    )
+
+
 def _submit_entry(
     frappe: Any,
     *,

@@ -23,10 +23,12 @@ from typing import Any
 from .fixtures import FOPS, ITEM_CODE, assert_scope
 from .stock_setup import (
     SPIKE_MARKER,
+    active_ledger_rows,
     cancel_spike_entries,
     ensure_customer,
     income_account,
     issue_to_clearing,
+    purge_orphan_ledger_rows,
     receive_layer,
 )
 
@@ -58,19 +60,26 @@ class _Gate0E:
 
     def run(self) -> dict[str, Any]:
         cleared = cancel_spike_entries(self.frappe)
+        purged = purge_orphan_ledger_rows(self.frappe, ITEM_CODE)
         ensure_customer(self.frappe)
         self.frappe.db.commit()
 
         seed = self._seed()
         before = self._snapshot()
+        before_rows = active_ledger_rows(self.frappe, ITEM_CODE)
 
         attempted, failure = self._attempt_checkout_and_fail()
         after = self._snapshot()
-        survivors = self._survivors(attempted)
+        # Compare ledger rows by identity, not by voucher name: Frappe reverts
+        # the naming series when the newest document is deleted, so names from
+        # an earlier run come back and a name-based check reports false hits.
+        new_rows = sorted(active_ledger_rows(self.frappe, ITEM_CODE) - before_rows)
+        survivors = self._surviving_documents(attempted)
 
         checks = {
             "injected_failure_was_raised": failure is not None,
             "no_document_survived": survivors == [],
+            "no_ledger_row_survived": new_rows == [],
             "balances_restored": before == after,
             "seed_layer_intact": after["bins"].get(SOURCE.pool_warehouse, {}).get("qty") == 2.0,
         }
@@ -78,12 +87,14 @@ class _Gate0E:
             "site": self.frappe.local.site,
             "posting_date": self.date,
             "cancelled_before_run": cleared,
+            "purged_orphan_rows": purged,
             "seed": seed,
             "attempted_documents": attempted,
             "injected_failure": str(failure) if failure else None,
             "before": before,
             "after": after,
-            "survivors": survivors,
+            "surviving_documents": survivors,
+            "surviving_ledger_rows": new_rows,
             "checks": checks,
             "result": "PASS" if all(checks.values()) else "FAIL",
         }
@@ -178,19 +189,16 @@ class _Gate0E:
             }
         return {
             "bins": bins,
-            "sle_count": self.frappe.db.count("Stock Ledger Entry", {"item_code": ITEM_CODE}),
+            "sle_count": self.frappe.db.count(
+                "Stock Ledger Entry", {"item_code": ITEM_CODE, "is_cancelled": 0}
+            ),
             "gl_count": self.frappe.db.count("GL Entry", {"is_cancelled": 0}),
         }
 
-    def _survivors(self, attempted: dict[str, str]) -> list[str]:
+    def _surviving_documents(self, attempted: dict[str, str]) -> list[str]:
         doctypes = {"issue": "Stock Entry", "receipt": "Stock Entry", "sales_invoice": "Sales Invoice"}
-        survivors = []
-        for key, name in attempted.items():
-            doctype = doctypes[key]
-            if self.frappe.db.exists(doctype, name):
-                survivors.append(f"{doctype} {name}")
-            if self.frappe.db.count("Stock Ledger Entry", {"voucher_no": name}):
-                survivors.append(f"SLE of {name}")
-            if self.frappe.db.count("GL Entry", {"voucher_no": name}):
-                survivors.append(f"GL of {name}")
-        return survivors
+        return [
+            f"{doctypes[key]} {name}"
+            for key, name in attempted.items()
+            if self.frappe.db.exists(doctypes[key], name)
+        ]
