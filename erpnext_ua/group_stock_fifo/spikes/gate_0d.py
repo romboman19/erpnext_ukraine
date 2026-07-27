@@ -37,7 +37,10 @@ CONFIRMATION = "RUN_GATE_0D"
 CLEANUP_CONFIRMATION = "CLEAN_GATE_0D"
 
 LAYER_DOCTYPE = "GSF Spike Layer"
+# On Stock Entry Detail the dimension is two fields, not one: the plain name
+# carries the outgoing leg and the `to_` prefix carries the incoming one.
 DIMENSION_FIELD = "gsf_spike_layer"
+INCOMING_DIMENSION_FIELD = "to_gsf_spike_layer"
 CC_DIMENSION = "CC Stock Lot"
 
 SOURCE = FOPS[0]
@@ -177,7 +180,7 @@ class _Gate0D:
             posting_date=self.date,
             posting_time="08:00:00",
             label="D-seed",
-            extra={DIMENSION_FIELD: source_layer},
+            extra={INCOMING_DIMENSION_FIELD: source_layer},
         )
         issue = issue_to_clearing(
             self.frappe,
@@ -200,7 +203,7 @@ class _Gate0D:
             posting_date=self.date,
             posting_time="09:00:00",
             label="D-receipt",
-            extra={DIMENSION_FIELD: target_layer},
+            extra={INCOMING_DIMENSION_FIELD: target_layer},
         )
         sale = self._sell(target_layer)
         return {
