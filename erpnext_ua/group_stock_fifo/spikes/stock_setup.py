@@ -80,6 +80,7 @@ def receive_layer(
     posting_date: str,
     posting_time: str,
     label: str,
+    extra: dict[str, Any] | None = None,
 ) -> str:
     """Material Receipt that seeds one cost layer at an exact rate."""
     return _submit_entry(
@@ -96,6 +97,7 @@ def receive_layer(
             "basic_rate": rate,
             "set_basic_rate_manually": 1,
             "expense_account": ensure_clearing_account(frappe, company),
+            **(extra or {}),
         },
     )
 
@@ -110,6 +112,7 @@ def issue_to_clearing(
     posting_date: str,
     posting_time: str,
     label: str,
+    extra: dict[str, Any] | None = None,
 ) -> str:
     """Material Issue whose counter-entry is the balance-sheet clearing account."""
     return _submit_entry(
@@ -124,6 +127,7 @@ def issue_to_clearing(
             "qty": qty,
             "s_warehouse": warehouse,
             "expense_account": ensure_clearing_account(frappe, company),
+            **(extra or {}),
         },
     )
 
