@@ -69,13 +69,42 @@ class _Gate0B:
         self.date = frappe.utils.nowdate()
 
     def run(self) -> dict[str, Any]:
+        # Each execution must start from zero stock, otherwise leftovers from a
+        # previous run blend into the valuation and the numbers mean nothing.
+        cleared = cancel_spike_entries(self.frappe)
+        opening = self._warehouse_balances()
+        if any(balance["qty"] or balance["value"] for balance in opening):
+            raise RuntimeError(f"Gate 0b needs empty fixture warehouses, found {opening}")
+
         runs = [self._run_a(), self._run_b()]
         return {
             "site": self.frappe.local.site,
             "posting_date": self.date,
+            "cancelled_before_run": cleared,
             "runs": runs,
             "result": "PASS" if all(r["verdict"] == "PASS" for r in runs) else "FAIL",
         }
+
+    def _warehouse_balances(self) -> list[dict[str, Any]]:
+        warehouses = [w for fop in FOPS for w in (fop.pool_warehouse, fop.stage_warehouse)]
+        return [
+            {
+                "warehouse": warehouse,
+                "qty": float(
+                    self.frappe.db.get_value(
+                        "Bin", {"item_code": ITEM_CODE, "warehouse": warehouse}, "actual_qty"
+                    )
+                    or 0
+                ),
+                "value": float(
+                    self.frappe.db.get_value(
+                        "Bin", {"item_code": ITEM_CODE, "warehouse": warehouse}, "stock_value"
+                    )
+                    or 0
+                ),
+            }
+            for warehouse in warehouses
+        ]
 
     def _run_a(self) -> dict[str, Any]:
         """Exact transfer while the target warehouse already values stock higher."""
@@ -90,9 +119,8 @@ class _Gate0B:
         )
         moved["documents"]["source_seed"] = source_seed
         moved["documents"]["target_seed_at_1500"] = target_seed
-        moved["checks"]["incoming_rate_is_not_the_target_valuation"] = (
-            moved["receipt_valuation_rate"] != 1500.0
-        )
+        moved["checks"]["source_released_its_own_cost"] = moved["released_by_source"] == 2000.0
+        moved["checks"]["incoming_value_ignores_the_target_valuation"] = moved["accepted_by_target"] == 2000.0
         moved["verdict"] = "PASS" if all(moved["checks"].values()) else "FAIL"
         return {"name": "A — exact transfer under a contaminated target", **moved}
 
@@ -107,6 +135,9 @@ class _Gate0B:
             label="B-move",
         )
         moved["documents"]["source_seed"] = seed
+        # What an unrounded FIFO would have released for two of three units.
+        moved["ideal_value"] = round(2 * (1000 / 3), 10)
+        moved["rounding_vs_ideal"] = round(moved["released_by_source"] - moved["ideal_value"], 10)
         moved["verdict"] = "PASS" if all(moved["checks"].values()) else "FAIL"
         return {"name": "B — non-dividing unit cost", **moved}
 
@@ -151,7 +182,10 @@ class _Gate0B:
             "released_by_source": released,
             "accepted_by_target": accepted,
             "delta": round(accepted - released, 10),
-            "receipt_valuation_rate": float(receipt_sle[0]["valuation_rate"]),
+            "implied_incoming_rate": round(accepted / qty, 10),
+            # Balance rate of the target warehouse after the receipt, not the
+            # incoming rate: ERPNext blends the moved layer with what was there.
+            "target_balance_rate_after": float(receipt_sle[0]["valuation_rate"]),
             "sle": {"issue": issue_sle, "receipt": receipt_sle},
             "gl": {"issue": gl_rows(self.frappe, issue), "receipt": gl_rows(self.frappe, receipt)},
             "checks": {
