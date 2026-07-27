@@ -49,6 +49,7 @@ target-version = "py314"
 # решта дерева писалася без ruff і має бути приведена окремим проходом.
 include = [
     "erpnext_ua/consignment_and_commission/**/*.py",
+    "erpnext_ua/group_stock_fifo/**/*.py",
     "erpnext_ua/integrations/**/*.py",
     "erpnext_ua/ecommerce/**/*.py",
     "erpnext_ua/ukrainian_integrations/**/*.py",
