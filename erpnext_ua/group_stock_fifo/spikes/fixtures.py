@@ -58,7 +58,7 @@ def build(confirm_site: str, confirm_write: str) -> dict[str, Any]:
     """Create the three-FOP pool. Idempotent: existing records are reused."""
     import frappe
 
-    _assert_scope(frappe, confirm_site=confirm_site, confirm_write=confirm_write, expected=CONFIRMATION)
+    assert_scope(frappe, confirm_site=confirm_site, confirm_write=confirm_write, expected=CONFIRMATION)
     report = _Builder(frappe).run()
     frappe.db.commit()
     print(json.dumps(report, ensure_ascii=False, indent=2))
@@ -69,7 +69,7 @@ def state(confirm_site: str) -> dict[str, Any]:
     """Read-only view of what the fixture currently owns on this site."""
     import frappe
 
-    _assert_site(frappe, confirm_site)
+    assert_site(frappe, confirm_site)
     report = {
         "site": frappe.local.site,
         "location": LOCATION,
@@ -94,7 +94,7 @@ def teardown(confirm_site: str, confirm_write: str) -> dict[str, Any]:
     """Remove the fixture. Refuses to touch a company that carries stock."""
     import frappe
 
-    _assert_scope(frappe, confirm_site=confirm_site, confirm_write=confirm_write, expected=TEARDOWN_CONFIRMATION)
+    assert_scope(frappe, confirm_site=confirm_site, confirm_write=confirm_write, expected=TEARDOWN_CONFIRMATION)
     report = _Teardown(frappe).run()
     frappe.db.commit()
     print(json.dumps(report, ensure_ascii=False, indent=2))
@@ -260,12 +260,12 @@ def _created_companies(frappe: Any) -> list[str]:
     return json.loads(raw) if raw else []
 
 
-def _assert_scope(frappe: Any, *, confirm_site: str, confirm_write: str, expected: str) -> None:
-    _assert_site(frappe, confirm_site)
+def assert_scope(frappe: Any, *, confirm_site: str, confirm_write: str, expected: str) -> None:
+    assert_site(frappe, confirm_site)
     if confirm_write != expected:
         raise RuntimeError(f"Explicit confirmation {expected!r} is required")
 
 
-def _assert_site(frappe: Any, confirm_site: str) -> None:
+def assert_site(frappe: Any, confirm_site: str) -> None:
     if frappe.local.site not in ALLOWED_SITES or confirm_site != frappe.local.site:
         raise RuntimeError("GSF Phase 0 fixtures are restricted to an allow-listed test site")
