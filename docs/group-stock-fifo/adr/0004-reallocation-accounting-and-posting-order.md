@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted on 2026-07-27, after gates 0a, 0b, 0c and 0j, with one item explicitly
-left open pending a tax opinion.
+Accepted on 2026-07-27, after gates 0a, 0b, 0c and 0j. One product question is
+left open: whether inter-FOP balances need a settlement document.
 
 ## Context
 
@@ -84,21 +84,23 @@ FOPs accumulates a monotonically growing inter-party balance — 6500 after a
 single six-unit sale in gate 0j.
 
 §15 makes the *income statement* neutral. It does not make the *balance sheet*
-neutral, and a growing payable between related parties is exactly what a tax
-inspection examines. This ADR therefore does **not** decide the settlement
-mechanism. Two things must happen before Phase 1 posts a single reallocation on
-a production site:
+neutral. That is a factual consequence of the posting scheme, recorded here so
+it is visible rather than discovered later.
 
-1. the tax opinion on `MANAGEMENT_REALLOCATION` must cover the accumulated
-   inter-FOP balance, not only the zero-margin transfer itself;
-2. a settlement process must exist. The commission module already has the
-   shape — `CC Settlement Report`, supplier debt journal entries, partial
-   `Payment Entry`, multi-currency outstanding — and is the obvious model rather
-   than a fresh design.
+Whether those balances should ever be settled with an actual payment, and how a
+group of FOPs is structured for tax purposes, is the owner's and the
+accountant's decision, not a question this project answers. The bookkeeping
+mechanism above is correct either way: the balances are real, tracked per
+company, and auditable.
 
-Until both are settled, the clearing account is a correct bookkeeping device
-with an unfinished business process behind it, and that should be stated plainly
-rather than discovered during an audit.
+What remains genuinely open is only a **product** question: does the domain need
+a settlement document that nets and discharges these balances? If yes, the
+commission module already has the shape to copy — `CC Settlement Report`,
+supplier debt journal entries, partial `Payment Entry`, multi-currency
+outstanding — rather than a fresh design. If no, the clearing accounts simply
+carry the position and the group reads it as a management report. This ADR does
+not decide, because either answer is compatible with everything gates 0a–0j
+proved.
 
 ## Consequences
 
@@ -109,5 +111,6 @@ rather than discovered during an audit.
   rounding to both legs only if it is allowed to do the rounding.
 - The intra-company Material Transfer path is a second document shape to build
   and test, not a variant of the first.
-- Settlement, once designed, will be the largest piece of accounting work in the
-  domain, and it is currently outside every estimate made so far.
+- If a settlement document is wanted, it will be the largest piece of accounting
+  work in the domain and is currently outside every estimate made so far. If it
+  is not wanted, nothing further is needed — the mechanism is complete as proved.
