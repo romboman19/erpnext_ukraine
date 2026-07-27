@@ -69,7 +69,7 @@ bench --site postest.local execute erpnext_ua.group_stock_fifo.spikes.fixtures.b
 |---|---|---|---|
 | 0b | Material Receipt приймає точну фактичну вартість source issue | `stock_value_difference` обох документів збігається | `PASS`, [evidence](evidence/2026-07-27-gate-0b-exact-value-transfer.md) |
 | 0e | Rollback усіх складських документів і продажу в одній транзакції | після ін'єкції винятку немає жодного SLE | `PASS`, [evidence](evidence/2026-07-27-gate-0e-atomic-rollback.md) |
-| 0d | Inventory Dimension шару переноситься в SLE source і target | SLE з `gsf_stock_layer` на обох ногах | `TODO` |
+| 0d | Inventory Dimension шару переноситься в SLE source і target | SLE з `gsf_stock_layer` на обох ногах | `PASS`, [evidence](evidence/2026-07-27-gate-0d-layer-dimension.md) |
 
 ### Хвиля 2 — детермінізм і наскрізний сценарій
 
@@ -86,7 +86,7 @@ bench --site postest.local execute erpnext_ua.group_stock_fifo.spikes.fixtures.b
 |---|---|---|---|
 | 0a | Material Issue на balance-sheet clearing без впливу на P&L | GL-таблиця, сума P&L-рядків = 0 | `PASS`, закрито разом з 0b |
 | 0c | Продаж зі Sale Stage дає COGS = вартості підготовленого | SLE продажу проти SLE stage | `TODO` |
-| 0h | Дві Inventory Dimension (`cc_stock_lot`, `gsf_stock_layer`) співіснують | forms і SLE без конфлікту | `TODO` |
+| 0h | Дві Inventory Dimension (`cc_stock_lot`, `gsf_stock_layer`) співіснують | forms і SLE без конфлікту | схема `PASS` разом з 0d, forms `TODO` |
 | 0i | GSF-хуки інертні на CC-складах і навпаки | тест на кожен обробник | сервісний рівень `PASS`, хуки `TODO` |
 
 ### Перепрофільовано
@@ -114,6 +114,23 @@ Evidence: [`2026-07-27-gate-0b-exact-value-transfer.md`](evidence/2026-07-27-gat
 поточний чек**, бо черга FIFO цільового складу впорядкована за надходженням у
 нього і не зобов'язана збігатися з вибором глобального FIFO. Перевіряється
 гейтом 0c.
+
+### 0d — вимір шару в книзі
+
+`PASS`, 2026-07-27.
+Evidence: [`2026-07-27-gate-0d-layer-dimension.md`](evidence/2026-07-27-gate-0d-layer-dimension.md).
+
+Вимір доїжджає до SLE на всіх трьох документах ланцюжка, включно з продажем.
+Дві Inventory Dimension співіснують — це половина 0h.
+
+Дві знахідки, які змінюють план:
+
+- вимір на `Stock Entry Detail` — це **пара полів**: `gsf_spike_layer` для
+  вихідної ноги і `to_gsf_spike_layer` для вхідної. Помилка fail-closed, але
+  падає наступний документ, а не той, що помилився;
+- `apply_to_all_doctypes = 1` засіває поле й на комісійні DocType (8 таблиць),
+  причому результат залежить від порядку створення вимірів. Питання до ADR-002:
+  чи не обмежити GSF явним переліком складських DocType.
 
 ### 0e — атомарний rollback
 
