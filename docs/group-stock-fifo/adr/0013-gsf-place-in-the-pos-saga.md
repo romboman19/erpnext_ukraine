@@ -103,6 +103,10 @@ the §25 fail-closed rule on closed periods.
 - Base spec §9.16 and §23.1 are amended by this ADR; §14.1 stays with a changed
   initiator. Once the base spec lands in the repo, both sections must carry the
   amendment inline.
+- "Stable keys" above cannot mean ERPNext document names. Gate 0e showed that
+  deleting the newest document reverts the naming series, so the same name is
+  handed out again. Keys must be owned by the domain, as in the commission
+  module's request fingerprint.
 - The reduced state machine has no fiscal states, so a GSF route can complete
   while the receipt is not yet fiscalized. Monitoring must read fiscal progress
   from `POS Order`, never from `GSF Checkout`.

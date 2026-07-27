@@ -68,7 +68,7 @@ bench --site postest.local execute erpnext_ua.group_stock_fifo.spikes.fixtures.b
 | # | Питання | Доказ | Статус |
 |---|---|---|---|
 | 0b | Material Receipt приймає точну фактичну вартість source issue | `stock_value_difference` обох документів збігається | `PASS`, [evidence](evidence/2026-07-27-gate-0b-exact-value-transfer.md) |
-| 0e | Rollback усіх складських документів і продажу в одній транзакції | після ін'єкції винятку немає жодного SLE | `TODO` |
+| 0e | Rollback усіх складських документів і продажу в одній транзакції | після ін'єкції винятку немає жодного SLE | `PASS`, [evidence](evidence/2026-07-27-gate-0e-atomic-rollback.md) |
 | 0d | Inventory Dimension шару переноситься в SLE source і target | SLE з `gsf_stock_layer` на обох ногах | `TODO` |
 
 ### Хвиля 2 — детермінізм і наскрізний сценарій
@@ -114,6 +114,19 @@ Evidence: [`2026-07-27-gate-0b-exact-value-transfer.md`](evidence/2026-07-27-gat
 поточний чек**, бо черга FIFO цільового складу впорядкована за надходженням у
 нього і не зобов'язана збігатися з вибором глобального FIFO. Перевіряється
 гейтом 0c.
+
+### 0e — атомарний rollback
+
+`PASS`, 2026-07-27.
+Evidence: [`2026-07-27-gate-0e-atomic-rollback.md`](evidence/2026-07-27-gate-0e-atomic-rollback.md).
+
+Виняток після подачі Sales Invoice знімає issue, receipt і продаж разом зі
+складською книгою та GL. Окремої компенсації для SLE не потрібно.
+
+Гейт додав вимогу до ідемпотентності: **імена документів ERPNext не є
+стабільними ключами** — `delete_doc` найновішого документа повертає лічильник
+серії назад, і номер повторно видається наступному документу. Стабільні ключі
+GSF мають бути власними, як у комісійному модулі.
 
 ### 0g — спільний аллокатор
 
