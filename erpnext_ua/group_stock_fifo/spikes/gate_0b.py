@@ -183,8 +183,9 @@ class _Gate0B:
             "accepted_by_target": accepted,
             "delta": round(accepted - released, 10),
             "implied_incoming_rate": round(accepted / qty, 10),
-            # Balance rate of the target warehouse after the receipt, not the
-            # incoming rate: ERPNext blends the moved layer with what was there.
+            # Average balance rate of the target warehouse after the receipt, not
+            # the incoming rate. Under FIFO the queue still holds the layers
+            # separately; only this reported number is an average.
             "target_balance_rate_after": float(receipt_sle[0]["valuation_rate"]),
             "sle": {"issue": issue_sle, "receipt": receipt_sle},
             "gl": {"issue": gl_rows(self.frappe, issue), "receipt": gl_rows(self.frappe, receipt)},

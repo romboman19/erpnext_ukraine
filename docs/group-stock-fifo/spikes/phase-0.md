@@ -67,7 +67,7 @@ bench --site postest.local execute erpnext_ua.group_stock_fifo.spikes.fixtures.b
 
 | # | Питання | Доказ | Статус |
 |---|---|---|---|
-| 0b | Material Receipt приймає точну фактичну вартість source issue | `stock_value_difference` обох документів збігається | `TODO` |
+| 0b | Material Receipt приймає точну фактичну вартість source issue | `stock_value_difference` обох документів збігається | `PASS`, [evidence](evidence/2026-07-27-gate-0b-exact-value-transfer.md) |
 | 0e | Rollback усіх складських документів і продажу в одній транзакції | після ін'єкції винятку немає жодного SLE | `TODO` |
 | 0d | Inventory Dimension шару переноситься в SLE source і target | SLE з `gsf_stock_layer` на обох ногах | `TODO` |
 
@@ -84,7 +84,7 @@ bench --site postest.local execute erpnext_ua.group_stock_fifo.spikes.fixtures.b
 
 | # | Питання | Доказ | Статус |
 |---|---|---|---|
-| 0a | Material Issue на balance-sheet clearing без впливу на P&L | GL-таблиця, сума P&L-рядків = 0 | `TODO` |
+| 0a | Material Issue на balance-sheet clearing без впливу на P&L | GL-таблиця, сума P&L-рядків = 0 | `PASS`, закрито разом з 0b |
 | 0c | Продаж зі Sale Stage дає COGS = вартості підготовленого | SLE продажу проти SLE stage | `TODO` |
 | 0h | Дві Inventory Dimension (`cc_stock_lot`, `gsf_stock_layer`) співіснують | forms і SLE без конфлікту | `TODO` |
 | 0i | GSF-хуки інертні на CC-складах і навпаки | тест на кожен обробник | сервісний рівень `PASS`, хуки `TODO` |
@@ -100,6 +100,20 @@ bench --site postest.local execute erpnext_ua.group_stock_fifo.spikes.fixtures.b
 ERPNext не потрібно — потрібно вміти звірити з нею.
 
 ## Виконані гейти
+
+### 0b + 0a — точність перенесення вартості
+
+`PASS`, 2026-07-27.
+Evidence: [`2026-07-27-gate-0b-exact-value-transfer.md`](evidence/2026-07-27-gate-0b-exact-value-transfer.md).
+
+Вартість переноситься між ФОП без втрат навіть тоді, коли цільовий склад уже
+оцінений інакше, і навіть коли собівартість не ділиться націло. P&L обох
+ваучерів = 0, тому 0a закритий тим самим прогоном.
+
+Гейт додав інваріант, якого немає в ревізії ТЗ: **Sale Stage має містити лише
+поточний чек**, бо черга FIFO цільового складу впорядкована за надходженням у
+нього і не зобов'язана збігатися з вибором глобального FIFO. Перевіряється
+гейтом 0c.
 
 ### 0g — спільний аллокатор
 
