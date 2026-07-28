@@ -8,7 +8,7 @@ Accepted on 2026-07-27, after gate 0e.
 
 A GSF checkout submits several documents in sequence, across two companies, and
 may be retried after a network failure, a PRRO timeout or a worker restart.
-[ADR-013](0013-gsf-place-in-the-pos-saga.md) requires that a retry reuse the
+[ADR-012](0012-pos-prro-saga.md) requires that a retry reuse the
 existing route and execute only the missing steps, and states that "stable keys
 are mandatory" — without saying what may serve as one.
 
@@ -67,6 +67,6 @@ is a query rule for the whole domain, not a detail of one gate.
   should be able to report them.
 - The fingerprint must be stable across process restarts and across workers,
   which rules out anything derived from in-memory state or wall-clock time.
-- Because [ADR-013](0013-gsf-place-in-the-pos-saga.md) leaves payment and
+- Because [ADR-012](0012-pos-prro-saga.md) leaves payment and
   fiscalization with `POS Order`, GSF's key covers stock preparation only. It
   must not be reused as, or confused with, the fiscal idempotency key.

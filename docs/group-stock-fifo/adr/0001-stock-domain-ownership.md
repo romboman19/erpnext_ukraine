@@ -64,7 +64,7 @@ created from one `after_migrate` in a defined order, so two installations of the
 same app version converge on the same schema. Whether GSF should use
 `apply_to_all_doctypes` at all, or an explicit list of stock DocTypes that
 excludes the other domain's tables, remains open in
-[ADR-002](0002-inventory-dimension-and-sale-stage-lifecycle.md); this ADR only
+[ADR-002](0002-inventory-dimension-coexistence.md); this ADR only
 requires that the order stop being incidental.
 
 ## Consequences

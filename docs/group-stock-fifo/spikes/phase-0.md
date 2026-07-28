@@ -15,7 +15,7 @@
 5. статус `PASS`, `FAIL` або `BLOCKED` — без оптимістичних припущень.
 
 Вихід фази: `GO`, `GO WITH CONSTRAINTS` або `REVISE ARCHITECTURE`, і прийняті
-ADR-001..005 та ADR-013 — усі шість прийнято 2026-07-27, [каталог](../adr).
+ADR за §40 базового ТЗ — [каталог](../adr).
 
 ## Середовища
 
@@ -103,24 +103,39 @@ ERPNext не потрібно — потрібно вміти звірити з 
 
 **`GO WITH CONSTRAINTS`**, 2026-07-27. Вісім гейтів з десяти закриті, обидва
 залишки — не блокери: 0h у частині форм і 0i у частині хуків, яких ще немає.
-Усі шість ADR, що їх фаза вимагала на вході в Phase 1, прийнято:
-[001](../adr/0001-domain-ownership-and-warehouse-binding.md),
-[002](../adr/0002-inventory-dimension-and-sale-stage-lifecycle.md),
-[003](../adr/0003-one-allocator-two-adapters.md),
-[004](../adr/0004-reallocation-accounting-and-posting-order.md),
-[005](../adr/0005-idempotency-and-stable-keys.md),
-[013](../adr/0013-gsf-place-in-the-pos-saga.md).
+Стан ADR за нумерацією §40 базового ТЗ:
+
+| № | Тема | Стан |
+|---|---|---|
+| [001](../adr/0001-stock-domain-ownership.md) | Stock-domain ownership | `Accepted` |
+| [002](../adr/0002-inventory-dimension-coexistence.md) | Inventory Dimension coexistence | `Accepted` |
+| [003](../adr/0003-exact-value-intercompany-reallocation.md) | Exact-value reallocation | `Accepted` |
+| [004](../adr/0004-posting-order.md) | Posting order | `Accepted` |
+| [005](../adr/0005-balance-sheet-clearing-accounting.md) | Clearing accounting | `Accepted` |
+| [006](../adr/0006-stage-lane-isolation.md) | Stage lane isolation | `Accepted` |
+| [007](../adr/0007-valuation-queue-preflight.md) | Valuation queue preflight | **`Proposed`, без спайка** |
+| [008](../adr/0008-transaction-boundary.md) | Transaction boundary | `Accepted` |
+| 009 | Return FIFO policy | не написаний |
+| 010 | Backdated/revaluation policy | не написаний |
+| 011 | CC compatibility contract | скасований ревізією |
+| [012](../adr/0012-pos-prro-saga.md) | POS/PRRO saga | `Proposed` |
+| [013](../adr/0013-one-allocator-two-adapters.md) | Один аллокатор, два адаптери | `Accepted`, поза §40 |
+| [014](../adr/0014-idempotency-and-stable-keys.md) | Ідемпотентність і стабільні ключі | `Accepted`, поза §40 |
+
+**ADR-007 — єдиний із §40, чиїх доказів Phase 0 не зібрала.** Він блокує Phase 4
+і є мітигацією ризику №1 у §35.
 
 Модель шарів витримала: вартість переноситься між ФОП точно, падіння відкочує
 все, шар простежується в книзі, наскрізний сценарій §37.1 дає рівно 6500.
 
 Обмеження, з якими дозволено починати Phase 1:
 
-1. **Sale Stage скоуповано на один чек**, не на компанію і не на касу — прийнято
-   [ADR-002](../adr/0002-inventory-dimension-and-sale-stage-lifecycle.md). Склад на
-   касу не закриває колізію: один касир може мати два чеки в польоті одночасно.
-   `GSF Checkout` створює й прибирає власний склад комплектування як частину
-   стану `PREPARING_STOCK`.
+1. **Один checkout на одну staging lane одночасно** —
+   [ADR-006](../adr/0006-stage-lane-isolation.md) за §7.2/§9.8. Lane —
+   довгоживучий склад із `lock_token` і статусом; zero-check є передумовою
+   локу, а `DIRTY` ніколи не чиститься автоматично. Ранній варіант «склад на
+   кожен чек» відкликано: він давав ту саму гарантію, але не мав де зберігати
+   стан `DIRTY`, який саме й має пережити невдалий чек.
 2. **Документи перепризначення подаються в порядку аллокатора** — порядок подачі
    і є tie-breaker при однаковому timestamp (0f).
 3. **Вартість читається з фактичного SLE**, ніколи з реєстру шарів: вимір
@@ -129,8 +144,12 @@ ERPNext не потрібно — потрібно вміти звірити з 
    відкочується при видаленні (0e).
 5. **Спільний аллокатор**, GSF як другий адаптер кандидатів; потрібен адитивний
    `GSF_LAYER → OWN` і зняття двозначності `CandidateQuery.company` (0g).
-6. **Порядок створення вимірів фіксується явно**; розглянути перелік складських
-   DocType замість `apply_to_all_doctypes` (0d).
+6. **Порядок створення вимірів фіксується явно**, а власний `after_migrate`-патч
+   прибирає GSF-поле з комісійних DocType (0d,
+   [ADR-002](../adr/0002-inventory-dimension-coexistence.md)).
+7. **Клірингових рахунків два, не один** — `Due From` і `Due To` плюс dimension
+   `Counterparty Accounting Company` за §15.3
+   ([ADR-005](../adr/0005-balance-sheet-clearing-accounting.md)).
 
 Базове ТЗ v1.0 залито в репозиторій 2026-07-27
 ([`spec-v1.0.md`](../spec-v1.0.md)), тому модель даних Phase 1 більше не є
@@ -142,10 +161,10 @@ ERPNext не потрібно — потрібно вміти звірити з 
 Податкова оцінка схеми `MANAGEMENT_REALLOCATION` — рішення власника бізнесу та
 його бухгалтера, не предмет цього проєкту. Питання зняте з переліку.
 
-Розрахунки між ФОП лишаються **продуктовим питанням, а не блокером**: клірингова
-стаття коректно накопичує зустрічні залишки, і чи потрібен документ їх погашення —
-вирішує власник
-([ADR-004](../adr/0004-reallocation-accounting-and-posting-order.md)).
+Розрахунки між ФОП питанням не є: §15.2 і §37.23 описують **звірку за
+контрагентом** і елімінацію на рівні групової звітності, а не платіж. Накопичений
+залишок — очікувана поведінка
+([ADR-005](../adr/0005-balance-sheet-clearing-accounting.md)).
 
 ## Виконані гейти
 
@@ -202,7 +221,7 @@ Evidence: [`2026-07-27-gate-0d-layer-dimension.md`](evidence/2026-07-27-gate-0d-
   падає наступний документ, а не той, що помилився;
 - `apply_to_all_doctypes = 1` засіває поле й на комісійні DocType (8 таблиць),
   причому результат залежить від порядку створення вимірів. Вирішено в
-  [ADR-002](../adr/0002-inventory-dimension-and-sale-stage-lifecycle.md):
+  [ADR-002](../adr/0002-inventory-dimension-coexistence.md):
   `apply_to_all_doctypes` лишається (явного переліку кількох DocType платформа не
   підтримує), а власний патч прибирає GSF-поле з чужих DocType одразу після міграції.
 

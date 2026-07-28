@@ -6,30 +6,44 @@
 Документ відповідає на одне питання: **що з базового ТЗ лишається чинним, що
 скасовано, і що Phase 0 довела або спростувала.**
 
-## 1. Колізія нумерації ADR — виправити першою
+## 1. Нумерація ADR — узгоджено з §40
 
-Базове ТЗ §40 визначає ADR-001…012 з конкретним змістом. ADR, написані до появи
-ТЗ у репо, нумерувалися за ревізією і **частково суперечать** цій нумерації.
+**Вирішено 2026-07-27:** базове ТЗ первинне, ADR підлаштовані під §40.
 
-| № за ТЗ §40 | Зміст за ТЗ | Що зараз лежить під цим номером | Стан |
+| № за §40 | Зміст | Файл | Стан |
 | --- | --- | --- | --- |
-| ADR-001 | Stock-domain ownership | [0001 Domain ownership and warehouse binding](adr/0001-domain-ownership-and-warehouse-binding.md) | ✅ збіг |
-| ADR-002 | Inventory Dimension coexistence | [0002 Dimension scope **and Sale Stage lifecycle**](adr/0002-inventory-dimension-and-sale-stage-lifecycle.md) | ⚠️ перевантажений: містить ще й ADR-006 |
-| ADR-003 | Exact-value intercompany reallocation | [0003 One allocator, two adapters](adr/0003-one-allocator-two-adapters.md) | ❌ **колізія** — зміст ТЗ лежить у 0004 |
-| ADR-004 | Posting order | [0004 Reallocation accounting and posting order](adr/0004-reallocation-accounting-and-posting-order.md) | ⚠️ містить ADR-003 + ADR-004 + ADR-005 |
-| ADR-005 | Balance-sheet clearing accounting | [0005 Idempotency and stable keys](adr/0005-idempotency-and-stable-keys.md) | ❌ **колізія** — зміст ТЗ лежить у 0004 |
-| ADR-006 | Stage lane isolation | всередині 0002 | ⚠️ не має власного номера |
-| ADR-007 | Valuation queue preflight | — | ❌ **не написаний** |
-| ADR-008 | Transaction boundary | доведено гейтом 0e, ADR немає | ❌ не написаний |
-| ADR-009 | Return FIFO policy | — | ❌ не написаний |
-| ADR-010 | Backdated/revaluation policy | — | ❌ не написаний |
-| ADR-011 | CC compatibility contract | скасований ревізією §2 | ✅ обґрунтовано скасований |
-| ADR-012 | POS/PRRO saga | [0013 GSF place in the POS saga](adr/0013-gsf-place-in-the-pos-saga.md) | ⚠️ номер 013 замість 012 |
+| ADR-001 | Stock-domain ownership | [0001](adr/0001-stock-domain-ownership.md) | `Accepted` |
+| ADR-002 | Inventory Dimension coexistence | [0002](adr/0002-inventory-dimension-coexistence.md) | `Accepted` |
+| ADR-003 | Exact-value intercompany reallocation | [0003](adr/0003-exact-value-intercompany-reallocation.md) | `Accepted` |
+| ADR-004 | Posting order | [0004](adr/0004-posting-order.md) | `Accepted` |
+| ADR-005 | Balance-sheet clearing accounting | [0005](adr/0005-balance-sheet-clearing-accounting.md) | `Accepted` |
+| ADR-006 | Stage lane isolation | [0006](adr/0006-stage-lane-isolation.md) | `Accepted` |
+| ADR-007 | Valuation queue preflight | [0007](adr/0007-valuation-queue-preflight.md) | **`Proposed`, без спайка** |
+| ADR-008 | Transaction boundary | [0008](adr/0008-transaction-boundary.md) | `Accepted` |
+| ADR-009 | Return FIFO policy | — | не написаний |
+| ADR-010 | Backdated/revaluation policy | — | не написаний |
+| ADR-011 | CC compatibility contract | — | скасований ревізією §2 |
+| ADR-012 | POS/PRRO saga | [0012](adr/0012-pos-prro-saga.md) | `Proposed` |
 
-**Рішення потрібне від власника:** перенумерувати наявні ADR під §40 (ТЗ
-первинне, воно з'явилося раніше) чи лишити поточну нумерацію і виправити §40.
-Поки цього не зроблено, посилання «ADR-005» означає різні речі залежно від
-документа — це найдорожча з наявних неоднозначностей.
+Два рішення не мають слота в §40, бо ТЗ проєктувало окремий застосунок і цих
+питань не ставило. Вони отримали номери після 012:
+
+| № | Зміст | Файл |
+| --- | --- | --- |
+| ADR-013 | Один аллокатор, два адаптери кандидатів | [0013](adr/0013-one-allocator-two-adapters.md) |
+| ADR-014 | Ідемпотентність і стабільні ключі | [0014](adr/0014-idempotency-and-stable-keys.md) |
+
+Що змінилося при узгодженні:
+
+- злитий ADR «reallocation accounting and posting order» **розділено на три** —
+  003 (точна вартість), 004 (порядок проведення), 005 (клірингові рахунки), як
+  того вимагає §40;
+- Sale Stage **винесено з 002 у 006** і рішення замінено: замість складу на
+  кожен чек — пул lane за §7.2/§9.8 (див. §5.1 нижче);
+- ADR-013 «Місце GSF у касовій сазі» став **ADR-012 «POS/PRRO saga»**;
+- дописано **ADR-008** (transaction boundary) — гейт 0e його вже доводив, ADR
+  бракувало;
+- заведено **ADR-007** зі статусом `Proposed` і явним записом, що доказів немає.
 
 ## 2. Що ТЗ вирішує, і що більше не треба вигадувати
 
@@ -89,29 +103,28 @@
 
 ## 5. Розбіжності, які треба усунути в ADR
 
-### 5.1. Sale Stage: lane pool, а не склад на чек
+### 5.1. Sale Stage: lane pool, а не склад на чек — ✅ усунуто
 
-[ADR-002](adr/0002-inventory-dimension-and-sale-stage-lifecycle.md) обрав
-**склад на кожен чек**, а пул заздалегідь створених lane поставив як fallback.
+Ранній ADR обрав **склад на кожен чек**, а пул lane поставив як fallback. ТЗ
+§7.2 і §9.8 задають протилежне і детальніше: **пул іменованих lane** з
+`lock_token`, статусами `AVAILABLE/LOCKED/DIRTY/DISABLED`, zero-check як
+передумовою локу і `STAGE_LANE_BUSY`/`STAGE_LANE_DIRTY` у моделі помилок.
 
-ТЗ §7.2 і §9.8 задають протилежне і детальніше: **пул іменованих lane** з
-`lock_token`, статусами `AVAILABLE/LOCKED/DIRTY/DISABLED`, обов'язковим
-zero-check перед lock і `STAGE_LANE_BUSY`/`STAGE_LANE_DIRTY` у моделі помилок.
+Переписано як [ADR-006](adr/0006-stage-lane-isolation.md). Вирішальний аргумент,
+якого не було видно без ТЗ: у складі-на-чек **немає де зберігати стан `DIRTY`**,
+бо носій зникає разом із чеком — а гейт 0c показує, що саме брудний стан має
+пережити невдалу спробу й заблокувати наступну.
 
-Дизайн ТЗ кращий: він дає ту саму гарантію «один чек на склад одночасно» без
-проліферації складів, яку ADR-002 сам називає ризиком. **ADR-002 треба
-переписати під §9.8**, зберігши обґрунтування з гейта 0c як доказову базу.
-
-### 5.2. Клірингові рахунки: два, а не один
+### 5.2. Клірингові рахунки: два, а не один — ✅ усунуто
 
 Гейти використали один `GSF Group Clearing` на компанію. §15.3 вимагає **два**
 (`Internal Stock Due From` і `Internal Stock Due To`) плюс обов'язковий
-accounting dimension `Counterparty Accounting Company` і звірку за
-`reallocation_id + source_company + destination_company`.
+accounting dimension `Counterparty Accounting Company`.
 
-Це також знімає питання, яке ADR-004 лишив відкритим: §15.3 і §37.23 описують
-**звірку**, а не платіж. Накопичений залишок — очікувана поведінка, яка
-елімінується на рівні групової звітності (§15.2).
+Зафіксовано в [ADR-005](adr/0005-balance-sheet-clearing-accounting.md). Там же
+закрито питання, яке рання редакція лишала відкритим: §15.3 і §37.23 описують
+**звірку за контрагентом**, а не платіж, а §15.2 — елімінацію на рівні групової
+звітності. Накопичений залишок є очікуваною поведінкою схеми.
 
 ### 5.3. FIFO key коротший за вимогу ТЗ
 
@@ -119,7 +132,7 @@ accounting dimension `Counterparty Accounting Company` і звірку за
 (`fifo_datetime, receipt_name, receipt_row_index, lot_name`). §12.3 вимагає семи:
 додатково `origin_doctype`, `source_company`, `source_warehouse`.
 
-[ADR-003](adr/0003-one-allocator-two-adapters.md) має або розширити ключ, або
+[ADR-013](adr/0013-one-allocator-two-adapters.md) має або розширити ключ, або
 довести, що для GSF-кандидатів чотирьох полів достатньо для тієї самої
 детермінованості. Без цього §4.2 «однаковий вхідний стан → однаковий порядок» не
 доведено формально.

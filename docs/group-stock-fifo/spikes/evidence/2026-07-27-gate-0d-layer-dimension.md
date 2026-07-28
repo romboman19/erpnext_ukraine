@@ -94,7 +94,7 @@ bench --site postest.local execute erpnext_ua.group_stock_fifo.spikes.gate_0d.ru
 даними — GSF-поле фізично з'являється на `CC Stock Lot`, `CC Allocation`,
 `CC Receipt Item` і ще п'яти комісійних таблицях.
 
-Вирішено в [ADR-002](../../adr/0002-inventory-dimension-and-sale-stage-lifecycle.md):
+Вирішено в [ADR-002](../../adr/0002-inventory-dimension-coexistence.md):
 явного переліку кількох DocType платформа не підтримує (`document_type` — одиничний
 Link, перевірено окремим пробним запуском). `apply_to_all_doctypes` лишається, а
 власний `after_migrate`-патч прибирає GSF-поле з комісійних DocType одразу після

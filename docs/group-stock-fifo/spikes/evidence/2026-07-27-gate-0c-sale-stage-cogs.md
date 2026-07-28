@@ -51,7 +51,7 @@ bench --site postest.local execute erpnext_ua.group_stock_fifo.spikes.gate_0c.ru
 3. **Один Sale Stage на компанію не працює на реальній точці.** Мультифопна каса
    — це кілька касирів на одній локації. Два одночасні чеки того самого ФОПа
    поділять один склад комплектування, і другий забере шар першого. Прийнято
-   [ADR-002](../../adr/0002-inventory-dimension-and-sale-stage-lifecycle.md):
+   [ADR-002](../../adr/0002-inventory-dimension-coexistence.md):
    Sale Stage скоуповано на один чек, склад на касу відхилено — не закриває
    колізію двох чеків у польоті на одному касирі.
 
