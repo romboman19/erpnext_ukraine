@@ -2,11 +2,11 @@
 
 ## Status
 
-Proposed on 2026-07-27. **Not yet backed by a spike** — this is the one §40 ADR
-whose evidence Phase 0 did not gather.
+Accepted on 2026-07-28, after gate 0k
+([evidence](../spikes/evidence/2026-07-28-gate-0k-valuation-preflight.md)).
 
-Blocks Phase 4 (§41). No reallocation may post on a production site before this
-is accepted and its control implemented.
+Filed as `Proposed` on 2026-07-27 with no spike behind it; the spike now exists
+and answered §42.1 question 7.
 
 ## Context
 
@@ -18,10 +18,27 @@ releases a different value than the global layer order implies.
 This is risk #1 in §35, and §17.2 makes a preflight check mandatory before every
 source issue.
 
-## Evidence available so far
+## Evidence
 
-Phase 0 did not build the preflight. What it did establish is the shape of the
-failure the preflight has to catch.
+Gate 0k built the preflight and measured it against the real ledger.
+
+**The queue needs no reconstruction.** ERPNext persists its FIFO queue as JSON on
+every Stock Ledger Entry (`stock_queue`) and ships the class that consumes it
+(`erpnext.stock.valuation.FIFOValuation`). Reading the latest row for an
+`item + warehouse` pair and replaying it through that class predicts the next
+issue exactly — in memory, with no write.
+
+| Run | Planned | Predicted | Actual | Outcome |
+|---|---:|---:|---:|---|
+| A — spanning two layers | 4200.00 | 4200.00 | **4200.00** | queue untouched by the prediction |
+| B — 1 unit with no layer | 4200.00 | 4200.00 | — | `UNCLASSIFIED_GSF_STOCK` |
+| C — plan disagrees | 4000.00 | 4200.00 | — | `VALUATION_QUEUE_DIVERGENCE` |
+
+Run B is the instructive one: its **value** check passes, because the offending
+unit sits third in the queue and does not affect an issue of four. A
+value-only preflight would have let it through and failed on a later checkout.
+
+The failure shape the preflight has to catch was established earlier.
 
 Gate 0c ([evidence](../spikes/evidence/2026-07-27-gate-0c-sale-stage-cogs.md))
 demonstrated divergence at the destination: a stage holding foreign stock
@@ -45,6 +62,13 @@ visibly too weak: §17 is a mandatory subsystem, not a corollary, and §42.1
 question 7 asks for it directly.
 
 ## Decision
+
+**Read the queue from `Stock Ledger Entry.stock_queue` and replay it through
+ERPNext's own `FIFOValuation`.** Option 1 of the three candidates; options 2
+(reconstruct from ledger rows) and 3 (savepoint dry-run) are not needed and are
+not implemented. Reusing the platform's class rather than reimplementing FIFO is
+the point: a divergence between prediction and behaviour would require ERPNext to
+diverge from itself.
 
 **A preflight runs before every source Material Issue, for each
 source Company / Item / Warehouse triple, and blocks on mismatch with
@@ -70,36 +94,44 @@ reported, but only the total gates the transaction.
 `GSF Integrity Issue` is raised for manual review (§17.2). Automatic repair is
 forbidden without dry-run and approval (§27.2, §35 risk 30).
 
-## Open — must be answered by a spike before this ADR is accepted
+## Resolved: how to obtain the queue
 
-§42.1 question 7 remains unanswered: **how to obtain or reproduce the local
-valuation queue reliably.** Candidate approaches, in order of preference:
+§42.1 question 7 asked how to obtain or reproduce the local valuation queue
+reliably. Answer: read `stock_queue` off the latest SLE. The three candidates
+this ADR listed while unproven resolve as follows.
 
-1. read ERPNext's own FIFO queue representation for the bin directly, if v16
-   exposes it in a stable form;
-2. reconstruct it from active `Stock Ledger Entry` rows for the
-   `item + warehouse` pair and compare against the GSF layer balances;
-3. dry-run the issue in a savepoint and read the resulting SLE, then roll back —
-   gate 0e proved this rollback is clean, which makes the approach viable if the
-   first two are not.
+1. **Read ERPNext's own queue — adopted.** It is exposed, stable, and consumed
+   by a public class.
+2. Reconstruct from active ledger rows — unnecessary, and would be a second
+   implementation of FIFO to keep in step with the first.
+3. Savepoint dry-run — unnecessary. Gate 0e proved the rollback is clean, so it
+   would have worked, but it doubles writes on the hot path for no gain.
 
-Option 3 is the fallback of last resort: it doubles the write load on the hot
-path. Options 1 and 2 must be evaluated first, and the spike must state which
-one it proves.
+The §17.3 minimisation rules still apply and reduce how often the preflight can
+fail: accept into GSF OWN Pool only with a layer; forbid unmanaged Stock Entry;
+move reallocated layers straight into the staging lane rather than the seller's
+OWN Pool; make returns a new layer by default; control backdated documents; run
+an integrity check after Landed Cost or Repost.
 
-The §17.3 minimisation rules apply regardless of which approach wins: accept
-into GSF OWN Pool only with a layer; forbid unmanaged Stock Entry; move
-reallocated layers straight into the Sale Stage rather than the seller's OWN
-Pool; make returns a new layer by default; control backdated documents; run an
-integrity check after Landed Cost or Repost.
+## Still open
+
+Two of the four §17.2 checks were not exercised: `PENDING_REPOST` (the test stack
+has no scheduler) and `NEGATIVE_STOCK_RISK`. Both read existing tables and do not
+depend on the queue mechanism, but neither has been demonstrated.
+
+Serial and Batch items keep their queue in `Serial and Batch Bundle` rather than
+in `stock_queue`. The preflight as proved does not cover them, and §21.2/§21.3
+route those items through exact selection anyway — but the gap should be closed
+before tracked items enter a GSF pool.
 
 ## Consequences
 
-- Until the spike lands, Phase 0's verdict of `GO WITH CONSTRAINTS` should be
-  read as covering the stock and accounting mechanics only. The control that
-  §35 names as the mitigation for its highest risk does not exist yet.
-- The preflight sits on the checkout hot path, so its cost is a latency budget
-  item (§34.2 tracks allocation and checkout latency).
-- §17.3's minimisation rules are cheaper than the preflight itself and reduce
-  how often it can fail. They should be implemented first, in Phase 2 with the
-  layer registry, not deferred to Phase 4 with the preflight.
+- Risk #1 in §35 now has a working mitigation rather than a planned one.
+- The preflight is two indexed reads and an in-memory replay, so it is cheap
+  enough to sit on the checkout hot path. §34.2 still tracks the latency.
+- §17.3's minimisation rules remain worth implementing early, in Phase 2 with
+  the layer registry, because they reduce how often the preflight has to refuse.
+- Gate 0k also established that a Material Issue row cannot span two layers —
+  the dimension's negative-stock check rejects it. §14.4 and §18.2 are therefore
+  enforced by the platform, not merely recommended, and the preparation service
+  must build one row per slice.
