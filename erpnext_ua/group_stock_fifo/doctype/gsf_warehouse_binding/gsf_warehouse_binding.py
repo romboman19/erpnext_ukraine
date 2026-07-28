@@ -45,12 +45,18 @@ class GSFWarehouseBinding(Document):
             frappe.throw(str(error), title=error.code)
 
     def _foreign_domain(self) -> str | None:
-        """The domain that already owns this warehouse, if it is not this row."""
-        other = frappe.db.get_value(
-            "GSF Warehouse Binding",
-            {"warehouse": self.warehouse, "enabled": 1, "name": ("!=", self.name or "")},
-            "manager_app",
-        )
+        """The domain that already owns this warehouse, if it is not this row.
+
+        `autoname` is `field:warehouse`, so a new row for an already-bound
+        warehouse arrives carrying the *existing* row's name. Excluding by name
+        unconditionally would therefore hide exactly the conflict we are looking
+        for, and the insert would fail later on the unique index with a generic
+        platform error instead of a §33 code.
+        """
+        filters = {"warehouse": self.warehouse, "enabled": 1}
+        if not self.is_new():
+            filters["name"] = ("!=", self.name)
+        other = frappe.db.get_value("GSF Warehouse Binding", filters, "manager_app")
         if other:
             return other
         if self.manager_app == "GSF" and _is_cc_warehouse(self.warehouse):
