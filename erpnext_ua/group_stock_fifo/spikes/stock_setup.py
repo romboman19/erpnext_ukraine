@@ -132,6 +132,46 @@ def issue_to_clearing(
     )
 
 
+def issue_layers_to_clearing(
+    frappe: Any,
+    *,
+    company: str,
+    warehouse: str,
+    item_code: str,
+    layer_quantities: list[tuple[str, float]],
+    posting_date: str,
+    posting_time: str,
+    label: str,
+    dimension_field: str,
+) -> str:
+    """One Material Issue with one row per layer.
+
+    A single row cannot span two layers: the dimension's negative-stock check
+    rejects it, which is how §14.4 and §18.2 end up enforced by the platform
+    rather than by convention.
+    """
+    clearing = ensure_clearing_account(frappe, company)
+    rows = [
+        {
+            "item_code": item_code,
+            "qty": qty,
+            "s_warehouse": warehouse,
+            "expense_account": clearing,
+            dimension_field: layer,
+        }
+        for layer, qty in layer_quantities
+    ]
+    return _submit_entry(
+        frappe,
+        company=company,
+        purpose="Material Issue",
+        label=label,
+        posting_date=posting_date,
+        posting_time=posting_time,
+        rows=rows,
+    )
+
+
 def sle_rows(frappe: Any, voucher_no: str) -> list[dict[str, Any]]:
     return frappe.db.sql(
         """
@@ -266,7 +306,8 @@ def _submit_entry(
     label: str,
     posting_date: str,
     posting_time: str,
-    row: dict[str, Any],
+    row: dict[str, Any] | None = None,
+    rows: list[dict[str, Any]] | None = None,
 ) -> str:
     doc = frappe.get_doc(
         {
@@ -278,7 +319,7 @@ def _submit_entry(
             "posting_date": posting_date,
             "posting_time": posting_time,
             "remarks": f"{SPIKE_MARKER} {label}",
-            "items": [row],
+            "items": rows if rows is not None else [row],
         }
     )
     doc.insert(ignore_permissions=True)

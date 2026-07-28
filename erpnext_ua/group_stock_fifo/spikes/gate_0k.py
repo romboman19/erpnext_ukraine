@@ -8,7 +8,10 @@ other two are unnecessary.
 Three runs:
 
 * A predicts the cost of an issue that spans two layers, then performs it and
-  compares the prediction against the actual ledger;
+  compares the prediction against the actual ledger. The issue needs one row per
+  layer — a single row spanning both is rejected by the dimension's
+  negative-stock check, which is how §14.4 and §18.2 turn out to be enforced by
+  the platform rather than by convention;
 * B injects stock with no layer on it and checks the preflight refuses before
   anything is issued;
 * C hands the preflight a planned value that does not match the queue and checks
@@ -29,7 +32,7 @@ from .fixtures import FOPS, ITEM_CODE, assert_scope
 from .preflight import check, read_queue
 from .stock_setup import (
     cancel_spike_entries,
-    issue_to_clearing,
+    issue_layers_to_clearing,
     purge_orphan_ledger_rows,
     receive_layer,
     sle_rows,
@@ -119,16 +122,16 @@ class _Gate0K:
         )
         after_prediction = read_queue(self.frappe, item_code=ITEM_CODE, warehouse=FOP.pool_warehouse)
 
-        issue = issue_to_clearing(
+        issue = issue_layers_to_clearing(
             self.frappe,
             company=FOP.company,
             warehouse=FOP.pool_warehouse,
             item_code=ITEM_CODE,
-            qty=MOVE_QTY,
+            layer_quantities=[(layers[0], OLD[0]), (layers[1], MOVE_QTY - OLD[0])],
             posting_date=self.date,
             posting_time="10:00:00",
             label="K-issue",
-            extra={DIMENSION_FIELD: layers[0]},
+            dimension_field=DIMENSION_FIELD,
         )
         actual = -sum(float(row["stock_value_difference"]) for row in sle_rows(self.frappe, issue))
 
