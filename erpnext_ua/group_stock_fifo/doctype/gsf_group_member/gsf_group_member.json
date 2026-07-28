@@ -1,0 +1,103 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "creation": "2026-07-28 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "enabled",
+  "can_source_stock",
+  "can_sell_stock",
+  "priority",
+  "intercompany_counterparty_code",
+  "column_break_accounts",
+  "default_due_from_stock_account",
+  "default_due_to_stock_account",
+  "activation_date",
+  "deactivation_date"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "can_source_stock",
+   "fieldtype": "Check",
+   "label": "Can Source Stock",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "can_sell_stock",
+   "fieldtype": "Check",
+   "label": "Can Sell Stock",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "priority",
+   "fieldtype": "Int",
+   "label": "Display Priority",
+   "default": "0",
+   "description": "UI ordering only. Using this to influence FIFO is forbidden (§9.4)."
+  },
+  {
+   "fieldname": "intercompany_counterparty_code",
+   "fieldtype": "Data",
+   "label": "Counterparty Code"
+  },
+  {
+   "fieldname": "column_break_accounts",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "default_due_from_stock_account",
+   "fieldtype": "Link",
+   "label": "Internal Stock Due From",
+   "options": "Account"
+  },
+  {
+   "fieldname": "default_due_to_stock_account",
+   "fieldtype": "Link",
+   "label": "Internal Stock Due To",
+   "options": "Account"
+  },
+  {
+   "fieldname": "activation_date",
+   "fieldtype": "Date",
+   "label": "Activation Date"
+  },
+  {
+   "fieldname": "deactivation_date",
+   "fieldtype": "Date",
+   "label": "Deactivation Date"
+  }
+ ],
+ "issingle": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Group Member",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

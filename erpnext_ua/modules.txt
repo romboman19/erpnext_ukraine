@@ -9,3 +9,4 @@ Consignment and Commission
 Ukrainian Integrations
 Ecommerce
 UA Setup
+Group Stock FIFO

@@ -63,6 +63,9 @@ after_install = [
 	"erpnext_ua.install.ensure_item_spec_setup",
 	"erpnext_ua.print_designer_setup.ensure_print_designer_formats",
 	"erpnext_ua.consignment_and_commission.setup.ownership_dimension.ensure_ownership_dimension",
+	# GSF setup runs after the commission domain on purpose: ADR-001 requires the
+	# order of domain provisioning to be fixed and explicit, not incidental.
+	"erpnext_ua.group_stock_fifo.setup.roles.ensure_roles",
 	"erpnext_ua.integrations.install.after_install",
 	"erpnext_ua.ua_setup.service.report_readiness",
 ]
@@ -84,6 +87,7 @@ after_migrate = [
 	"erpnext_ua.print_designer_setup.ensure_print_designer_formats",
 	"erpnext_ua.consignment_and_commission.setup.ownership_dimension.ensure_ownership_dimension",
 	"erpnext_ua.consignment_and_commission.setup.financial_backfill.backfill_financial_snapshots",
+	"erpnext_ua.group_stock_fifo.setup.roles.ensure_roles",
 	"erpnext_ua.integrations.migrations.after_migrate",
 ]
 

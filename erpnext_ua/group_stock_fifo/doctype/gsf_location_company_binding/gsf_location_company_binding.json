@@ -1,0 +1,200 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "creation": "2026-07-28 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company_group",
+  "physical_location",
+  "company",
+  "enabled",
+  "can_purchase",
+  "can_sell",
+  "section_warehouses",
+  "own_pool_warehouse",
+  "default_sale_stage_lane",
+  "section_accounts",
+  "stock_clearing_debit_account",
+  "stock_clearing_credit_account",
+  "cost_center",
+  "column_break_pos",
+  "default_pos_profile",
+  "default_prro_profile",
+  "base_currency_snapshot",
+  "activation_date",
+  "deactivation_date"
+ ],
+ "fields": [
+  {
+   "fieldname": "company_group",
+   "fieldtype": "Link",
+   "label": "Company Group",
+   "options": "GSF Company Group",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "physical_location",
+   "fieldtype": "Link",
+   "label": "Physical Location",
+   "options": "GSF Physical Location",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "can_purchase",
+   "fieldtype": "Check",
+   "label": "Can Purchase",
+   "default": "1"
+  },
+  {
+   "fieldname": "can_sell",
+   "fieldtype": "Check",
+   "label": "Can Sell",
+   "default": "1"
+  },
+  {
+   "fieldname": "section_warehouses",
+   "fieldtype": "Section Break",
+   "label": "Warehouses"
+  },
+  {
+   "fieldname": "own_pool_warehouse",
+   "fieldtype": "Link",
+   "label": "OWN Pool Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "default_sale_stage_lane",
+   "fieldtype": "Link",
+   "label": "Default Sale Stage Lane",
+   "options": "GSF Staging Lane"
+  },
+  {
+   "fieldname": "section_accounts",
+   "fieldtype": "Section Break",
+   "label": "Accounts"
+  },
+  {
+   "fieldname": "stock_clearing_debit_account",
+   "fieldtype": "Link",
+   "label": "Internal Stock Due From",
+   "options": "Account"
+  },
+  {
+   "fieldname": "stock_clearing_credit_account",
+   "fieldtype": "Link",
+   "label": "Internal Stock Due To",
+   "options": "Account"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
+   "fieldname": "column_break_pos",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "default_pos_profile",
+   "fieldtype": "Link",
+   "label": "Default POS Profile",
+   "options": "POS Profile"
+  },
+  {
+   "fieldname": "default_prro_profile",
+   "fieldtype": "Data",
+   "label": "Default PRRO Profile"
+  },
+  {
+   "fieldname": "base_currency_snapshot",
+   "fieldtype": "Link",
+   "label": "Base Currency Snapshot",
+   "options": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "activation_date",
+   "fieldtype": "Date",
+   "label": "Activation Date"
+  },
+  {
+   "fieldname": "deactivation_date",
+   "fieldtype": "Date",
+   "label": "Deactivation Date"
+  }
+ ],
+ "issingle": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-07-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Location Company Binding",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF Stock Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "hash"
+}

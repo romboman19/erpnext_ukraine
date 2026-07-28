@@ -57,6 +57,7 @@ jobs:
           wheel = glob.glob("dist/*.whl")[0]
           names = set(zipfile.ZipFile(wheel).namelist())
           required_suffixes = {
+              "doctype/gsf_warehouse_binding/gsf_warehouse_binding.json",
               "chart_of_accounts/ua_full_291.json",
               "chart_of_accounts/ua_simplified_186.json",
               "doctype/ua_off_balance_entry/ua_off_balance_entry.json",
