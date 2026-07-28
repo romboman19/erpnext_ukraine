@@ -20,8 +20,8 @@
 | ADR-006 | Stage lane isolation | [0006](adr/0006-stage-lane-isolation.md) | `Accepted` |
 | ADR-007 | Valuation queue preflight | [0007](adr/0007-valuation-queue-preflight.md) | **`Proposed`, без спайка** |
 | ADR-008 | Transaction boundary | [0008](adr/0008-transaction-boundary.md) | `Accepted` |
-| ADR-009 | Return FIFO policy | — | не написаний |
-| ADR-010 | Backdated/revaluation policy | — | не написаний |
+| ADR-009 | Return FIFO policy | [0009](adr/0009-return-fifo-policy.md) | `Accepted` |
+| ADR-010 | Backdated/revaluation policy | [0010](adr/0010-backdated-and-revaluation-policy.md) | `Accepted` |
 | ADR-011 | CC compatibility contract | — | скасований ревізією §2 |
 | ADR-012 | POS/PRRO saga | [0012](adr/0012-pos-prro-saga.md) | `Proposed` |
 

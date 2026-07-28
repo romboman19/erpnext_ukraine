@@ -123,16 +123,16 @@ bench --site postest.local execute erpnext_ua.group_stock_fifo.spikes.fixtures.b
 | [006](../adr/0006-stage-lane-isolation.md) | Stage lane isolation | `Accepted` |
 | [007](../adr/0007-valuation-queue-preflight.md) | Valuation queue preflight | `Accepted` (гейт 0k) |
 | [008](../adr/0008-transaction-boundary.md) | Transaction boundary | `Accepted` |
-| 009 | Return FIFO policy | не написаний |
-| 010 | Backdated/revaluation policy | не написаний |
+| [009](../adr/0009-return-fifo-policy.md) | Return FIFO policy | `Accepted` |
+| [010](../adr/0010-backdated-and-revaluation-policy.md) | Backdated/revaluation policy | `Accepted` |
 | 011 | CC compatibility contract | скасований ревізією |
 | [012](../adr/0012-pos-prro-saga.md) | POS/PRRO saga | `Proposed` |
 | [013](../adr/0013-one-allocator-two-adapters.md) | Один аллокатор, два адаптери | `Accepted`, поза §40 |
 | [014](../adr/0014-idempotency-and-stable-keys.md) | Ідемпотентність і стабільні ключі | `Accepted`, поза §40 |
 
 ADR-007 закритий гейтом 0k 2026-07-28 — ризик №1 у §35 має робочу мітигацію, а
-не заплановану. Незаписаними за §40 лишаються 009 (повернення) і 010
-(backdated/revaluation); 011 скасований ревізією.
+не заплановану. За §40 лишається незакритим лише 011, і той скасований ревізією як предмет —
+межі між доменами тепер описує [ADR-001](../adr/0001-stock-domain-ownership.md).
 
 Модель шарів витримала: вартість переноситься між ФОП точно, падіння відкочує
 все, шар простежується в книзі, наскрізний сценарій §37.1 дає рівно 6500.
