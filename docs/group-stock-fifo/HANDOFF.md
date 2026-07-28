@@ -1,0 +1,441 @@
+# GSF (Group Stock FIFO) — передача агенту, стан на 2026-07-28
+
+Цей документ існує для того, щоб інший агент (або ви за тиждень) міг увійти в
+роботу без повторного читання 30+ комітів історії. Він описує: що таке GSF і
+навіщо, де що лежить, що зроблено і доведено, що зроблено але не доведено, що
+не зроблено взагалі, і з чого продовжувати. Пишіть сюди самі, якщо після
+прочитання лишається питання, на яке довелося шукати відповідь деінде — це
+ознака, що документ застарів.
+
+---
+
+## 1. Що таке GSF і навіщо він
+
+**Бізнес-задача.** Один фізичний магазин (мережа HUNTER.rv, м. Рівне), товар
+фізично спільний, але з податкових причин продажі й закупівлі проводяться через
+кілька ФОП — кожен ФОП це окрема ERPNext `Company`. Потрібно: закуповувати
+товар будь-яким ФОПом, зберігати його фізично разом, а продавати — тим ФОПом,
+якому вигідно з податкової точки зору саме зараз (ліміт групи ЄП, наявність
+ПДВ тощо), і при цьому:
+
+- зберігати повний і точний складський та бухгалтерський облік у кожній Company
+  окремо (жодного паралельного облікового ядра);
+- вести **один глобальний FIFO** по фізичному товару незалежно від того, яка
+  Company його купила;
+- якщо продає ФОП B, а найстаріший товар належить ФОП A — автоматично
+  «перепризначити» цей товар ФОПу B без податкової фікції купівлі-продажу між
+  ФОП, без внутрішньої маржі, без впливу на P&L;
+- касир нічого цього не бачить і не обирає вручну.
+
+**Технічна назва:** `Group Stock FIFO` (GSF), модуль всередині вже існуючого
+застосунку `erpnext_ua` (НЕ окремий Frappe app — це свідоме рішення,
+консолідація, див. розділ 3).
+
+**Другий діючий домен на тому ж сайті:** `Consignment and Commission` (CC) —
+уже реалізований і випущений модуль комісійної/консигнаційної торгівлі в тому
+самому `erpnext_ua`. GSF має співіснувати з ним, не заважати йому і не
+використовувати його склади. Скрізь у документах ви побачите слово "CC" — це
+завжди про цей сусідній модуль.
+
+---
+
+## 2. Де що лежить (карта репозиторію)
+
+### 2.1. Два фізичні місця коду — і чому
+
+| Копія | Шлях | Роль |
+|---|---|---|
+| Робоча (ця) | `/root/my-claude-project/erpnext_ukraine` | тут я пишу код і документи |
+| Хостова | `/home/romboman19/erpnext_ua` | bind-mount у Docker-контейнер тестового сайту |
+
+Тестовий сайт (`postest.local`, стек `frappe-test`, `docker compose`)
+**виконує код з хостової копії**, не з робочої. Тому після кожної зміни:
+
+```bash
+# у робочій копії
+git add -A && git commit -m "..." && git push origin feat/gsf-phase-0
+
+# синхронізувати хостову копію
+cd /home/romboman19/erpnext_ua && git pull --ff-only
+```
+
+Обидві копії — це один і той самий git-репозиторій
+(`github.com/romboman19/erpnext_ukraine`), просто два робочих дерева на одну
+гілку. Немає жодного окремого репозиторію для CC чи для GSF — усе злито в один
+`erpnext_ukraine` за прямим рішенням власника (див. розділ 3).
+
+### 2.2. Гілка
+
+Уся робота — на гілці **`feat/gsf-phase-0`**, запушеній на GitHub. Гілка ще НЕ
+змержена в `main`. Це свідомо: робота не закінчена, і `main` мають чіпати
+тільки завершені, приймані шматки.
+
+### 2.3. Тестовий сайт
+
+```
+Стек:     frappe-test (docker compose), HTTP на 192.168.10.11:8081
+Сайт:     postest.local
+Версії:   Frappe 16.25.0, ERPNext 16.26.2, erpnext_ua 0.9.0
+Apps:     erpnext, erpnext_ua, flow, frappe, print_designer
+ВАЖЛИВО:  немає scheduler-контейнера — фонові задачі не виконуються
+          (це і плюс, і мінус: гейти детерміновані, але Repost Item
+          Valuation, наприклад, ніколи не запуститься сам)
+```
+
+Керування (доступ через `docker exec`):
+
+```bash
+docker exec frappe-test-backend-1 bench --site postest.local <команда>
+docker exec -i frappe-test-backend-1 bench --site postest.local mariadb <<'SQL' ... SQL
+docker exec -i frappe-test-backend-1 bench --site postest.local console <<'PY' ... PY
+```
+
+**Гейти виконуються прогонами** через `bench execute` з обов'язковим
+подвійним підтвердженням (`confirm_site` + власний `confirm_write`-токен на
+кожен гейт) — це запобіжник, щоб такий скрипт не запустився випадково на
+production. Дивись `erpnext_ua/group_stock_fifo/spikes/*.py`.
+
+### 2.4. Документація — усе під `docs/group-stock-fifo/`
+
+```
+docs/group-stock-fifo/
+├── HANDOFF.md                    ← цей файл
+├── README.md                     ← ревізія базового ТЗ під "один застосунок"
+├── spec-v1.0.md                  ← БАЗОВЕ ТЗ, 2422 рядки, §0–§47, дослівно
+├── spec-reconciliation.md        ← звід розбіжностей ТЗ vs ревізія vs докази
+├── adr/                          ← 12 прийнятих ADR (0001–0014, без 0011)
+├── spikes/
+│   ├── phase-0.md                ← протокол Phase 0, зведена таблиця гейтів
+│   └── evidence/                 ← один .md на кожен гейт із фактичними даними
+└── release/
+    └── phase-1.md                ← звіт по Phase 1 проти §41/§43
+```
+
+**Якщо читаєте тільки один файл — читайте `spec-v1.0.md`.** Це ЄДИНЕ джерело
+істини щодо моделі даних, інваріантів і плану фаз. Все інше — коментарі й
+докази поверх нього.
+
+**Другий за пріоритетом — `spikes/phase-0.md`.** Там зведена таблиця: який
+гейт що довів, з якою evidence, і посилання на ADR, яке з цього випливло.
+
+### 2.5. Код — усе під `erpnext_ua/group_stock_fifo/`
+
+```
+erpnext_ua/group_stock_fifo/
+├── __init__.py
+├── api.py                        ← whitelisted API (поки одна ручка: readiness)
+├── doctype/                      ← 7 production DocType (Phase 1, готово)
+│   ├── gsf_settings/
+│   ├── gsf_company_group/
+│   ├── gsf_group_member/         (child table)
+│   ├── gsf_physical_location/
+│   ├── gsf_location_company_binding/
+│   ├── gsf_warehouse_binding/
+│   └── gsf_staging_lane/
+├── services/
+│   ├── domain.py                 ← ЧИСТІ функції-правила, без Frappe (§28.3)
+│   └── readiness.py               ← §30 readiness, використовує domain.py
+├── setup/
+│   └── roles.py                  ← ідемпотентний provisioning 6 ролей
+├── tests/
+│   ├── test_foundation_domain.py  ← 27 тестів на domain.py
+│   └── test_shared_allocator_spike.py
+└── spikes/                        ← КОД ГЕЙТІВ. Це не production, це докази.
+    ├── fixtures.py                 (3 ФОП HUNTER.rv — будівник тестових даних)
+    ├── dimension.py, stock_setup.py, preflight.py, shared_allocator.py (утиліти)
+    └── gate_0b.py … gate_0k.py     (виконувані докази, див. розділ 4)
+```
+
+**Критична відмінність:** `spikes/` — це не заготовки production-коду, це
+одноразові виконувані докази з жорсткими guard-ами (`ALLOWED_SITES`,
+`confirm_write`-токени), які не мають потрапити в production-шлях. Коли
+писатимете Phase 2+, дещо з логіки `spikes/dimension.py` і `spikes/preflight.py`
+доведеться **переписати načisto** як production-сервіс — не імпортувати спайк
+напряму.
+
+---
+
+## 3. Ключове архітектурне рішення, яке треба знати одразу
+
+Базове ТЗ (`spec-v1.0.md`) написане під **окремий Frappe app**
+`erpnext_group_stock_fifo`. Це рішення **скасоване**. GSF — це модуль
+всередині вже існуючого `erpnext_ua`, поруч із CC. Причина: власник прямо
+попросив злити все в один репозиторій `erpnext_ukraine`, і ревізія (README.md)
+це задокументувала ще до того, як спливло само ТЗ.
+
+Наслідок для читання ТЗ: скрізь, де в `spec-v1.0.md` написано
+`erpnext_group_stock_fifo/...`, читайте `erpnext_ua/group_stock_fifo/...`.
+Скрізь, де написано "окремий hooks.py" — це один спільний `erpnext_ua/hooks.py`.
+
+---
+
+## 4. Що ЗРОБЛЕНО і ДОВЕДЕНО (Phase 0 — спайки)
+
+Phase 0 за §41 ТЗ — це прототипи, які мають довести найризикованіші
+припущення ДО написання production DocType-моделі. Вона закрита вердиктом:
+
+> **`GO WITH CONSTRAINTS`**, з 6 явними обмеженнями, зафіксованими в ADR.
+
+Дев'ять гейтів пройдено `PASS` (0a, 0b, 0c, 0d, 0e, 0f, 0g, 0j, 0k). Два
+частково (0h — схема так, форми не перевірялись; 0i — сервісний рівень так,
+хуки ще не існують — нема що перевіряти).
+
+### Таблиця гейтів і що кожен реально довів
+
+| Гейт | Питання | Результат | Наслідок |
+|---|---|---|---|
+| **0a** | Material Issue на clearing-рахунок не чіпає P&L | `PASS` (закрито разом з 0b) | — |
+| **0b** | Вартість source issue = вартості destination receipt, точно | `PASS`, навіть при "забрудненому" цільовому складі і при дробовому rate (1000/3) | ADR-003 |
+| **0c** | Продаж зі Sale Stage списує рівно підготовлену вартість | `PASS` для чистого складу, **FAIL-виявлення** для забрудненого: 2500 замість 2000 | **Найважливіший гейт.** Довів: Inventory Dimension НЕ керує тим, який шар спишеться — вона лише мітка постфактум. FIFO черга ERPNext працює на рівні `item+warehouse`, ігноруючи мітку шару в рядку продажу |
+| **0d** | Вимір шару доїжджає до SLE на обох ногах перепризначення + продажу | `PASS` | Знахідка: вимір на `Stock Entry Detail` — це ДВА поля (`gsf_x` для вихідної ноги, `to_gsf_x` для вхідної), а не одне |
+| **0e** | Rollback усього ланцюжка (issue+receipt+sale) в одній транзакції | `PASS`, savepoint rollback знімає SLE+GL+документи разом | Знахідка: імена документів ERPNext НЕ стабільні (revert_series_if_last повертає лічильник назад при видаленні) → ключі ідемпотентності не можуть спиратись на імена |
+| **0f** | Порядок ERPNext при однаковому posting datetime | `PASS`: детермінований, консьюмиться шар, **поданий першим** | Наслідок: документи перепризначення МАЮТЬ подаватись у порядку, який вирішив аллокатор — порядок подачі і є tie-breaker |
+| **0g** | Чи потрібен GSF власний FIFO-аллокатор, окремий від CC | `PASS`: НІ. `allocate_global_fifo` вже company-agnostic, GSF — просто другий адаптер кандидатів | ADR-013 |
+| **0j** | Наскрізний сценарій §37.1: 3 Company, COGS=6500 | `PASS`, точний збіг з тестовим сценарієм ТЗ | Підтвердив увесь ланцюжок разом |
+| **0k** | Як передбачити, що спише ERPNext, ДО фактичного списання (§17 preflight) | `PASS`: читати `Stock Ledger Entry.stock_queue` (JSON) і прогнати через `erpnext.stock.valuation.FIFOValuation` — той самий клас, яким ERPNext сам користується. Жодного запису, жодного savepoint | **Закрив ADR-007**, найбільшу прогалину. Побічна знахідка: один рядок Material Issue НЕ може охопити два шари — вимір відхиляє за негативним залишком, тобто §14.4/§18.2 (окремий рядок на shar) — вимога платформи, не рекомендація |
+
+### Три найважливіші висновки з усієї Phase 0 (якщо запам'ятати тільки це)
+
+1. **Inventory Dimension — це аудит-мітка, не механізм оцінки.** Собівартість
+   завжди читається з фактичного `Stock Ledger Entry` після проведення
+   документа, ніколи з власного реєстру шарів GSF. Це не стиль — інакше буде
+   розбіжність з бухгалтерією.
+
+2. **Sale Stage має вміщувати РІВНО один чек одночасно.** Не "один склад на
+   компанію", не "один склад на касу" — рівно на один активний checkout. Тому
+   ADR-006 вимагає пул іменованих `GSF Staging Lane` з lock-механізмом, а не
+   динамічне створення складу на кожен чек.
+
+3. **Preflight перед кожним issue — не опція.** Перед тим, як списати товар з
+   пулу конкретного ФОПа, треба прочитати `stock_queue` цього складу і
+   передбачити, що спише ERPNext, порівняти з планом аллокатора, і заблокувати
+   операцію при розбіжності. Механізм готовий і доведений (гейт 0k,
+   `spikes/preflight.py`), але ще НЕ є частиною production-коду.
+
+---
+
+## 5. ADR — усі прийняті рішення (14 штук, без 0011)
+
+Нумерація підігнана під §40 базового ТЗ (це саме по собі було окремою роботою —
+довелось переносити файли і виправляти всі перехресні посилання).
+
+| № | Назва | Статус | Суть в одному реченні |
+|---|---|---|---|
+| [0001](adr/0001-stock-domain-ownership.md) | Stock-domain ownership | Accepted | `GSF Warehouse Binding` — єдиний реєстр, хто володіє складом; один склад = один домен |
+| [0002](adr/0002-inventory-dimension-coexistence.md) | Inventory Dimension coexistence | Accepted | Вимір не керує оцінкою (гейт 0c); власний `after_migrate`-патч прибирає GSF-поле з чужих (CC) DocType після реєстрації |
+| [0003](adr/0003-exact-value-intercompany-reallocation.md) | Exact-value reallocation | Accepted | Вартість перенесення читається з `stock_value_difference` факту, ніколи не рахується наперед |
+| [0004](adr/0004-posting-order.md) | Posting order | Accepted | Документи подаються в порядку, який вирішив аллокатор (не потрібні штучні зсуви часу) |
+| [0005](adr/0005-balance-sheet-clearing-accounting.md) | Balance-sheet clearing | Accepted | Два рахунки на компанію (`Due From`/`Due To`) + dimension `Counterparty Accounting Company`, накопичена позиція — очікувана, елімінується на груповій звітності |
+| [0006](adr/0006-stage-lane-isolation.md) | Stage lane isolation | Accepted | Пул `GSF Staging Lane` з lock/zero-check, НЕ склад-на-чек (це рішення ЗМІНИЛОСЬ під час роботи — раніше було "склад на чек", тепер пул lanes за §9.8 ТЗ) |
+| [0007](adr/0007-valuation-queue-preflight.md) | Valuation queue preflight | Accepted (гейт 0k) | `FIFOValuation` replay на `stock_queue`, без запису |
+| [0008](adr/0008-transaction-boundary.md) | Transaction boundary | Accepted | Rollback через savepoint (гейт 0e), а не ручна компенсація до commit |
+| [0009](adr/0009-return-fifo-policy.md) | Return FIFO policy | Accepted | Повернення = новий шар з датою повернення, компанія повернення = компанія продажу |
+| [0010](adr/0010-backdated-and-revaluation-policy.md) | Backdated/revaluation | Accepted | MVP блокує заднім числом, повний revaluation engine — поза MVP |
+| — | CC compatibility contract | Скасовано ревізією | Нема сенсу — один застосунок, немає версійного контракту між репо |
+| [0012](adr/0012-pos-prro-saga.md) | POS/PRRO saga | Accepted | `GSF Checkout` — це МАРШРУТ під існуючим `POS Order`, не окрема сага з власним payment/fiscal state |
+| [0013](adr/0013-one-allocator-two-adapters.md) | Один аллокатор, два адаптери | Accepted | GSF не пише свій FIFO-аллокатор — використовує спільний з CC |
+| [0014](adr/0014-idempotency-and-stable-keys.md) | Idempotency and stable keys | Accepted | Ключі ідемпотентності — власні (не імена ERPNext-документів) |
+
+---
+
+## 6. Що ЗРОБЛЕНО, але це ще НЕ повна логіка (Phase 1 — foundation)
+
+Phase 1 за §41 закрита в обсязі "foundation", НЕ більше. Детальний звіт —
+`docs/group-stock-fifo/release/phase-1.md`. Коротко:
+
+**Готово:**
+- 7 production DocType (список у розділі 2.5), усі змігровані на
+  `postest.local` і перевірені.
+- `GSF Settings.enabled` за замовчуванням `0`, і контролер **відмовляється**
+  його увімкнути, поки `readiness()` повертає хоч один blocking check —
+  перевірено живцем на сайті.
+- `services/domain.py` — 180 рядків чистих функцій (без `frappe.*`
+  імпортів) з правилами: ексклюзивність warehouse binding, валідація групи
+  (одна валюта, без дублів компаній), lock-перевірка lane (zero-balance
+  перед locking), `ReadinessReport`.
+- `services/readiness.py` — складає §30.2 blocking checks + §30.3 warnings з
+  живих таблиць.
+- `setup/roles.py` — створює 6 ролей ідемпотентно, викликається і з
+  `after_install`, і з `after_migrate` (після CC-хука, порядок навмисний, це
+  ADR-001).
+- 27 юніт-тестів на `domain.py`, усі проходять.
+- **Знайдений і виправлений живий баг:** перевірка "чужий домен уже займає
+  склад" не спрацьовувала через `autoname = field:warehouse` — новий рядок для
+  вже зайнятого складу приходить з іменем **наявного** рядка, і фільтр
+  `name != self.name` ховав саме той конфлікт, який мав ловити. Юніт-тести
+  цього не бачили (вони працюють з чистими даними, не знають про autoname).
+  Знайдено тільки прогоном на живому сайті. **Урок: контролери DocType
+  обов'язково перевіряти на сайті, не лише юніт-тестами домену.**
+
+**Свідомо НЕ зроблено в Phase 1 (і чому):**
+- **Warehouse provisioning** (сервіс, що САМ створює технічні склади за §7.5) —
+  відкладено, бо без CC discovery він міг би створити склад поверх уже
+  зайнятого CC-складом.
+- **CC discovery** (§8.3, автовиявлення `CC Location` і реєстрація їх як
+  `DISCOVERED_EXTERNAL`) — відкладено, бо на тестовому сайті зараз **немає
+  жодного `CC Location`**, реалізація без цього була б без доказу.
+- **Workspace/UI** — не є передумовою Phase 2.
+
+---
+
+## 7. Що НЕ ЗРОБЛЕНО ВЗАГАЛІ — залишок за §41
+
+Це найважливіший розділ для того, хто продовжує. Порядок — як у §41 ТЗ.
+
+### Phase 2 — Layer registry (НАСТУПНИЙ КРОК)
+- `GSF Stock Layer` (§9.9) — production DocType, незмінна ідентичність
+  партії. **Увага:** не можна просто скопіювати `spikes/dimension.py`
+  (`GSF Spike Layer`) — це був навмисно тимчасовий носій з ім'ям, яке НЕ мало
+  збігатися з production-ім'ям, щоб уникнути колізії в базі під час гейтів.
+  Production DocType піде під іменем `GSF Stock Layer` (як у ТЗ).
+- `GSF Layer Balance` (§9.10), `GSF Layer Movement` (§9.11).
+- Production Inventory Dimension `gsf_stock_layer` — з тим самим
+  `after_migrate`-патчем прибирання чужих полів, що описаний в ADR-002 (код
+  патча ще не написаний, лише доведена сама техніка в гейті 0d).
+- Хуки приймання (§11): `Purchase Receipt`, `Purchase Invoice`,
+  `Stock Entry Material Receipt` → створення шару, guard на
+  Company/Warehouse/Location binding.
+- `GSF Opening Stock Import` (§38.2) — можна відкласти до реального запуску.
+- **§17.3 мінімізаційні правила теж сюди** (не в Phase 4 з preflight-ом) —
+  дешевше і зменшує частоту, коли preflight взагалі спрацьовує.
+
+### Phase 3 — Global FIFO reservation
+- `GSF Allocation` / `GSF Allocation Slice` (§9.12–9.13).
+- Детермінований аллокатор — ВЖЕ ІСНУЄ як `allocate_global_fifo` у CC-модулі
+  (`consignment_and_commission/services/allocation.py`), GSF просто пише
+  ДРУГИЙ адаптер кандидатів (ADR-013). Основна робота тут — адаптер +
+  reservation/lock/TTL/idempotency обвʼязка.
+- Lock order за §13.2 (шість рівнів).
+- `POST /allocation/reserve`, `/allocation/release`, `/allocation/preview` API.
+
+### Phase 4 — Stock reallocation
+- Реалізація самого перепризначення: source Material Issue → читання
+  фактичного SLE → destination Material Receipt на цю вартість (техніка
+  доведена в гейтах 0b/0k, коду виробничого рівня нема).
+- **Тут же виробничий preflight** — переписати `spikes/preflight.py` в
+  `services/preflight.py`, підключити до Material Issue hook.
+- Same-company transfer (§14.2) окремо від cross-company (§14.3) — гейт 0j
+  показав, що спайк наразі веде ОБИДВА через clearing-рахунок для простоти;
+  production має розділити (same-company = звичайний Material Transfer, без
+  clearing).
+
+### Phase 5 — Managed sale
+- Sales Invoice builder з множинними рядками (один на шар/зріз, §18.2) —
+  ТЕХНІЧНО ДОВЕДЕНО, що рядок не може охопити два шари (гейт 0k), сам builder
+  не написаний.
+- `GSF Checkout` як маршрут під `POS Order` (ADR-012) — саги, стани §23.1,
+  компенсація.
+
+### Phase 6 — POS/PRRO
+- Інтеграція з фіскалізацією. `POS Order` вже існує в `erpnext_ua` (не GSF), і
+  ADR-012 каже, що фіскалізацію ІНІЦІЮЄ `POS Order`, GSF туди не лізе.
+
+### Phase 7 — Returns and inventory count
+- ADR-009 написаний, коду немає: новий шар при поверненні, quarantine для
+  Serial/Batch.
+- `GSF Physical Stock Count` (§20.3).
+
+### Phase 8 — Hardening
+- Load tests, deadlock tests, failure injection на РЕАЛЬНОМУ scheduler-стеку
+  (поточний тестовий стек `frappe-test` **не має scheduler-контейнера** —
+  вибухне як тільки з'явиться будь-яка scheduled job).
+- 17 runbooks за §45 — **жодного не написано**.
+- Production acceptance — це операція власника, агент її не виконує.
+
+### Взагалі не почато, не в жодній фазі явно
+- Concurrency-тест на реальне double-booking (§37.7) — CC-модуль має схожий
+  тест, GSF ще ні.
+- CC compatibility suite (§37.24–37.29) — жодного інтеграційного тесту
+  GSF+CC разом.
+- Financial Integrity report (§31.6, §37.23).
+
+---
+
+## 8. П'ять пасток, у які я вже вступив — щоб ви не вступали повторно
+
+1. **`bench migrate` при першому підключенні нового модуля треба ДВІЧІ.**
+   Перший прохід створює Module Def, другий синкає DocType. Якщо після
+   першого migrate DocType не з'явились — це не помилка, просто мігруйте ще
+   раз.
+
+2. **`autoname = field:X` ламає наївні "виключити поточний рядок" перевірки.**
+   Новий (ще не збережений) документ з `autoname` на дублікатне значення
+   отримує ІМ'Я НАЯВНОГО рядка ще до insert. Фільтр `name != self.name` в
+   такому разі виключає саме той конфліктний рядок, який мали знайти.
+   Правильно: перевіряти `if not self.is_new(): filters["name"] = ("!=", self.name)`.
+
+3. **Inventory Dimension на `Stock Entry Detail` — це ДВА поля**, не одне:
+   `gsf_x` для вихідної ноги (`s_warehouse`), `to_gsf_x` для вхідної
+   (`t_warehouse`). Переплутаєте — вимір мовчки не потрапить у книгу, і впаде
+   НАСТУПНИЙ (не цей) документ з незрозумілою помилкою про негативний
+   залишок.
+
+4. **`apply_to_all_doctypes=1` засіває поле на ВСІ DocType, що торкаються
+   складу — включно з чужим доменом (CC).** Явного способу обмежити список
+   кількох конкретних DocType в ERPNext НЕМАЄ (`document_type` — одиничний
+   Link, перевірено експериментально). Рішення (ADR-002): лишити
+   `apply_to_all_doctypes=1`, а власним `after_migrate`-патчем видаляти
+   custom fields з чужих DocType одразу після реєстрації.
+
+5. **Скасовані рядки Stock Ledger Entry переживають видалення батьківського
+   документа** (лишаються з `is_cancelled=1`), а `delete_doc` найновішого
+   документа ще й ВІДКОЧУЄ naming series — тому наступний прогін отримує ТІ Ж
+   САМІ імена документів, і перевірка "чи вижив цей ваучер" за іменем дає
+   хибний результат. Порівнюйте за МНОЖИНОЮ живих рядків, не за іменами
+   (див. `gate_0e.py`).
+
+---
+
+## 9. Як перевіряти будь-яку зміну (мінімальний ритуал)
+
+```bash
+# у робочій копії, після кожної зміни:
+cd /root/my-claude-project/erpnext_ukraine
+python3 -m ruff check
+python3 -m compileall -q erpnext_ua
+python3 -m pytest -q erpnext_ua/consignment_and_commission/tests erpnext_ua/group_stock_fifo/tests
+python3 tools/check_hooks.py
+find erpnext_ua -name '*.json' -print0 | xargs -0 -n1 jq -e . >/dev/null && echo "JSON OK"
+
+# коміт + push
+git add -A && git commit -m "..." && git push origin feat/gsf-phase-0
+
+# синхронізація хостової копії (сайт бачить ТІЛЬКИ її)
+cd /home/romboman19/erpnext_ua && git pull --ff-only
+
+# якщо змінювались DocType/hooks — мігрувати (ДВІЧІ якщо новий модуль)
+docker exec frappe-test-backend-1 bench --site postest.local migrate
+```
+
+Для гейтів (`spikes/gate_*.py`) — команда прогону написана в докстрінгу
+кожного файлу і продубльована у відповідному evidence-файлі.
+
+---
+
+## 10. Рекомендований наступний крок
+
+**Почати Phase 2 (layer registry)**, у такому порядку:
+
+1. `GSF Stock Layer` DocType (§9.9) — production-версія, за зразком уже
+   написаних Phase 1 DocType (`erpnext_ua/group_stock_fifo/doctype/`), не за
+   зразком spike-носія.
+2. Production Inventory Dimension + `after_migrate`-патч прибирання чужих
+   полів (ADR-002) — це перший production-код, що торкається схеми складу,
+   тож перевіряти на сайті обов'язково, юніт-тестів недостатньо (див. пастку
+   №2 і №4).
+3. `GSF Layer Balance`, `GSF Layer Movement`.
+4. Хуки приймання (§11) — і одразу §17.3 мінімізаційні правила, поки дешево.
+
+Перед тим, як писати warehouse provisioning і CC discovery (відкладені з
+Phase 1) — треба фікстуру з реальним `CC Location` на тестовому сайті, інакше
+discovery буде написаний без доказу.
+
+---
+
+## 11. Одна річ, яку я НЕ можу зробити замість вас
+
+§43 Definition of Done закінчується "production acceptance виконаний на
+staging-копії реальних даних". Це операція власника бізнесу — потрібні
+реальні дані, реальне рішення про запуск, реальна відповідальність за
+наслідки. Я довожу логіку гейтами і тестами; прийняття в продакшн — ваше
+рішення, не моє.
