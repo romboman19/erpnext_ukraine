@@ -109,7 +109,8 @@ docs/group-stock-fifo/
 │   └── evidence/                 ← один .md на кожен гейт із фактичними даними
 └── release/
     ├── phase-1.md                ← звіт по Phase 1 проти §41/§43
-    └── phase-2.md                ← звіт по Phase 2, з таблицями живих прогонів
+    ├── phase-2.md                ← звіт по Phase 2, з таблицями живих прогонів
+    └── phase-3.md                ← звіт по Phase 3, включно з §37.7 гонкою
 ```
 
 **Якщо читаєте тільки один файл — читайте `spec-v1.0.md`.** Це ЄДИНЕ джерело
@@ -126,7 +127,7 @@ erpnext_ua/group_stock_fifo/
 ├── __init__.py
 ├── api.py                        ← whitelisted API (поки одна ручка: readiness)
 ├── receipts.py                   ← doc_event-хуки §11 і §17.3 (Phase 2)
-├── doctype/                      ← 10 production DocType
+├── doctype/                      ← 13 production DocType
 │   ├── gsf_settings/             ┐
 │   ├── gsf_company_group/        │
 │   ├── gsf_group_member/         │ Phase 1 (child table)
@@ -136,18 +137,29 @@ erpnext_ua/group_stock_fifo/
 │   ├── gsf_staging_lane/         ┘
 │   ├── gsf_stock_layer/          ┐
 │   ├── gsf_layer_balance/        │ Phase 2
-│   └── gsf_layer_movement/       ┘
+│   ├── gsf_layer_movement/       ┘
+│   ├── gsf_allocation/           ┐
+│   ├── gsf_allocation_slice/     │ Phase 3 (slice — child table)
+│   └── gsf_scope_lock/           ┘
 ├── services/
 │   ├── domain.py                 ← ЧИСТІ функції-правила, без Frappe (§28.3)
 │   ├── readiness.py              ← §30 readiness, використовує domain.py
-│   └── layers.py                 ← write-path реєстру шарів (Phase 2)
+│   ├── layers.py                 ← write-path реєстру шарів (Phase 2)
+│   ├── reservation.py            ← ЧИСТІ правила §13.4/§9.12 (Phase 3)
+│   ├── candidates.py             ← §12.2 адаптер кандидатів (Phase 3)
+│   └── allocations.py            ← write-path резервування, §13.1–§13.3
 ├── setup/
 │   ├── roles.py                  ← ідемпотентний provisioning 6 ролей
 │   └── layer_dimension.py        ← вимір + патч ADR-002 + індекси
-├── tests/
-│   ├── test_foundation_domain.py  ← 27 тестів на domain.py
-│   ├── test_layer_domain.py       ← 32 тести на правила Phase 2
+├── tests/                         ← юніт-тести домену, без сайту
+│   ├── test_foundation_domain.py  ← 27 тестів
+│   ├── test_layer_domain.py       ← 32 тести (Phase 2)
+│   ├── test_reservation_domain.py ← 25 тестів (Phase 3)
 │   └── test_shared_allocator_spike.py
+├── integration_tests/             ← прогони НА САЙТІ, з confirm-токенами
+│   ├── phase_3_fixture.py         ← build/teardown фікстури §37.1
+│   ├── phase_3_checks.py          ← функціональний прогін Phase 3
+│   └── phase_3_race.py            ← ОДИН racer; запускати ДВА процеси (§37.7)
 └── spikes/                        ← КОД ГЕЙТІВ. Це не production, це докази.
     ├── fixtures.py                 (3 ФОП HUNTER.rv — будівник тестових даних)
     ├── dimension.py, stock_setup.py, preflight.py, shared_allocator.py (утиліти)
@@ -329,6 +341,35 @@ Phase 1 за §41 закрита в обсязі "foundation", НЕ більше
 
 ---
 
+## 6b. Що ЗРОБЛЕНО в Phase 3 — global FIFO reservation
+
+Детальний звіт — `docs/group-stock-fifo/release/phase-3.md`. Коротко:
+
+**Готово:** адаптер кандидатів §12.2 поверх спільного аллокатора,
+`GSF Allocation` / `GSF Allocation Slice` / `GSF Scope Lock`, порядок локів
+§13.2, TTL, ідемпотентність §13.4, чотири ручки API. У спільному коді змінено
+рівно один рядок — `GSF_LAYER -> OWN`, саме той, що передбачив гейт 0g.
+
+**Три речі, які варто знати про цей код:**
+1. **Кількість — з книги, резерв — з рядка балансу.** Несиметрично навмисно:
+   `actual_qty_cache` має право відставати (§9.10), тож доступне береться
+   агрегатом SLE; резерв у книзі не представлений взагалі, тож ним володіє
+   `reserved_qty_cache`, і кожен інкремент — умовний `UPDATE`, захищений щойно
+   прочитаним балансом книги під row lock.
+2. **Порядок кандидатів з адаптера — частина контракту.** Спільний аллокатор
+   сортує за ключем, який є ПРЕФІКСОМ §12.3; сортування стабільне, тож адаптер
+   повертає рядки вже відсортованими за повним ключем, і саме це дає хвостовий
+   tie-break за company/warehouse. Зламати можна тихо.
+3. **Serial-шари відхиляються (`SERIAL_AMBIGUOUS`), а не апроксимуються** —
+   поштучної правди з книги адаптер не читає.
+
+**Доведено живцем (§37.1 і §37.7):** продавець, який володіє 5 із 10 одиниць,
+все одно отримує зрізи 2+3+1 від найстарішого власника; сума 6 500 збіглася з
+ТЗ. Два процеси на двох з'єднаннях, які одночасно беруть увесь пул: рівно один
+виграє, книга 10 — резерв 10, переможець чергується між прогонами.
+
+---
+
 ## 7. Що НЕ ЗРОБЛЕНО ВЗАГАЛІ — залишок за §41
 
 Це найважливіший розділ для того, хто продовжує. Порядок — як у §41 ТЗ.
@@ -338,16 +379,16 @@ Phase 1 за §41 закрита в обсязі "foundation", НЕ більше
 - Integrity report (§31.6) — потребує стека зі scheduler.
 - Фікстура трекінгового товару + прогін приймання на Batch і на Serial.
 
-### Phase 3 — Global FIFO reservation (НАСТУПНИЙ КРОК)
-- `GSF Allocation` / `GSF Allocation Slice` (§9.12–9.13).
-- Детермінований аллокатор — ВЖЕ ІСНУЄ як `allocate_global_fifo` у CC-модулі
-  (`consignment_and_commission/services/allocation.py`), GSF просто пише
-  ДРУГИЙ адаптер кандидатів (ADR-013). Основна робота тут — адаптер +
-  reservation/lock/TTL/idempotency обвʼязка.
-- Lock order за §13.2 (шість рівнів).
-- `POST /allocation/reserve`, `/allocation/release`, `/allocation/preview` API.
+### Phase 3 — залишок (не блокує Phase 4)
+- **Serial allocation** — наразі fail-closed (`SERIAL_AMBIGUOUS`). Потрібна
+  поштучна правда з книги про те, які серійники шару ще на складі, і фікстура
+  трекінгового товару.
+- `expire_due_allocations()` написана, але **свідомо не підключена** до
+  `scheduler_events` — див. §8, пастка №7.
+- Item policy (§12.2) — DocType політики товару в моделі §9 немає; запит несе
+  `item_policy` і зберігає снапшот, правил поверх нього ще нема.
 
-### Phase 4 — Stock reallocation
+### Phase 4 — Stock reallocation (НАСТУПНИЙ КРОК)
 - Реалізація самого перепризначення: source Material Issue → читання
   фактичного SLE → destination Material Receipt на цю вартість (техніка
   доведена в гейтах 0b/0k, коду виробничого рівня нема).
@@ -390,7 +431,7 @@ Phase 1 за §41 закрита в обсязі "foundation", НЕ більше
 
 ---
 
-## 8. Шість пасток, у які я вже вступив — щоб ви не вступали повторно
+## 8. Вісім пасток, у які я вже вступив — щоб ви не вступали повторно
 
 1. **`bench migrate` при першому підключенні нового модуля треба ДВІЧІ.**
    Перший прохід створює Module Def, другий синкає DocType. Якщо після
@@ -433,6 +474,20 @@ Phase 1 за §41 закрита в обсязі "foundation", НЕ більше
    `ua_supplier_document_file`. Будь-яка тестова фікстура з приходом має їх
    заповнювати, інакше падає ще до GSF-хуків.
 
+7. **Резерв позиції — ОДНЕ число, спільне для всіх allocation, які її
+   тримають.** Тому будь-яка операція, що зменшує `reserved_qty_cache`, мусить
+   бути справді one-shot: повторний виклик віддає в пул одиниці, які ще тримає
+   інша allocation. `validate_allocation_transition` дозволяє статусу лишитися
+   на місці (це потрібно контролеру), тож захист має бути в сервісі — саме на
+   цьому Phase 3 і спіймали живий баг. Правило: перехід у термінальний статус
+   перевіряти на «вже там», перш ніж виконувати побічний ефект.
+
+8. **Не підключайте scheduled job, поки немає стека зі scheduler.**
+   `frappe-test` не має scheduler-контейнера, тож задача, зареєстрована в
+   `scheduler_events`, ніколи не виконається в тесті й одразу виконається в
+   проді. `expire_due_allocations()` навмисно лишена як звичайна функція; на
+   стеку `frappe-uat` scheduler є — саме там її і треба вмикати (Phase 8).
+
 ---
 
 ## 9. Як перевіряти будь-яку зміну (мінімальний ритуал)
@@ -456,32 +511,47 @@ cd /home/romboman19/erpnext_ua && git pull --ff-only
 docker exec frappe-test-backend-1 bench --site postest.local migrate
 ```
 
-Для гейтів (`spikes/gate_*.py`) — команда прогону написана в докстрінгу
-кожного файлу і продубльована у відповідному evidence-файлі.
+Для гейтів (`spikes/gate_*.py`) і для прогонів на сайті
+(`integration_tests/phase_*.py`) — команда прогону написана в докстрінгу
+кожного файлу. Прогони Phase 3 **комітять** дані, тому teardown обов'язковий:
+
+```bash
+docker exec frappe-test-backend-1 bench --site postest.local execute \
+  erpnext_ua.group_stock_fifo.integration_tests.phase_3_fixture.teardown \
+  --kwargs '{"confirm_write": "DROP_GSF_PHASE_3"}'
+```
 
 ---
 
 ## 10. Рекомендований наступний крок
 
-**Почати Phase 3 (global FIFO reservation)**, у такому порядку:
+**Почати Phase 4 (stock reallocation)**, у такому порядку:
 
-1. Адаптер кандидатів поверх `allocate_global_fifo` з CC-модуля (ADR-013).
-   Джерело кандидатів тепер існує: `GSF Layer Balance` дає позиції, а
-   `GSF Stock Layer.original_received_datetime` — глобальний FIFO-порядок, і
-   під це вже є індекс `gsf_layer_fifo`. Свій аллокатор НЕ писати.
-2. `GSF Allocation` / `GSF Allocation Slice` (§9.12–9.13) з `idempotency_key`
-   як unique — так само, як зроблено для `GSF Layer Movement`.
-3. Lock order §13.2 (шість рівнів) і TTL. Concurrency-тест на реальне
-   double-booking (§37.7) писати ОДРАЗУ тут, а не відкладати в Phase 8: у
-   CC-модулі такий тест уже є, з нього можна взяти форму.
-4. `/allocation/reserve`, `/allocation/release`, `/allocation/preview`.
+1. **Виробничий preflight** — переписати `spikes/preflight.py` начисто в
+   `services/preflight.py`. Робити ЦЕ першим, бо все інше в Phase 4 має право
+   писати в книгу тільки після того, як preflight сказав «те, що спише ERPNext,
+   збігається з планом». Техніка доведена гейтом 0k, коду немає.
+2. Same-company transfer (§14.2) окремо від cross-company (§14.3). Гейт 0j вів
+   ОБИДВА через clearing-рахунок для простоти спайка; production має розділити:
+   same-company — звичайний Material Transfer, без clearing.
+3. Cross-company: source Material Issue → прочитати фактичний SLE → destination
+   Material Receipt рівно на цю вартість (гейти 0b/0k). Вартість НЕ рахувати
+   наперед — ADR-003.
+4. Stage lane: `GSF Staging Lane` — це рівень 1 порядку §13.2, і Phase 4 перша,
+   хто його реально бере. Lock-порядок уже реалізований у
+   `services/allocations.py`; беріть його звідти, а не пишіть заново.
+
+Вхідні дані для Phase 4 вже є: `GSF Allocation Slice.requires_reallocation`
+позначає саме ті зрізи, які належать не продавцю, і `source_balance_key` вказує
+на рядок балансу, який треба зменшити.
 
 Перед тим, як писати warehouse provisioning і CC discovery (відкладені з
 Phase 1) — треба фікстуру з реальним `CC Location` на тестовому сайті, інакше
 discovery буде написаний без доказу.
 
-Найдешевше, що можна закрити принагідно: фікстура трекінгового товару, щоб
-приймання на Batch і на Serial теж мало живий прогін, а не лише код.
+Найдешевше, що можна закрити принагідно: фікстура трекінгового товару. Вона
+закриває одразу дві дірки — приймання на Batch/Serial (Phase 2) і serial
+allocation (Phase 3), яка зараз чесно fail-closed.
 
 ---
 
