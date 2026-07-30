@@ -1,0 +1,254 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "creation": "2026-07-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "layer_status",
+  "company_group",
+  "physical_location",
+  "column_break_identity",
+  "item_code",
+  "stock_uom",
+  "section_origin",
+  "origin_company",
+  "origin_warehouse",
+  "original_received_datetime",
+  "original_received_qty",
+  "column_break_origin",
+  "origin_doctype",
+  "origin_document",
+  "origin_row_name",
+  "origin_row_index",
+  "section_tracking",
+  "tracking_type",
+  "batch_no",
+  "serial_numbers",
+  "section_audit",
+  "return_origin_layer",
+  "created_by_service",
+  "blocked_reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "layer_status",
+   "fieldtype": "Select",
+   "label": "Layer Status",
+   "options": "PENDING\nOPEN\nBLOCKED\nEXHAUSTED\nCANCELLED",
+   "default": "PENDING",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "company_group",
+   "fieldtype": "Link",
+   "label": "Company Group",
+   "options": "GSF Company Group",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "physical_location",
+   "fieldtype": "Link",
+   "label": "Physical Location",
+   "options": "GSF Physical Location",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "stock_uom",
+   "fieldtype": "Link",
+   "label": "Stock UOM",
+   "options": "UOM",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_origin",
+   "fieldtype": "Section Break",
+   "label": "Origin Receipt"
+  },
+  {
+   "fieldname": "origin_company",
+   "fieldtype": "Link",
+   "label": "Origin Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "origin_warehouse",
+   "fieldtype": "Link",
+   "label": "Origin Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "original_received_datetime",
+   "fieldtype": "Datetime",
+   "label": "Original Received Datetime",
+   "description": "Immutable global FIFO date. Never recomputed from a later document.",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "original_received_qty",
+   "fieldtype": "Float",
+   "label": "Original Received Qty",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_origin",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "origin_doctype",
+   "fieldtype": "Link",
+   "label": "Origin DocType",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "fieldname": "origin_document",
+   "fieldtype": "Dynamic Link",
+   "label": "Origin Document",
+   "options": "origin_doctype",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "origin_row_name",
+   "fieldtype": "Data",
+   "label": "Origin Row Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "origin_row_index",
+   "fieldtype": "Int",
+   "label": "Origin Row Index"
+  },
+  {
+   "fieldname": "section_tracking",
+   "fieldtype": "Section Break",
+   "label": "Tracking Identity"
+  },
+  {
+   "fieldname": "tracking_type",
+   "fieldtype": "Select",
+   "label": "Tracking Type",
+   "options": "NONE\nBATCH\nSERIAL",
+   "default": "NONE",
+   "reqd": 1
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch",
+   "options": "Batch",
+   "depends_on": "eval:doc.tracking_type=='BATCH'"
+  },
+  {
+   "fieldname": "serial_numbers",
+   "fieldtype": "Small Text",
+   "label": "Serial Numbers",
+   "description": "One serial per line.",
+   "depends_on": "eval:doc.tracking_type=='SERIAL'"
+  },
+  {
+   "fieldname": "section_audit",
+   "fieldtype": "Section Break",
+   "label": "Audit"
+  },
+  {
+   "fieldname": "return_origin_layer",
+   "fieldtype": "Link",
+   "label": "Return Origin Layer",
+   "options": "GSF Stock Layer",
+   "description": "Set on a return layer to point back at the layer that was sold (ADR-009)."
+  },
+  {
+   "fieldname": "created_by_service",
+   "fieldtype": "Data",
+   "label": "Created By Service",
+   "read_only": 1
+  },
+  {
+   "fieldname": "blocked_reason",
+   "fieldtype": "Small Text",
+   "label": "Blocked Reason"
+  }
+ ],
+ "issingle": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-07-30 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Stock Layer",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF Stock Manager",
+   "read": 1,
+   "write": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Stock User",
+   "read": 1
+  }
+ ],
+ "sort_field": "original_received_datetime",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "item_code",
+ "show_title_field_in_link": 1
+}

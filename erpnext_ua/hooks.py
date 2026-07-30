@@ -66,6 +66,7 @@ after_install = [
 	# GSF setup runs after the commission domain on purpose: ADR-001 requires the
 	# order of domain provisioning to be fixed and explicit, not incidental.
 	"erpnext_ua.group_stock_fifo.setup.roles.ensure_roles",
+	"erpnext_ua.group_stock_fifo.setup.layer_dimension.ensure_layer_dimension",
 	"erpnext_ua.integrations.install.after_install",
 	"erpnext_ua.ua_setup.service.report_readiness",
 ]
@@ -88,6 +89,9 @@ after_migrate = [
 	"erpnext_ua.consignment_and_commission.setup.ownership_dimension.ensure_ownership_dimension",
 	"erpnext_ua.consignment_and_commission.setup.financial_backfill.backfill_financial_snapshots",
 	"erpnext_ua.group_stock_fifo.setup.roles.ensure_roles",
+	# ADR-002: the cleanup patch must run in the same after_migrate, right after
+	# ERPNext finishes registering the dimension's custom fields.
+	"erpnext_ua.group_stock_fifo.setup.layer_dimension.ensure_layer_dimension",
 	"erpnext_ua.integrations.migrations.after_migrate",
 ]
 
