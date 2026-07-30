@@ -1,0 +1,168 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-07-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "sequence",
+  "stock_layer",
+  "source_company",
+  "source_warehouse",
+  "column_break_slice",
+  "physical_location",
+  "qty",
+  "requires_reallocation",
+  "section_fifo",
+  "original_fifo_datetime",
+  "origin_document",
+  "origin_row_index",
+  "column_break_fifo",
+  "batch_no",
+  "serial_no",
+  "source_balance_key",
+  "section_downstream",
+  "reserved_stock_value_snapshot",
+  "reallocation_leg",
+  "sales_invoice_item"
+ ],
+ "fields": [
+  {
+   "fieldname": "sequence",
+   "fieldtype": "Int",
+   "label": "Sequence",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "stock_layer",
+   "fieldtype": "Link",
+   "label": "Stock Layer",
+   "options": "GSF Stock Layer",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "source_company",
+   "fieldtype": "Link",
+   "label": "Source Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "label": "Source Warehouse",
+   "options": "Warehouse",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "column_break_slice",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "physical_location",
+   "fieldtype": "Link",
+   "label": "Physical Location",
+   "options": "GSF Physical Location"
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "requires_reallocation",
+   "fieldtype": "Check",
+   "label": "Requires Reallocation",
+   "in_list_view": 1,
+   "columns": 1,
+   "description": "The layer belongs to a company other than the seller (§14.3)."
+  },
+  {
+   "fieldname": "section_fifo",
+   "fieldtype": "Section Break",
+   "label": "FIFO Position"
+  },
+  {
+   "fieldname": "original_fifo_datetime",
+   "fieldtype": "Datetime",
+   "label": "Original FIFO Datetime",
+   "reqd": 1
+  },
+  {
+   "fieldname": "origin_document",
+   "fieldtype": "Data",
+   "label": "Origin Document"
+  },
+  {
+   "fieldname": "origin_row_index",
+   "fieldtype": "Int",
+   "label": "Origin Row Index"
+  },
+  {
+   "fieldname": "column_break_fifo",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch",
+   "options": "Batch"
+  },
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Data",
+   "label": "Serial No"
+  },
+  {
+   "fieldname": "source_balance_key",
+   "fieldtype": "Data",
+   "label": "Source Balance Key",
+   "description": "The GSF Layer Balance row this slice reserves against."
+  },
+  {
+   "fieldname": "section_downstream",
+   "fieldtype": "Section Break",
+   "label": "Downstream"
+  },
+  {
+   "fieldname": "reserved_stock_value_snapshot",
+   "fieldtype": "Currency",
+   "label": "Reserved Stock Value (informational)",
+   "description": "Never the final cost. Value is read from the actual source SLE at preparation time (ADR-003)."
+  },
+  {
+   "fieldname": "reallocation_leg",
+   "fieldtype": "Data",
+   "label": "Reallocation Leg"
+  },
+  {
+   "fieldname": "sales_invoice_item",
+   "fieldtype": "Data",
+   "label": "Sales Invoice Item Row"
+  }
+ ],
+ "istable": 1,
+ "issingle": 0,
+ "links": [],
+ "modified": "2026-07-30 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Allocation Slice",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

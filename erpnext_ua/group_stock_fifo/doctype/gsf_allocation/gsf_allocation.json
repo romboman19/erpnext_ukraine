@@ -1,0 +1,275 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "creation": "2026-07-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "company_group",
+  "physical_location",
+  "seller_company",
+  "column_break_scope",
+  "item_code",
+  "requested_qty",
+  "allocated_qty",
+  "item_policy_snapshot",
+  "section_request",
+  "idempotency_key",
+  "request_fingerprint",
+  "allowed_warehouses",
+  "column_break_request",
+  "serial_no",
+  "batch_no",
+  "external_row_id",
+  "posting_date",
+  "section_window",
+  "reserved_at",
+  "expires_at",
+  "column_break_window",
+  "consumer_doctype",
+  "consumer_document",
+  "checkout",
+  "section_slices",
+  "slices",
+  "section_failure",
+  "failure_code",
+  "failure_message"
+ ],
+ "fields": [
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "PENDING\nRESERVED\nPREPARING\nPREPARED\nCONSUMED\nRELEASED\nEXPIRED\nFAILED\nREVERSED",
+   "default": "PENDING",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "company_group",
+   "fieldtype": "Link",
+   "label": "Company Group",
+   "options": "GSF Company Group",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "physical_location",
+   "fieldtype": "Link",
+   "label": "Physical Location",
+   "options": "GSF Physical Location",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "seller_company",
+   "fieldtype": "Link",
+   "label": "Seller Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Who sells. Never a filter on which stock is eligible (§12.6)."
+  },
+  {
+   "fieldname": "column_break_scope",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "requested_qty",
+   "fieldtype": "Float",
+   "label": "Requested Qty",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "allocated_qty",
+   "fieldtype": "Float",
+   "label": "Allocated Qty",
+   "read_only": 1
+  },
+  {
+   "fieldname": "item_policy_snapshot",
+   "fieldtype": "Data",
+   "label": "Item Policy Snapshot"
+  },
+  {
+   "fieldname": "section_request",
+   "fieldtype": "Section Break",
+   "label": "Request Identity"
+  },
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Idempotency Key",
+   "reqd": 1,
+   "unique": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "request_fingerprint",
+   "fieldtype": "Data",
+   "label": "Request Fingerprint",
+   "reqd": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "allowed_warehouses",
+   "fieldtype": "Small Text",
+   "label": "Allowed Warehouses",
+   "description": "One warehouse per line. Kept so the fingerprint can be recomputed from the row.",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_request",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Data",
+   "label": "Serial No"
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Batch",
+   "options": "Batch"
+  },
+  {
+   "fieldname": "external_row_id",
+   "fieldtype": "Data",
+   "label": "External Row ID"
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Requested Posting Date"
+  },
+  {
+   "fieldname": "section_window",
+   "fieldtype": "Section Break",
+   "label": "Reservation Window"
+  },
+  {
+   "fieldname": "reserved_at",
+   "fieldtype": "Datetime",
+   "label": "Reserved At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "label": "Expires At",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_window",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "consumer_doctype",
+   "fieldtype": "Link",
+   "label": "Consumer DocType",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "consumer_document",
+   "fieldtype": "Dynamic Link",
+   "label": "Consumer Document",
+   "options": "consumer_doctype"
+  },
+  {
+   "fieldname": "checkout",
+   "fieldtype": "Data",
+   "label": "Checkout",
+   "search_index": 1
+  },
+  {
+   "fieldname": "section_slices",
+   "fieldtype": "Section Break",
+   "label": "Slices"
+  },
+  {
+   "fieldname": "slices",
+   "fieldtype": "Table",
+   "label": "Slices",
+   "options": "GSF Allocation Slice"
+  },
+  {
+   "fieldname": "section_failure",
+   "fieldtype": "Section Break",
+   "label": "Failure"
+  },
+  {
+   "fieldname": "failure_code",
+   "fieldtype": "Data",
+   "label": "Failure Code"
+  },
+  {
+   "fieldname": "failure_message",
+   "fieldtype": "Small Text",
+   "label": "Failure Message"
+  }
+ ],
+ "issingle": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-07-30 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Allocation",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF Stock Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Stock User",
+   "read": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "item_code"
+}
