@@ -26,6 +26,11 @@ REFERENCE_DOCTYPE = "GSF Stock Layer"
 LAYER_FIELD = "gsf_stock_layer"
 INCOMING_LAYER_FIELD = "to_gsf_stock_layer"
 
+#: Set by GSF services on documents they build themselves. §17.3 refuses any
+#: other document that touches a GSF pool, so this flag is what separates a
+#: managed flow from a hand-written Stock Entry.
+MANAGED_FIELD = "gsf_managed"
+
 LAYER_BALANCE_INDEX = "gsf_layer_balance"
 LAYER_FIFO_INDEX = "gsf_layer_fifo"
 
@@ -37,6 +42,8 @@ REQUIRED_COLUMNS = {
     "Purchase Receipt Item": (LAYER_FIELD,),
     "Purchase Invoice Item": (LAYER_FIELD,),
     "Sales Invoice Item": (LAYER_FIELD,),
+    "Stock Entry": (MANAGED_FIELD,),
+    "Stock Reconciliation": (MANAGED_FIELD,),
 }
 
 
@@ -48,10 +55,32 @@ def ensure_layer_dimension() -> None:
         return
 
     _ensure_dimension(frappe)
+    _ensure_managed_flag(frappe)
     frappe.clear_cache()
     _strip_foreign_fields(frappe)
     _assert_schema(frappe)
     _ensure_indexes(frappe)
+
+
+def _ensure_managed_flag(frappe: Any) -> None:
+    from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+    create_custom_fields(
+        {
+            doctype: [
+                {
+                    "fieldname": MANAGED_FIELD,
+                    "label": "GSF Managed",
+                    "fieldtype": "Check",
+                    "read_only": 1,
+                    "no_copy": 1,
+                    "search_index": 1,
+                }
+            ]
+            for doctype in ("Stock Entry", "Stock Reconciliation")
+        },
+        update=True,
+    )
 
 
 def _ensure_dimension(frappe: Any) -> None:

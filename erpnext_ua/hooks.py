@@ -152,6 +152,7 @@ has_permission = {
 }
 
 CC = "erpnext_ua.consignment_and_commission.integrations"
+GSF = "erpnext_ua.group_stock_fifo"
 
 # Порядок у списках — це контракт, а не випадковість. Комісійні перевірки й
 # споживання резервів мають завершитися до фіскалізації ПРРО: скасувати вже
@@ -182,20 +183,54 @@ doc_events = {
 	},
 	"Purchase Receipt": {
 		"before_validate": "erpnext_ua.ua_receiving.pricing.apply_supplier_price_vat",
-		"before_submit": "erpnext_ua.ua_receiving.service.validate_purchase_receipt",
+		"before_submit": [
+			"erpnext_ua.ua_receiving.service.validate_purchase_receipt",
+			f"{GSF}.receipts.register_receipt_layers",
+		],
+		"on_submit": f"{GSF}.receipts.open_receipt_layers",
+		"before_cancel": f"{GSF}.receipts.guard_receipt_cancellation",
+		"on_cancel": f"{GSF}.receipts.reverse_receipt_layers",
 	},
 	"Purchase Invoice": {
 		"before_validate": "erpnext_ua.ua_receiving.pricing.apply_supplier_price_vat",
-		"before_submit": f"{CC}.tracking.validate_purchase_invoice_tracking_ownership",
-		"before_cancel": f"{CC}.purchase_invoice.guard_linked_own_receipt_cancellation",
-		"on_cancel": f"{CC}.purchase_invoice.allow_linked_own_receipt_cancellation",
+		"before_submit": [
+			f"{CC}.tracking.validate_purchase_invoice_tracking_ownership",
+			f"{GSF}.receipts.register_receipt_layers",
+		],
+		"on_submit": f"{GSF}.receipts.open_receipt_layers",
+		"before_cancel": [
+			f"{CC}.purchase_invoice.guard_linked_own_receipt_cancellation",
+			f"{GSF}.receipts.guard_receipt_cancellation",
+		],
+		"on_cancel": [
+			f"{CC}.purchase_invoice.allow_linked_own_receipt_cancellation",
+			f"{GSF}.receipts.reverse_receipt_layers",
+		],
 	},
     # Інертні для звичайних складських операцій ERPNext: спрацьовують лише на
     # документах, явно пов'язаних із CC Receipt.
     "Stock Entry": {
-        "before_submit": f"{CC}.tracking.validate_stock_entry_tracking_ownership",
-        "before_cancel": f"{CC}.stock_entry.guard_linked_receipt_cancellation",
-        "on_cancel": f"{CC}.stock_entry.allow_linked_receipt_cancellation",
+        # §17.3: the guard runs before registration on purpose — an unmanaged
+        # entry into a GSF pool is refused, never quietly given a layer.
+        "before_submit": [
+            f"{CC}.tracking.validate_stock_entry_tracking_ownership",
+            f"{GSF}.receipts.guard_unmanaged_stock_document",
+            f"{GSF}.receipts.register_receipt_layers",
+        ],
+        "on_submit": f"{GSF}.receipts.open_receipt_layers",
+        "before_cancel": [
+            f"{CC}.stock_entry.guard_linked_receipt_cancellation",
+            f"{GSF}.receipts.guard_receipt_cancellation",
+        ],
+        "on_cancel": [
+            f"{CC}.stock_entry.allow_linked_receipt_cancellation",
+            f"{GSF}.receipts.reverse_receipt_layers",
+        ],
+    },
+    "Stock Reconciliation": {
+        # §11.1 admits reconciliation only through a separate controlled
+        # scenario, which does not exist yet; until it does, refusal is correct.
+        "before_submit": f"{GSF}.receipts.guard_unmanaged_stock_document",
     },
     "Journal Entry": {
         "before_cancel": [
