@@ -171,9 +171,11 @@ def build(confirm_write):
         entry.submit()
         receipts.append(entry.name)
 
+    drained = drain_reposts()
     frappe.db.commit()
     return {
         "location": location,
+        "reposts_drained": drained,
         "companies": firms,
         "pools": [pool_name(company) for company in firms],
         "receipts": receipts,
@@ -182,6 +184,35 @@ def build(confirm_write):
                                          "original_received_qty", "layer_status"],
                                  order_by="original_received_datetime"),
     }
+
+
+def drain_reposts():
+    """Run the reposts a scheduler would have run.
+
+    Backdated receipts make ERPNext queue a `Repost Item Valuation`, and this
+    stack has no scheduler container, so those stay `Queued` forever. §17.2
+    treats a pending repost as "the valuation queue is not settled" and refuses
+    to issue against it — correctly, because until the repost runs the queue on
+    disk is not what ERPNext will actually consume. Draining here is what a real
+    stack does within seconds; it is not a workaround for the check.
+    """
+    from erpnext.stock.doctype.repost_item_valuation.repost_item_valuation import repost
+
+    done = []
+    for name in frappe.get_all(
+        "Repost Item Valuation",
+        filters={"status": ("in", ("Queued", "In Progress")), "docstatus": 1},
+        order_by="posting_date asc, creation asc",
+        pluck="name",
+    ):
+        try:
+            repost(frappe.get_doc("Repost Item Valuation", name))
+            done.append(name)
+        except Exception:
+            frappe.db.rollback()
+            frappe.db.set_value("Repost Item Valuation", name, "status", "Failed")
+            frappe.db.commit()
+    return len(done)
 
 
 def teardown(confirm_write):
