@@ -31,6 +31,7 @@
   "consumer_doctype",
   "consumer_document",
   "checkout",
+  "positions_released",
   "section_slices",
   "slices",
   "section_failure",
@@ -196,6 +197,14 @@
    "fieldtype": "Data",
    "label": "Checkout",
    "search_index": 1
+  },
+  {
+   "fieldname": "positions_released",
+   "fieldtype": "Check",
+   "label": "Positions Released",
+   "read_only": 1,
+   "default": "0",
+   "description": "The held quantity has already been given back. A position's reservation is one number shared by every allocation on it, so it may only be released once."
   },
   {
    "fieldname": "section_slices",

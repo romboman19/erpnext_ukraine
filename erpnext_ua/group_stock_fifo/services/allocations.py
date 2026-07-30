@@ -424,8 +424,17 @@ def _ensure_balance(*, stock_layer: str, company: str, warehouse: str) -> str:
     return name
 
 
-def _release_positions(allocation: Any) -> None:
-    """Give the held quantity back, in the same §13.2 order it was taken."""
+def release_positions(allocation: Any) -> None:
+    """Give the held quantity back exactly once, in the §13.2 order it was taken.
+
+    Once, because a position's `reserved_qty_cache` is one number shared by
+    every allocation holding it: a second decrement hands back units another
+    allocation still owns. Preparation releases the source hold when the stock
+    physically leaves (the reservation has become real stage stock by then), and
+    the terminal transitions must not repeat it.
+    """
+    if allocation.get("positions_released"):
+        return
     for row in sorted(
         allocation.slices, key=lambda row: (row.source_company, row.source_warehouse, row.stock_layer)
     ):
@@ -445,6 +454,7 @@ def _release_positions(allocation: Any) -> None:
             """,
             {"qty": float(row.qty or 0), "name": name, "now": now_datetime()},
         )
+    allocation.positions_released = 1
 
 
 def _finish(allocation_name: str, *, status: str, **fields) -> Any:
@@ -464,7 +474,7 @@ def _finish(allocation_name: str, *, status: str, **fields) -> Any:
     validate_allocation_transition(rows[0].status, status)
 
     allocation = frappe.get_doc("GSF Allocation", allocation_name)
-    _release_positions(allocation)
+    release_positions(allocation)
     allocation.status = status
     for fieldname, value in fields.items():
         allocation.set(fieldname, value)

@@ -1,0 +1,234 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "creation": "2026-07-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "reallocation_mode",
+  "company_group",
+  "physical_location",
+  "column_break_scope",
+  "seller_company",
+  "checkout",
+  "staging_lane",
+  "posting_datetime",
+  "section_amounts",
+  "total_qty",
+  "total_source_value",
+  "column_break_amounts",
+  "total_destination_value",
+  "value_difference",
+  "clearing_status",
+  "section_legs",
+  "legs",
+  "section_failure",
+  "allocation_set_hash",
+  "failure_code",
+  "manual_review_reason",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "DRAFT\nVALIDATING\nPOSTING_SOURCE\nPOSTING_DESTINATION\nPREPARED\nCONSUMED\nCOMPENSATING\nCOMPENSATED\nFAILED\nMANUAL_REVIEW\nCANCELLED",
+   "default": "DRAFT",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "reallocation_mode",
+   "fieldtype": "Select",
+   "label": "Reallocation Mode",
+   "options": "MANAGEMENT_REALLOCATION\nLEGAL_INTERCOMPANY_SALE_PURCHASE\nCOMMISSION_MODEL\nMANUAL_APPROVAL\nREALLOCATION_FORBIDDEN",
+   "default": "MANAGEMENT_REALLOCATION",
+   "reqd": 1,
+   "description": "MVP implements MANAGEMENT_REALLOCATION only (§15.4)."
+  },
+  {
+   "fieldname": "company_group",
+   "fieldtype": "Link",
+   "label": "Company Group",
+   "options": "GSF Company Group",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "physical_location",
+   "fieldtype": "Link",
+   "label": "Physical Location",
+   "options": "GSF Physical Location",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_scope",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "seller_company",
+   "fieldtype": "Link",
+   "label": "Seller Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "checkout",
+   "fieldtype": "Data",
+   "label": "Checkout",
+   "search_index": 1
+  },
+  {
+   "fieldname": "staging_lane",
+   "fieldtype": "Link",
+   "label": "Staging Lane",
+   "options": "GSF Staging Lane"
+  },
+  {
+   "fieldname": "posting_datetime",
+   "fieldtype": "Datetime",
+   "label": "Posting Datetime",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "section_amounts",
+   "fieldtype": "Section Break",
+   "label": "Value"
+  },
+  {
+   "fieldname": "total_qty",
+   "fieldtype": "Float",
+   "label": "Total Qty",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_source_value",
+   "fieldtype": "Currency",
+   "label": "Total Source Value",
+   "read_only": 1,
+   "description": "Sum of the actual source SLE values. Never computed ahead of the ledger (ADR-003)."
+  },
+  {
+   "fieldname": "column_break_amounts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_destination_value",
+   "fieldtype": "Currency",
+   "label": "Total Destination Value",
+   "read_only": 1
+  },
+  {
+   "fieldname": "value_difference",
+   "fieldtype": "Currency",
+   "label": "Value Difference",
+   "read_only": 1,
+   "description": "§16.2 requires this within the configured currency tolerance."
+  },
+  {
+   "fieldname": "clearing_status",
+   "fieldtype": "Select",
+   "label": "Clearing Status",
+   "options": "PENDING\nBALANCED\nIMBALANCED",
+   "default": "PENDING",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_legs",
+   "fieldtype": "Section Break",
+   "label": "Legs"
+  },
+  {
+   "fieldname": "legs",
+   "fieldtype": "Table",
+   "label": "Legs",
+   "options": "GSF Reallocation Leg"
+  },
+  {
+   "fieldname": "section_failure",
+   "fieldtype": "Section Break",
+   "label": "Audit"
+  },
+  {
+   "fieldname": "allocation_set_hash",
+   "fieldtype": "Data",
+   "label": "Allocation Set Hash",
+   "read_only": 1
+  },
+  {
+   "fieldname": "failure_code",
+   "fieldtype": "Data",
+   "label": "Failure Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "manual_review_reason",
+   "fieldtype": "Small Text",
+   "label": "Manual Review Reason"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "GSF Stock Reallocation",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "issingle": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-07-30 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Stock Reallocation",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF Stock Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Accountant",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "seller_company"
+}

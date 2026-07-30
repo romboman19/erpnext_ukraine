@@ -16,6 +16,7 @@
   "require_same_base_currency",
   "block_negative_stock",
   "block_backdated_mutations",
+  "currency_tolerance",
   "block_unmanaged_gsf_stock_docs",
   "closed_through_date",
   "section_compat",
@@ -89,6 +90,13 @@
    "fieldtype": "Check",
    "label": "Block Backdated Mutations",
    "default": "1"
+  },
+  {
+   "fieldname": "currency_tolerance",
+   "fieldtype": "Currency",
+   "label": "Currency Tolerance",
+   "default": "0.01",
+   "description": "§16.2: the largest base-currency gap allowed between a source issue and its destination receipt."
   },
   {
    "fieldname": "block_unmanaged_gsf_stock_docs",
