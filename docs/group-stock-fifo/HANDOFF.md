@@ -110,7 +110,8 @@ docs/group-stock-fifo/
 └── release/
     ├── phase-1.md                ← звіт по Phase 1 проти §41/§43
     ├── phase-2.md                ← звіт по Phase 2, з таблицями живих прогонів
-    └── phase-3.md                ← звіт по Phase 3, включно з §37.7 гонкою
+    ├── phase-3.md                ← звіт по Phase 3, включно з §37.7 гонкою
+    └── phase-4.md                ← звіт по Phase 4, §37.1 уже в книзі
 ```
 
 **Якщо читаєте тільки один файл — читайте `spec-v1.0.md`.** Це ЄДИНЕ джерело
@@ -127,7 +128,7 @@ erpnext_ua/group_stock_fifo/
 ├── __init__.py
 ├── api.py                        ← whitelisted API (поки одна ручка: readiness)
 ├── receipts.py                   ← doc_event-хуки §11 і §17.3 (Phase 2)
-├── doctype/                      ← 13 production DocType
+├── doctype/                      ← 15 production DocType
 │   ├── gsf_settings/             ┐
 │   ├── gsf_company_group/        │
 │   ├── gsf_group_member/         │ Phase 1 (child table)
@@ -140,14 +141,21 @@ erpnext_ua/group_stock_fifo/
 │   ├── gsf_layer_movement/       ┘
 │   ├── gsf_allocation/           ┐
 │   ├── gsf_allocation_slice/     │ Phase 3 (slice — child table)
-│   └── gsf_scope_lock/           ┘
+│   ├── gsf_scope_lock/           ┘
+│   ├── gsf_stock_reallocation/   ┐ Phase 4
+│   └── gsf_reallocation_leg/     ┘ (leg — child table)
 ├── services/
 │   ├── domain.py                 ← ЧИСТІ функції-правила, без Frappe (§28.3)
 │   ├── readiness.py              ← §30 readiness, використовує domain.py
 │   ├── layers.py                 ← write-path реєстру шарів (Phase 2)
 │   ├── reservation.py            ← ЧИСТІ правила §13.4/§9.12 (Phase 3)
 │   ├── candidates.py             ← §12.2 адаптер кандидатів (Phase 3)
-│   └── allocations.py            ← write-path резервування, §13.1–§13.3
+│   ├── allocations.py            ← write-path резервування, §13.1–§13.3
+│   ├── preflight.py              ← ЧИСТЕ рішення §17.2 (Phase 4)
+│   ├── preflight_probe.py        ← факти для нього, з книги
+│   ├── clearing.py               ← §15.2/§15.3 рахунки, ADR-005
+│   ├── staging.py                ← §9.8 lane lock, рівень 1 порядку §13.2
+│   └── reallocation.py           ← write-path перепризначення, §14–§16
 ├── setup/
 │   ├── roles.py                  ← ідемпотентний provisioning 6 ролей
 │   └── layer_dimension.py        ← вимір + патч ADR-002 + індекси
@@ -155,11 +163,13 @@ erpnext_ua/group_stock_fifo/
 │   ├── test_foundation_domain.py  ← 27 тестів
 │   ├── test_layer_domain.py       ← 32 тести (Phase 2)
 │   ├── test_reservation_domain.py ← 25 тестів (Phase 3)
+│   ├── test_preflight_domain.py   ← 15 тестів (Phase 4)
 │   └── test_shared_allocator_spike.py
 ├── integration_tests/             ← прогони НА САЙТІ, з confirm-токенами
 │   ├── phase_3_fixture.py         ← build/teardown фікстури §37.1
 │   ├── phase_3_checks.py          ← функціональний прогін Phase 3
-│   └── phase_3_race.py            ← ОДИН racer; запускати ДВА процеси (§37.7)
+│   ├── phase_3_race.py            ← ОДИН racer; запускати ДВА процеси (§37.7)
+│   └── phase_4_checks.py          ← прогін Phase 4 проти §37.1 у книзі
 └── spikes/                        ← КОД ГЕЙТІВ. Це не production, це докази.
     ├── fixtures.py                 (3 ФОП HUNTER.rv — будівник тестових даних)
     ├── dimension.py, stock_setup.py, preflight.py, shared_allocator.py (утиліти)
@@ -370,6 +380,31 @@ Phase 1 за §41 закрита в обсязі "foundation", НЕ більше
 
 ---
 
+## 6c. Що ЗРОБЛЕНО в Phase 4 — stock reallocation
+
+Детальний звіт — `docs/group-stock-fifo/release/phase-4.md`. Коротко:
+
+**Готово:** preflight §17.2, source issue + destination receipt §14.3,
+same-company transfer §14.2 окремо, clearing-рахунки §15.2/§15.3, перевірка
+точності §16.2, lock lane §9.8. Модель поповнилась `GSF Stock Reallocation` і
+`GSF Reallocation Leg`.
+
+**Три речі, які варто знати про цей код:**
+1. **Preflight питає «чи спише ERPNext саме ті шари»**, а не «чи схожа
+   вартість». Гейт 0c показав, що мітка виміру черги не керує, тож перевіряється
+   ВИБІР: позиції шарів у FIFO-порядку проти плану аллокатора.
+2. **Вартість читається з книги після submit джерела** і потім звіряється
+   (§16.2), а не рахується двічі.
+3. **Своє і чуже розділені.** Власні зрізи продавця — Material Transfer без
+   clearing; чужі — issue+receipt, бо це дві окремі юридичні особи.
+
+**Доведено живцем:** ті самі 6 500 грн §37.1 тепер у книзі — 2×1000 + 3×1100 +
+1×1200, source = destination, різниця 0. **Вплив на P&L рівно 0.00** за всіма
+GL-рядками. Clearing: +2000, +3300, −5300, сума 0. Stage тримає 6 шт / 6 500 у
+**трьох різних шарах** — ідентичність пережила обидві ноги.
+
+---
+
 ## 7. Що НЕ ЗРОБЛЕНО ВЗАГАЛІ — залишок за §41
 
 Це найважливіший розділ для того, хто продовжує. Порядок — як у §41 ТЗ.
@@ -388,18 +423,16 @@ Phase 1 за §41 закрита в обсязі "foundation", НЕ більше
 - Item policy (§12.2) — DocType політики товару в моделі §9 немає; запит несе
   `item_policy` і зберігає снапшот, правил поверх нього ще нема.
 
-### Phase 4 — Stock reallocation (НАСТУПНИЙ КРОК)
-- Реалізація самого перепризначення: source Material Issue → читання
-  фактичного SLE → destination Material Receipt на цю вартість (техніка
-  доведена в гейтах 0b/0k, коду виробничого рівня нема).
-- **Тут же виробничий preflight** — переписати `spikes/preflight.py` в
-  `services/preflight.py`, підключити до Material Issue hook.
-- Same-company transfer (§14.2) окремо від cross-company (§14.3) — гейт 0j
-  показав, що спайк наразі веде ОБИДВА через clearing-рахунок для простоти;
-  production має розділити (same-company = звичайний Material Transfer, без
-  clearing).
+### Phase 4 — залишок (блокує Phase 5 частково)
+- **Компенсація (§9.14 `COMPENSATING` / `COMPENSATED`)** — статуси є, коду
+  немає. Скасування вже закоміченого перепризначення лишає `GSF Layer Balance`
+  і `GSF Layer Movement` такими, ніби запас усе ще в stage. У межах однієї
+  транзакції це не проблема (savepoint, ADR-008); проблема — коли документи вже
+  закомічені. Робити разом із сагою checkout у Phase 5.
+- §16.4 контроль після продажу — половина зі сторони stage готова
+  (`reallocation.stage_value`), друга половина потребує самого продажу.
 
-### Phase 5 — Managed sale
+### Phase 5 — Managed sale (НАСТУПНИЙ КРОК)
 - Sales Invoice builder з множинними рядками (один на шар/зріз, §18.2) —
   ТЕХНІЧНО ДОВЕДЕНО, що рядок не може охопити два шари (гейт 0k), сам builder
   не написаний.
@@ -431,7 +464,7 @@ Phase 1 за §41 закрита в обсязі "foundation", НЕ більше
 
 ---
 
-## 8. Вісім пасток, у які я вже вступив — щоб ви не вступали повторно
+## 8. Десять пасток, у які я вже вступив — щоб ви не вступали повторно
 
 1. **`bench migrate` при першому підключенні нового модуля треба ДВІЧІ.**
    Перший прохід створює Module Def, другий синкає DocType. Якщо після
@@ -525,25 +558,24 @@ docker exec frappe-test-backend-1 bench --site postest.local execute \
 
 ## 10. Рекомендований наступний крок
 
-**Почати Phase 4 (stock reallocation)**, у такому порядку:
+**Почати Phase 5 (managed sale)**, у такому порядку:
 
-1. **Виробничий preflight** — переписати `spikes/preflight.py` начисто в
-   `services/preflight.py`. Робити ЦЕ першим, бо все інше в Phase 4 має право
-   писати в книгу тільки після того, як preflight сказав «те, що спише ERPNext,
-   збігається з планом». Техніка доведена гейтом 0k, коду немає.
-2. Same-company transfer (§14.2) окремо від cross-company (§14.3). Гейт 0j вів
-   ОБИДВА через clearing-рахунок для простоти спайка; production має розділити:
-   same-company — звичайний Material Transfer, без clearing.
-3. Cross-company: source Material Issue → прочитати фактичний SLE → destination
-   Material Receipt рівно на цю вартість (гейти 0b/0k). Вартість НЕ рахувати
-   наперед — ADR-003.
-4. Stage lane: `GSF Staging Lane` — це рівень 1 порядку §13.2, і Phase 4 перша,
-   хто його реально бере. Lock-порядок уже реалізований у
-   `services/allocations.py`; беріть його звідти, а не пишіть заново.
+1. **Компенсація спершу.** Phase 4 лишила `COMPENSATING`/`COMPENSATED` без коду,
+   і сага checkout без них не має що робити при збої. Це той самий шматок, тож
+   писати його на початку Phase 5, а не наприкінці.
+2. Sales Invoice builder з технічними рядками §18.2 — окремий рядок на шар.
+   Гейт 0k довів, що інакше не можна: вимір відхиляє рядок, який охоплює два
+   шари. `GSF Layer Balance` у stage вже дає рівно ті рядки, які потрібні.
+3. §16.4 після продажу: `actual_sale_cogs == prepared_stage_value`. Половина
+   готова — `reallocation.stage_value()`; лишилось прочитати COGS продажу і
+   зіставити, з rollback ДО фіскалізації при розбіжності.
+4. `GSF Checkout` (§9.16) як маршрут під наявним `POS Order` (ADR-012), стани
+   §23.1. Lane звільняється на будь-якому термінальному стані —
+   `staging.release_lane` уже це вміє, включно з переведенням у `DIRTY`.
 
-Вхідні дані для Phase 4 вже є: `GSF Allocation Slice.requires_reallocation`
-позначає саме ті зрізи, які належать не продавцю, і `source_balance_key` вказує
-на рядок балансу, який треба зменшити.
+Перед §18.3: readiness має перевірити, що Buying/Selling Settings дозволяють
+один Item кількома рядками в одній транзакції. Без цього §18.2 не працює, а
+мовчки міняти чужу глобальну настройку GSF не має права (§44).
 
 Перед тим, як писати warehouse provisioning і CC discovery (відкладені з
 Phase 1) — треба фікстуру з реальним `CC Location` на тестовому сайті, інакше
