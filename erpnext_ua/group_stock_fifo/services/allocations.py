@@ -455,6 +455,12 @@ def _finish(allocation_name: str, *, status: str, **fields) -> Any:
     )
     if not rows:
         raise GSFError(f"Allocation {allocation_name} does not exist", "ALLOCATION_CONFLICT")
+    if rows[0].status == status:
+        # Already there, so return it untouched. Falling through would release
+        # the positions a second time, and since a position's reservation is a
+        # single number shared by every allocation holding it, the second
+        # decrement would give away stock another allocation still holds.
+        return frappe.get_doc("GSF Allocation", allocation_name)
     validate_allocation_transition(rows[0].status, status)
 
     allocation = frappe.get_doc("GSF Allocation", allocation_name)
