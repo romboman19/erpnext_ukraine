@@ -39,6 +39,37 @@ def pool_name(company):
     return f"GSF P3 Pool - {abbr}"
 
 
+def stage_name(company):
+    abbr = frappe.db.get_value("Company", company, "abbr")
+    return f"GSF P3 Stage - {abbr}"
+
+
+def clearing_account(company, side):
+    """One balance-sheet account per company per side, as ADR-005 requires.
+
+    Asset root on both sides: a receivable from the other FOP and a payable to
+    it are both positions in the group, and §15.3 forbids anything that reaches
+    profit and loss.
+    """
+    abbr = frappe.db.get_value("Company", company, "abbr")
+    label = f"GSF Internal Stock Due {side}"
+    name = f"{label} - {abbr}"
+    if frappe.db.exists("Account", name):
+        return name
+    parent = frappe.db.get_value(
+        "Account", {"company": company, "account_name": "Current Assets", "is_group": 1}, "name"
+    ) or frappe.db.get_value(
+        "Account", {"company": company, "root_type": "Asset", "is_group": 1}, "name"
+    )
+    frappe.get_doc({
+        "doctype": "Account", "account_name": label, "company": company,
+        "parent_account": parent, "root_type": "Asset", "report_type": "Balance Sheet",
+        "is_group": 0,
+        "account_currency": frappe.db.get_value("Company", company, "default_currency"),
+    }).insert(ignore_permissions=True)
+    return name
+
+
 def build(confirm_write):
     assert_site()
     if confirm_write != "BUILD_GSF_PHASE_3":
@@ -60,7 +91,11 @@ def build(confirm_write):
             "doctype": "GSF Company Group", "group_name": GROUP, "group_code": "P3",
             "enabled": 1, "base_currency": currency,
             "members": [
-                {"company": company, "enabled": 1, "can_source_stock": 1, "can_sell_stock": 1}
+                {
+                    "company": company, "enabled": 1, "can_source_stock": 1, "can_sell_stock": 1,
+                    "default_due_from_stock_account": clearing_account(company, "From"),
+                    "default_due_to_stock_account": clearing_account(company, "To"),
+                }
                 for company in firms
             ],
         }).insert(ignore_permissions=True)
@@ -91,6 +126,25 @@ def build(confirm_write):
                 "physical_location": location, "company": company, "enabled": 1,
                 "can_purchase": 1, "can_sell": 1, "own_pool_warehouse": warehouse,
             }).insert(ignore_permissions=True)
+
+    seller = firms[2]
+    stage = stage_name(seller)
+    if not frappe.db.exists("Warehouse", stage):
+        frappe.get_doc({
+            "doctype": "Warehouse", "warehouse_name": "GSF P3 Stage", "company": seller,
+        }).insert(ignore_permissions=True)
+    if not frappe.db.exists("GSF Warehouse Binding", stage):
+        frappe.get_doc({
+            "doctype": "GSF Warehouse Binding", "warehouse": stage, "company": seller,
+            "company_group": GROUP, "physical_location": location, "manager_app": "GSF",
+            "warehouse_role": "GSF_SALE_STAGE", "binding_mode": "MANAGED", "enabled": 1,
+        }).insert(ignore_permissions=True)
+    if not frappe.db.exists("GSF Staging Lane", {"warehouse": stage}):
+        frappe.get_doc({
+            "doctype": "GSF Staging Lane", "lane_code": "P3-LANE-1", "company_group": GROUP,
+            "physical_location": location, "company": seller, "warehouse": stage,
+            "consumer_type": "MANUAL", "enabled": 1, "status": "AVAILABLE",
+        }).insert(ignore_permissions=True)
 
     settings = frappe.get_single("GSF Settings")
     if not settings.enabled:
@@ -136,14 +190,23 @@ def teardown(confirm_write):
         raise RuntimeError("confirm_write token required")
     frappe.flags.in_uninstall = True
     try:
+        for name in frappe.get_all("GSF Stock Reallocation",
+                                   filters={"company_group": GROUP}, pluck="name"):
+            frappe.delete_doc("GSF Stock Reallocation", name, force=True, ignore_permissions=True)
         for name in frappe.get_all("GSF Allocation", filters={"item_code": ITEM}, pluck="name"):
             frappe.delete_doc("GSF Allocation", name, force=True, ignore_permissions=True)
         for name in frappe.get_all("GSF Layer Movement", pluck="name"):
             if frappe.db.get_value("GSF Stock Layer", frappe.db.get_value(
                     "GSF Layer Movement", name, "stock_layer"), "item_code") == ITEM:
                 frappe.delete_doc("GSF Layer Movement", name, force=True, ignore_permissions=True)
-        for entry in frappe.get_all("Stock Entry", filters={"remarks": ("like", "GSF-P3-%")},
-                                    fields=["name", "docstatus"]):
+        # Cancelled newest-first: a reallocation receipt has to go before the
+        # issue that funded it, and both before the receipt that seeded them.
+        for entry in frappe.get_all(
+            "Stock Entry",
+            filters={"remarks": ("like", "%GSF%")},
+            fields=["name", "docstatus"],
+            order_by="creation desc",
+        ):
             doc = frappe.get_doc("Stock Entry", entry.name)
             if doc.docstatus == 1:
                 doc.cancel()
@@ -157,14 +220,18 @@ def teardown(confirm_write):
         for name in frappe.get_all("GSF Location Company Binding",
                                    filters={"company_group": GROUP}, pluck="name"):
             frappe.delete_doc("GSF Location Company Binding", name, force=True, ignore_permissions=True)
+        for name in frappe.get_all("GSF Staging Lane", filters={"company_group": GROUP}, pluck="name"):
+            frappe.delete_doc("GSF Staging Lane", name, force=True, ignore_permissions=True)
         for company in companies():
-            warehouse = pool_name(company)
-            if frappe.db.exists("GSF Warehouse Binding", warehouse):
-                frappe.delete_doc("GSF Warehouse Binding", warehouse, force=True, ignore_permissions=True)
-            frappe.db.sql("delete from `tabStock Ledger Entry` where warehouse = %s", (warehouse,))
-            frappe.db.sql("delete from `tabBin` where warehouse = %s", (warehouse,))
-            if frappe.db.exists("Warehouse", warehouse):
-                frappe.delete_doc("Warehouse", warehouse, force=True, ignore_permissions=True)
+            for warehouse in (pool_name(company), stage_name(company)):
+                if frappe.db.exists("GSF Warehouse Binding", warehouse):
+                    frappe.delete_doc(
+                        "GSF Warehouse Binding", warehouse, force=True, ignore_permissions=True
+                    )
+                frappe.db.sql("delete from `tabStock Ledger Entry` where warehouse = %s", (warehouse,))
+                frappe.db.sql("delete from `tabBin` where warehouse = %s", (warehouse,))
+                if frappe.db.exists("Warehouse", warehouse):
+                    frappe.delete_doc("Warehouse", warehouse, force=True, ignore_permissions=True)
         location = frappe.db.get_value("GSF Physical Location", {"location_code": LOCATION_CODE}, "name")
         if location:
             frappe.delete_doc("GSF Physical Location", location, force=True, ignore_permissions=True)
@@ -183,5 +250,6 @@ def teardown(confirm_write):
         "allocations": frappe.db.count("GSF Allocation"),
         "balances": frappe.db.count("GSF Layer Balance"),
         "scope_locks": frappe.db.count("GSF Scope Lock"),
+        "reallocations": frappe.db.count("GSF Stock Reallocation"),
         "gsf_enabled": frappe.db.get_single_value("GSF Settings", "enabled"),
     }
