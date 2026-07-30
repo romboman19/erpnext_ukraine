@@ -176,9 +176,25 @@ def run() -> dict:
     )
 
     attempt("preparing_twice", lambda: prepare(allocation.name, checkout="P4-CHECKOUT-1").name)
+
+    # A genuinely second checkout, on its own allocation. Reusing the first one
+    # would fail on the status transition long before reaching the lane, which
+    # would prove nothing about lane isolation.
+    second = reserve(
+        ReservationRequest(
+            idempotency_key="p4-check-2",
+            company_group=GROUP,
+            physical_location=location,
+            seller_company=seller,
+            item_code=ITEM,
+            qty=Decimal("1"),
+            allowed_warehouses=pools,
+            checkout="P4-CHECKOUT-2",
+        )
+    )
     attempt(
         "a_second_checkout_cannot_take_the_locked_lane",
-        lambda: prepare(allocation.name, checkout="P4-CHECKOUT-2").name,
+        lambda: prepare(second.name, checkout="P4-CHECKOUT-2").name,
     )
 
     frappe.db.commit()
