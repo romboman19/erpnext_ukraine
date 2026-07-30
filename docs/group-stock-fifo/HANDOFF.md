@@ -1,4 +1,4 @@
-# GSF (Group Stock FIFO) — передача агенту, стан на 2026-07-28
+# GSF (Group Stock FIFO) — передача агенту, стан на 2026-07-30
 
 Цей документ існує для того, щоб інший агент (або ви за тиждень) міг увійти в
 роботу без повторного читання 30+ комітів історії. Він описує: що таке GSF і
@@ -108,7 +108,8 @@ docs/group-stock-fifo/
 │   ├── phase-0.md                ← протокол Phase 0, зведена таблиця гейтів
 │   └── evidence/                 ← один .md на кожен гейт із фактичними даними
 └── release/
-    └── phase-1.md                ← звіт по Phase 1 проти §41/§43
+    ├── phase-1.md                ← звіт по Phase 1 проти §41/§43
+    └── phase-2.md                ← звіт по Phase 2, з таблицями живих прогонів
 ```
 
 **Якщо читаєте тільки один файл — читайте `spec-v1.0.md`.** Це ЄДИНЕ джерело
@@ -124,21 +125,28 @@ docs/group-stock-fifo/
 erpnext_ua/group_stock_fifo/
 ├── __init__.py
 ├── api.py                        ← whitelisted API (поки одна ручка: readiness)
-├── doctype/                      ← 7 production DocType (Phase 1, готово)
-│   ├── gsf_settings/
-│   ├── gsf_company_group/
-│   ├── gsf_group_member/         (child table)
-│   ├── gsf_physical_location/
+├── receipts.py                   ← doc_event-хуки §11 і §17.3 (Phase 2)
+├── doctype/                      ← 10 production DocType
+│   ├── gsf_settings/             ┐
+│   ├── gsf_company_group/        │
+│   ├── gsf_group_member/         │ Phase 1 (child table)
+│   ├── gsf_physical_location/    │
 │   ├── gsf_location_company_binding/
-│   ├── gsf_warehouse_binding/
-│   └── gsf_staging_lane/
+│   ├── gsf_warehouse_binding/    │
+│   ├── gsf_staging_lane/         ┘
+│   ├── gsf_stock_layer/          ┐
+│   ├── gsf_layer_balance/        │ Phase 2
+│   └── gsf_layer_movement/       ┘
 ├── services/
 │   ├── domain.py                 ← ЧИСТІ функції-правила, без Frappe (§28.3)
-│   └── readiness.py               ← §30 readiness, використовує domain.py
+│   ├── readiness.py              ← §30 readiness, використовує domain.py
+│   └── layers.py                 ← write-path реєстру шарів (Phase 2)
 ├── setup/
-│   └── roles.py                  ← ідемпотентний provisioning 6 ролей
+│   ├── roles.py                  ← ідемпотентний provisioning 6 ролей
+│   └── layer_dimension.py        ← вимір + патч ADR-002 + індекси
 ├── tests/
 │   ├── test_foundation_domain.py  ← 27 тестів на domain.py
+│   ├── test_layer_domain.py       ← 32 тести на правила Phase 2
 │   └── test_shared_allocator_spike.py
 └── spikes/                        ← КОД ГЕЙТІВ. Це не production, це докази.
     ├── fixtures.py                 (3 ФОП HUNTER.rv — будівник тестових даних)
@@ -278,28 +286,59 @@ Phase 1 за §41 закрита в обсязі "foundation", НЕ більше
 
 ---
 
+## 6a. Що ЗРОБЛЕНО в Phase 2 — layer registry
+
+Детальний звіт із таблицями живих прогонів —
+`docs/group-stock-fifo/release/phase-2.md`. Коротко:
+
+**Готово:**
+- `GSF Stock Layer` (§9.9), `GSF Layer Balance` (§9.10), `GSF Layer Movement`
+  (§9.11).
+- Production Inventory Dimension `GSF Stock Layer` + патч ADR-002, який
+  прибирає GSF-поля з DocType цього застосунку і **перевіряє власний
+  результат** — валить міграцію, якщо щось вціліло. На сайті: 22 поля на ядрі
+  ERPNext, 0 на `erpnext_ua`, комісійні поля не зачеплені.
+- Хуки §11 на `Purchase Receipt`, `Purchase Invoice` (`update_stock = 1`) і
+  керований `Stock Entry` Material Receipt: `PENDING`-шар до submit, `OPEN` +
+  `ORIGIN_RECEIPT` + баланс після submit, зі значеннями з фактичного SLE.
+- §11.4 скасування: guard (шар, який уже рухався, не дає скасувати) +
+  `REVERSAL` + `CANCELLED`.
+- §17.3: unmanaged `Stock Entry` / `Stock Reconciliation` у GSF-пул
+  відхиляється (`UNCLASSIFIED_GSF_STOCK`). Поза GSF-складами хуки інертні —
+  перевірено окремим прогоном.
+- 32 юніт-тести на нові правила `domain.py`.
+
+**Три речі, які варто знати про цей код:**
+1. **Ім'я шару — це його ідентичність** (§11.3, хеш координат у `GSFL-…`).
+   Перевірка існування І Є перевіркою ідемпотентності; окремого реєстру ключів
+   немає і не потрібно.
+2. **Розділення `before_submit` / `on_submit` вимушене:** шар має існувати до
+   submit, щоб вимір доїхав у книгу (гейт 0d), а кількість і вартість читаються
+   тільки після submit з фактичного SLE (гейт 0c, ADR-003).
+3. **Патч ADR-002 стрижений за модулями застосунку, не за списком імен**, щоб
+   новий комісійний DocType зі складським полем не повернув забруднення тихо.
+
+**НЕ зроблено в Phase 2:**
+- `GSF Opening Stock Import` (§38.2) — потрібен лише на реальному запуску.
+- Integrity report (§31.6) — кеш балансу вже пишеться так, щоб розбіжність було
+  видно (`integrity_status`), але сам звіт і його scheduled job без
+  scheduler-контейнера не перевірити.
+- **Живий прогон на Batch/Serial товарі.** Код читає `Serial and Batch Bundle`
+  і відмовляє, якщо один рядок несе кілька партій, але на сайті немає
+  трекінгового товару. Це перше, що варто закрити фікстурою.
+
+---
+
 ## 7. Що НЕ ЗРОБЛЕНО ВЗАГАЛІ — залишок за §41
 
 Це найважливіший розділ для того, хто продовжує. Порядок — як у §41 ТЗ.
 
-### Phase 2 — Layer registry (НАСТУПНИЙ КРОК)
-- `GSF Stock Layer` (§9.9) — production DocType, незмінна ідентичність
-  партії. **Увага:** не можна просто скопіювати `spikes/dimension.py`
-  (`GSF Spike Layer`) — це був навмисно тимчасовий носій з ім'ям, яке НЕ мало
-  збігатися з production-ім'ям, щоб уникнути колізії в базі під час гейтів.
-  Production DocType піде під іменем `GSF Stock Layer` (як у ТЗ).
-- `GSF Layer Balance` (§9.10), `GSF Layer Movement` (§9.11).
-- Production Inventory Dimension `gsf_stock_layer` — з тим самим
-  `after_migrate`-патчем прибирання чужих полів, що описаний в ADR-002 (код
-  патча ще не написаний, лише доведена сама техніка в гейті 0d).
-- Хуки приймання (§11): `Purchase Receipt`, `Purchase Invoice`,
-  `Stock Entry Material Receipt` → створення шару, guard на
-  Company/Warehouse/Location binding.
-- `GSF Opening Stock Import` (§38.2) — можна відкласти до реального запуску.
-- **§17.3 мінімізаційні правила теж сюди** (не в Phase 4 з preflight-ом) —
-  дешевше і зменшує частоту, коли preflight взагалі спрацьовує.
+### Phase 2 — залишок (не блокує Phase 3)
+- `GSF Opening Stock Import` (§38.2).
+- Integrity report (§31.6) — потребує стека зі scheduler.
+- Фікстура трекінгового товару + прогін приймання на Batch і на Serial.
 
-### Phase 3 — Global FIFO reservation
+### Phase 3 — Global FIFO reservation (НАСТУПНИЙ КРОК)
 - `GSF Allocation` / `GSF Allocation Slice` (§9.12–9.13).
 - Детермінований аллокатор — ВЖЕ ІСНУЄ як `allocate_global_fifo` у CC-модулі
   (`consignment_and_commission/services/allocation.py`), GSF просто пише
@@ -351,7 +390,7 @@ Phase 1 за §41 закрита в обсязі "foundation", НЕ більше
 
 ---
 
-## 8. П'ять пасток, у які я вже вступив — щоб ви не вступали повторно
+## 8. Шість пасток, у які я вже вступив — щоб ви не вступали повторно
 
 1. **`bench migrate` при першому підключенні нового модуля треба ДВІЧІ.**
    Перший прохід створює Module Def, другий синкає DocType. Якщо після
@@ -384,6 +423,16 @@ Phase 1 за §41 закрита в обсязі "foundation", НЕ більше
    хибний результат. Порівнюйте за МНОЖИНОЮ живих рядків, не за іменами
    (див. `gate_0e.py`).
 
+6. **`Purchase Receipt` на цьому сайті не проводиться «просто так».** Хук
+   `erpnext_ua.ua_receiving.service.validate_purchase_receipt` вимагає
+   українські реквізити первинного документа: `supplier_delivery_note`,
+   `ua_supplier_document_type` (Select із фіксованими значеннями, напр.
+   `Видаткова накладна постачальника`), `ua_supplier_document_date`,
+   `ua_received_by` (Link на `User`), `ua_receipt_verified` і, якщо
+   `Buying Settings.ua_require_supplier_document_attachment` увімкнено,
+   `ua_supplier_document_file`. Будь-яка тестова фікстура з приходом має їх
+   заповнювати, інакше падає ще до GSF-хуків.
+
 ---
 
 ## 9. Як перевіряти будь-яку зміну (мінімальний ритуал)
@@ -414,21 +463,25 @@ docker exec frappe-test-backend-1 bench --site postest.local migrate
 
 ## 10. Рекомендований наступний крок
 
-**Почати Phase 2 (layer registry)**, у такому порядку:
+**Почати Phase 3 (global FIFO reservation)**, у такому порядку:
 
-1. `GSF Stock Layer` DocType (§9.9) — production-версія, за зразком уже
-   написаних Phase 1 DocType (`erpnext_ua/group_stock_fifo/doctype/`), не за
-   зразком spike-носія.
-2. Production Inventory Dimension + `after_migrate`-патч прибирання чужих
-   полів (ADR-002) — це перший production-код, що торкається схеми складу,
-   тож перевіряти на сайті обов'язково, юніт-тестів недостатньо (див. пастку
-   №2 і №4).
-3. `GSF Layer Balance`, `GSF Layer Movement`.
-4. Хуки приймання (§11) — і одразу §17.3 мінімізаційні правила, поки дешево.
+1. Адаптер кандидатів поверх `allocate_global_fifo` з CC-модуля (ADR-013).
+   Джерело кандидатів тепер існує: `GSF Layer Balance` дає позиції, а
+   `GSF Stock Layer.original_received_datetime` — глобальний FIFO-порядок, і
+   під це вже є індекс `gsf_layer_fifo`. Свій аллокатор НЕ писати.
+2. `GSF Allocation` / `GSF Allocation Slice` (§9.12–9.13) з `idempotency_key`
+   як unique — так само, як зроблено для `GSF Layer Movement`.
+3. Lock order §13.2 (шість рівнів) і TTL. Concurrency-тест на реальне
+   double-booking (§37.7) писати ОДРАЗУ тут, а не відкладати в Phase 8: у
+   CC-модулі такий тест уже є, з нього можна взяти форму.
+4. `/allocation/reserve`, `/allocation/release`, `/allocation/preview`.
 
 Перед тим, як писати warehouse provisioning і CC discovery (відкладені з
 Phase 1) — треба фікстуру з реальним `CC Location` на тестовому сайті, інакше
 discovery буде написаний без доказу.
+
+Найдешевше, що можна закрити принагідно: фікстура трекінгового товару, щоб
+приймання на Batch і на Serial теж мало живий прогін, а не лише код.
 
 ---
 
