@@ -26,6 +26,7 @@ def readiness() -> ReadinessReport:
     _check_groups(frappe, report)
     _check_warehouse_bindings(frappe, report)
     _check_lanes(frappe, report)
+    _check_counterparty_dimension(frappe, report)
     return report
 
 
@@ -84,6 +85,46 @@ def _check_groups(frappe: Any, report: ReadinessReport) -> None:
                     f"group {group.name} currency {group.base_currency}"
                 )
             _check_member_bindings(frappe, report, group.name, member)
+            _check_clearing(frappe, report, group.name, member)
+
+
+def _check_clearing(frappe: Any, report: ReadinessReport, group: str, member: Any) -> None:
+    """ADR-005: reallocation cannot post without both balance-sheet accounts."""
+    from .clearing import assert_balance_sheet
+    from .domain import GSFError
+
+    for fieldname in ("default_due_from_stock_account", "default_due_to_stock_account"):
+        account = frappe.db.get_value(
+            "GSF Group Member", {"parent": group, "company": member.company}, fieldname
+        )
+        if not account:
+            report.block(
+                f"{member.company} has no {fieldname.replace('_', ' ')} "
+                f"(CLEARING_ACCOUNT_MISSING)"
+            )
+            continue
+        try:
+            assert_balance_sheet(account, company=member.company)
+        except GSFError as error:
+            report.block(str(error))
+
+
+def _check_counterparty_dimension(frappe: Any, report: ReadinessReport) -> None:
+    """A warning, not a block, and the reason is a platform limit.
+
+    ADR-005 asks for a `Counterparty Accounting Company` accounting dimension
+    and wants its absence to block. ERPNext 16 refuses to create an Accounting
+    Dimension over `Company` at all, so blocking here would make the gate
+    permanently unopenable. Reconciliation by counterparty runs off
+    `GSF Reallocation Leg.counterparty_company` (§9.15) in the meantime.
+    """
+    from .clearing import COUNTERPARTY_DIMENSION, counterparty_dimension_field
+
+    if not counterparty_dimension_field():
+        report.warn(
+            f"No {COUNTERPARTY_DIMENSION} accounting dimension; clearing balances are "
+            "reconcilable only through GSF Reallocation Leg, not through GL reports"
+        )
 
 
 def _check_member_bindings(frappe: Any, report: ReadinessReport, group: str, member: Any) -> None:

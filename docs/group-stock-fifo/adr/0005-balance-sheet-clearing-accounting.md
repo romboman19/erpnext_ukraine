@@ -87,3 +87,37 @@ outside this ADR and outside the domain.
 - The spike fixture keeps its single-account shape. It is evidence of the
   posting mechanism, not a model of the production chart of accounts, and the
   evidence files say so.
+
+## Amendment, 2026-07-30 (Phase 4): the counterparty dimension is not buildable
+
+The decision above requires a `Counterparty Accounting Company` **accounting
+dimension**. ERPNext 16 does not allow one. Probed on `postest.local`:
+
+```python
+frappe.get_doc({"doctype": "Accounting Dimension", "document_type": "Company"}).insert()
+# ValidationError: Not allowed to create accounting dimension for Company
+```
+
+The refusal is explicit in ERPNext, not incidental: `company` is already a
+column on every accounting document, so a dimension of that type would collide
+with it. No configuration makes this work.
+
+**What holds instead.** The reconciliation key moves from the GL to GSF's own
+records: `GSF Reallocation Leg` (§9.15) already carries `counterparty_company`
+alongside `source_stock_value`, `destination_stock_value` and both clearing
+accounts. §31.6's requirement — "due-from = due-to за
+group/counterparty/reallocation" — is evaluable from that table joined to its
+vouchers, which is the property this ADR wanted the dimension for. What is lost
+is reconciliation from a *standard GL report* without touching GSF tables.
+
+**What would restore it.** A dimension over a GSF-owned mirror DocType (one row
+per member company) rather than over `Company` itself. That is a real option and
+deliberately not taken now: it adds a shadow registry that has to be kept in
+step with `Company`, to buy a reporting convenience for balances that §15.2 says
+are eliminated at group level anyway. Revisit if the owner's accountant needs
+the split inside standard reports.
+
+**Readiness changes accordingly.** The two accounts stay **blocking** — they are
+GSF configuration and reallocation cannot post without them. The dimension
+becomes a **warning**, because blocking on something the platform refuses to
+create would make the feature gate permanently unopenable.
