@@ -33,7 +33,6 @@ import frappe
 from frappe.utils import now_datetime
 
 from ..setup.layer_dimension import INCOMING_LAYER_FIELD, LAYER_FIELD
-from .allocations import release_positions
 from .clearing import ClearingPair, clearing_pair, counterparty_values
 from .domain import GSFError, balance_identity
 from .layers import apply_to_balance, record_movement
@@ -427,7 +426,13 @@ def _assert_exact_transfer(source: Decimal, destination: Decimal, *, source_comp
 
 
 def _shift_balance(move: SliceMove, *, allocation: Any, stage_warehouse: str, entry: Any) -> None:
-    """Move the §9.10 cache with the stock: out of the pool, into the stage."""
+    """Move the §9.10 cache with the stock: out of the pool, into the stage.
+
+    The hold on the source position is released in the same write that removes
+    the quantity. The reservation and the stock it was holding stop existing at
+    the same instant, so releasing afterwards would briefly leave the row
+    claiming a hold on stock it no longer has.
+    """
     value = _row_value(entry, move, move.source_warehouse)
     apply_to_balance(
         stock_layer=move.stock_layer,
@@ -435,6 +440,7 @@ def _shift_balance(move: SliceMove, *, allocation: Any, stage_warehouse: str, en
         warehouse=move.source_warehouse,
         qty=float(-move.qty),
         stock_value=float(-value),
+        reserved_delta=float(-move.qty),
     )
     apply_to_balance(
         stock_layer=move.stock_layer,
@@ -525,9 +531,10 @@ def _settle(allocation: Any, reallocation: Any, legs: list[dict[str, Any]]) -> N
         reallocation.status = "PREPARED"
         reallocation.save(ignore_permissions=True)
 
-        # The hold on the source pool ends here: the stock has physically left
-        # it, so the reservation has become stage stock rather than a promise.
-        release_positions(allocation)
+        # Each leg already released its own hold as the stock left, so the
+        # allocation is marked settled rather than released again — a second
+        # decrement would hand back units another allocation still holds.
+        allocation.positions_released = 1
         allocation.status = ALLOCATION_PREPARED
         allocation.save(ignore_permissions=True)
 

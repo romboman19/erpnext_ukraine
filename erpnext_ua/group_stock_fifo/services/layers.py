@@ -249,6 +249,7 @@ def apply_to_balance(
     warehouse: str,
     qty: float,
     stock_value: float,
+    reserved_delta: float = 0,
     last_sle: str | None = None,
 ) -> str:
     """Move the §9.10 cache for one layer position.
@@ -256,6 +257,12 @@ def apply_to_balance(
     A cache, not a source of truth: §9.10 allows it to lag the ledger but never
     to hide a divergence from it, so nothing here recomputes a value — it only
     accumulates what the ledger already reported.
+
+    `reserved_delta` moves with `qty` rather than afterwards. When reserved
+    stock leaves a pool, the two have to fall in the same write: releasing the
+    hold a moment later leaves the row claiming more reserved than it holds, and
+    the controller's own guard rejects it — which is how this parameter came to
+    exist.
     """
     name = balance_identity(stock_layer=stock_layer, company=company, warehouse=warehouse)
     existing = frappe.db.exists("GSF Layer Balance", name)
@@ -263,6 +270,7 @@ def apply_to_balance(
         balance = frappe.get_doc("GSF Layer Balance", name)
         balance.actual_qty_cache = (balance.actual_qty_cache or 0) + qty
         balance.stock_value_cache = (balance.stock_value_cache or 0) + stock_value
+        balance.reserved_qty_cache = max((balance.reserved_qty_cache or 0) + reserved_delta, 0)
     else:
         balance = frappe.get_doc(
             {
