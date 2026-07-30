@@ -230,6 +230,17 @@ def teardown(confirm_write):
             if frappe.db.get_value("GSF Stock Layer", frappe.db.get_value(
                     "GSF Layer Movement", name, "stock_layer"), "item_code") == ITEM:
                 frappe.delete_doc("GSF Layer Movement", name, force=True, ignore_permissions=True)
+        # Balances go before the vouchers. Cancelling a reallocation does not
+        # reverse the §9.10 caches — Phase 4 has no compensation path yet — so
+        # §11.4's guard would otherwise refuse to cancel the seeding receipt on
+        # the grounds that its layer still holds stock in the stage.
+        for name in frappe.get_all("GSF Layer Balance", pluck="name"):
+            if frappe.db.get_value(
+                "GSF Stock Layer", frappe.db.get_value("GSF Layer Balance", name, "stock_layer"),
+                "item_code",
+            ) == ITEM:
+                frappe.delete_doc("GSF Layer Balance", name, force=True, ignore_permissions=True)
+
         # Cancelled newest-first: a reallocation receipt has to go before the
         # issue that funded it, and both before the receipt that seeded them.
         for entry in frappe.get_all(
