@@ -18,6 +18,7 @@ ALLOWED_SITES = {"postest.local"}
 GROUP = "GSF Phase 3"
 LOCATION_CODE = "P3"
 ITEM = "GSF-P3-ITEM"
+CUSTOMER = "GSF Phase 3 Покупець"
 LAYERS = [
     ("A", 2, 1000, "2026-01-10 09:00:00"),
     ("B", 3, 1100, "2026-02-01 09:00:00"),
@@ -144,6 +145,17 @@ def build(confirm_write):
             "doctype": "GSF Staging Lane", "lane_code": "P3-LANE-1", "company_group": GROUP,
             "physical_location": location, "company": seller, "warehouse": stage,
             "consumer_type": "MANUAL", "enabled": 1, "status": "AVAILABLE",
+        }).insert(ignore_permissions=True)
+
+    # §18.3: a managed sale needs one Item on several rows. Enabled here
+    # explicitly — GSF itself must never flip a global ERPNext setting (§44) —
+    # and restored by teardown.
+    if not frappe.db.get_single_value("Selling Settings", "allow_multiple_items"):
+        frappe.db.set_single_value("Selling Settings", "allow_multiple_items", 1)
+
+    if not frappe.db.exists("Customer", CUSTOMER):
+        frappe.get_doc({
+            "doctype": "Customer", "customer_name": CUSTOMER, "customer_type": "Individual",
         }).insert(ignore_permissions=True)
 
     settings = frappe.get_single("GSF Settings")
@@ -281,6 +293,17 @@ def teardown(confirm_write):
             frappe.delete_doc("GSF Company Group", GROUP, force=True, ignore_permissions=True)
         if frappe.db.exists("Item", ITEM):
             frappe.delete_doc("Item", ITEM, force=True, ignore_permissions=True)
+        for invoice in frappe.get_all(
+            "Sales Invoice", filters={"customer": CUSTOMER}, fields=["name", "docstatus"],
+            order_by="creation desc",
+        ):
+            doc = frappe.get_doc("Sales Invoice", invoice.name)
+            if doc.docstatus == 1:
+                doc.cancel()
+            frappe.delete_doc("Sales Invoice", invoice.name, force=True, ignore_permissions=True)
+        if frappe.db.exists("Customer", CUSTOMER):
+            frappe.delete_doc("Customer", CUSTOMER, force=True, ignore_permissions=True)
+        frappe.db.set_single_value("Selling Settings", "allow_multiple_items", 0)
         settings = frappe.get_single("GSF Settings")
         settings.enabled = 0
         settings.save(ignore_permissions=True)
