@@ -1,0 +1,207 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "creation": "2026-07-31 00:00:00.000000",
+ "description": "Persistent saga for one external sale (§9.16). Survives the transactions it coordinates, because fiscalization does not.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "company_group",
+  "physical_location",
+  "seller_company",
+  "column_break_scope",
+  "customer",
+  "staging_lane",
+  "posting_datetime",
+  "currency",
+  "conversion_rate",
+  "section_request",
+  "idempotency_key",
+  "request_fingerprint",
+  "column_break_request",
+  "external_order_doctype",
+  "external_order_name",
+  "section_lines",
+  "lines",
+  "section_states",
+  "stock_state",
+  "erp_sale_state",
+  "column_break_states",
+  "payment_state",
+  "fiscal_state",
+  "section_results",
+  "sales_invoice",
+  "reallocations",
+  "column_break_results",
+  "prro_receipt_id",
+  "retry_count",
+  "completed_at",
+  "section_review",
+  "failure_code",
+  "manual_review_reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "DRAFT\nRESERVING\nRESERVED\nPREPARING_STOCK\nSTOCK_PREPARED\nERP_SALE_SUBMITTED\nFISCAL_PENDING\nFISCAL_RETRY\nCOMPLETED\nEXPIRED\nCANCELLED\nCOMPENSATING\nCOMPENSATED\nFAILED\nMANUAL_REVIEW\nRETURN_IN_PROGRESS\nRETURNED",
+   "default": "DRAFT",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "company_group",
+   "fieldtype": "Link",
+   "label": "Company Group",
+   "options": "GSF Company Group",
+   "reqd": 1
+  },
+  {
+   "fieldname": "physical_location",
+   "fieldtype": "Link",
+   "label": "Physical Location",
+   "options": "GSF Physical Location",
+   "reqd": 1
+  },
+  {
+   "fieldname": "seller_company",
+   "fieldtype": "Link",
+   "label": "Seller Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {"fieldname": "column_break_scope", "fieldtype": "Column Break"},
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "staging_lane",
+   "fieldtype": "Link",
+   "label": "Staging Lane",
+   "options": "GSF Staging Lane",
+   "read_only": 1
+  },
+  {"fieldname": "posting_datetime", "fieldtype": "Datetime", "label": "Posting Datetime"},
+  {"fieldname": "currency", "fieldtype": "Link", "label": "Currency", "options": "Currency"},
+  {"fieldname": "conversion_rate", "fieldtype": "Float", "label": "Conversion Rate"},
+  {"fieldname": "section_request", "fieldtype": "Section Break", "label": "Request Identity"},
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Idempotency Key",
+   "reqd": 1,
+   "unique": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "request_fingerprint",
+   "fieldtype": "Data",
+   "label": "Request Fingerprint",
+   "read_only": 1
+  },
+  {"fieldname": "column_break_request", "fieldtype": "Column Break"},
+  {
+   "fieldname": "external_order_doctype",
+   "fieldtype": "Link",
+   "label": "External Order DocType",
+   "options": "DocType",
+   "description": "ADR-012: the checkout is a route under an existing order, never its own life cycle."
+  },
+  {
+   "fieldname": "external_order_name",
+   "fieldtype": "Dynamic Link",
+   "label": "External Order",
+   "options": "external_order_doctype",
+   "search_index": 1
+  },
+  {"fieldname": "section_lines", "fieldtype": "Section Break", "label": "Lines"},
+  {"fieldname": "lines", "fieldtype": "Table", "label": "Lines", "options": "GSF Checkout Line"},
+  {"fieldname": "section_states", "fieldtype": "Section Break", "label": "Sub-states"},
+  {
+   "fieldname": "stock_state",
+   "fieldtype": "Select",
+   "label": "Stock State",
+   "options": "NONE\nRESERVED\nPREPARED\nCONSUMED\nCOMPENSATED",
+   "default": "NONE",
+   "read_only": 1
+  },
+  {
+   "fieldname": "erp_sale_state",
+   "fieldtype": "Select",
+   "label": "ERP Sale State",
+   "options": "NONE\nSUBMITTED\nCANCELLED",
+   "default": "NONE",
+   "read_only": 1
+  },
+  {"fieldname": "column_break_states", "fieldtype": "Column Break"},
+  {
+   "fieldname": "payment_state",
+   "fieldtype": "Select",
+   "label": "Payment State",
+   "options": "NONE\nPENDING\nPAID\nFAILED",
+   "default": "NONE"
+  },
+  {
+   "fieldname": "fiscal_state",
+   "fieldtype": "Select",
+   "label": "Fiscal State",
+   "options": "NONE\nNOT_REQUIRED\nPENDING\nDONE\nUNCERTAIN\nFAILED",
+   "default": "NONE",
+   "description": "Owned by POS Order, not by GSF (ADR-012). Mirrored here for the saga to read."
+  },
+  {"fieldname": "section_results", "fieldtype": "Section Break", "label": "Results"},
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "label": "Sales Invoice",
+   "options": "Sales Invoice",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "reallocations",
+   "fieldtype": "Small Text",
+   "label": "Reallocations",
+   "read_only": 1,
+   "description": "One per line, in preparation order. What a compensation has to reverse."
+  },
+  {"fieldname": "column_break_results", "fieldtype": "Column Break"},
+  {"fieldname": "prro_receipt_id", "fieldtype": "Data", "label": "PRRO Receipt ID", "read_only": 1},
+  {"fieldname": "retry_count", "fieldtype": "Int", "label": "Retry Count", "read_only": 1},
+  {"fieldname": "completed_at", "fieldtype": "Datetime", "label": "Completed At", "read_only": 1},
+  {"fieldname": "section_review", "fieldtype": "Section Break", "label": "Review"},
+  {"fieldname": "failure_code", "fieldtype": "Data", "label": "Failure Code", "read_only": 1},
+  {"fieldname": "manual_review_reason", "fieldtype": "Small Text", "label": "Manual Review Reason"}
+ ],
+ "issingle": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-07-31 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Checkout",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "report": 1, "export": 1, "print": 1, "email": 1, "share": 1},
+  {"role": "GSF System Manager", "read": 1, "write": 1, "report": 1, "export": 1, "print": 1, "email": 1, "share": 1},
+  {"role": "GSF Stock Manager", "read": 1, "report": 1, "export": 1},
+  {"role": "GSF Manual Review Operator", "read": 1, "write": 1, "report": 1, "export": 1},
+  {"role": "GSF Auditor", "read": 1, "report": 1, "export": 1},
+  {"role": "GSF Stock User", "read": 1}
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "customer"
+}

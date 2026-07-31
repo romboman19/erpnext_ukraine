@@ -137,6 +137,91 @@ def allocation_reserve(
 
 
 @frappe.whitelist(methods=["POST"])
+def checkout_open(
+    *,
+    idempotency_key: str,
+    company_group: str,
+    physical_location: str,
+    seller_company: str,
+    customer: str,
+    lines: str | list[dict[str, Any]],
+    external_order_doctype: str | None = None,
+    external_order_name: str | None = None,
+    requires_fiscalization: str | int | bool = 0,
+) -> dict[str, Any]:
+    """`POST /checkout/open` — record the basket, then walk it as far as it goes."""
+    frappe.only_for(OPERATOR_ROLES)
+    from .services.checkout import CheckoutLine, CheckoutRequest, open_checkout, run
+
+    parsed = json.loads(lines) if isinstance(lines, str) else lines
+    if not isinstance(parsed, list):
+        raise GSFError("lines must be a JSON list", "MANUAL_REVIEW_REQUIRED")
+
+    checkout = open_checkout(
+        CheckoutRequest(
+            idempotency_key=idempotency_key,
+            company_group=company_group,
+            physical_location=physical_location,
+            seller_company=seller_company,
+            customer=customer,
+            external_order_doctype=external_order_doctype,
+            external_order_name=external_order_name,
+            requires_fiscalization=bool(int(requires_fiscalization or 0)),
+            lines=tuple(
+                CheckoutLine(
+                    item_code=str(row["item_code"]),
+                    qty=_decimal(row["qty"], "qty"),
+                    rate=_decimal(row["rate"], "rate"),
+                    external_row_id=row.get("external_row_id"),
+                )
+                for row in parsed
+            ),
+        )
+    )
+    return checkout_payload(run(checkout.name))
+
+
+@frappe.whitelist(methods=["POST"])
+def checkout_resume(*, checkout: str) -> dict[str, Any]:
+    """`POST /checkout/resume` — carry on from wherever this one stopped."""
+    frappe.only_for(OPERATOR_ROLES)
+    from .services.checkout import run
+
+    return checkout_payload(run(checkout))
+
+
+@frappe.whitelist(methods=["POST"])
+def checkout_abort(*, checkout: str, reason: str = "aborted by request") -> dict[str, Any]:
+    """`POST /checkout/abort` — release or compensate, whichever the state owes."""
+    frappe.only_for(OPERATOR_ROLES)
+    from .services.checkout import abort
+
+    return checkout_payload(abort(checkout, reason=reason))
+
+
+def checkout_payload(checkout: Any) -> dict[str, Any]:
+    return {
+        "name": checkout.name,
+        "status": checkout.status,
+        "stock_state": checkout.stock_state,
+        "erp_sale_state": checkout.erp_sale_state,
+        "fiscal_state": checkout.fiscal_state,
+        "sales_invoice": checkout.sales_invoice,
+        "staging_lane": checkout.staging_lane,
+        "failure_code": checkout.failure_code,
+        "lines": [
+            {
+                "item_code": line.item_code,
+                "qty": line.qty,
+                "rate": line.rate,
+                "allocation": line.allocation,
+            }
+            for line in checkout.lines
+        ],
+    }
+
+
+@frappe.whitelist(methods=["POST"])
 def allocation_release(*, allocation: str, reason: str = "released by request") -> dict[str, Any]:
     """`POST /allocation/release`."""
     frappe.only_for(OPERATOR_ROLES)
