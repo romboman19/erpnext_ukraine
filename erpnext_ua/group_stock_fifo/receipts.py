@@ -41,6 +41,13 @@ from erpnext_ua.group_stock_fifo.setup.layer_dimension import (
 def register_receipt_layers(doc, method=None) -> None:
     """§11.2 before submit: one PENDING layer per managed row, tagged onto the row."""
     for child, row, pool in _managed_rows(doc):
+        if child.get(row.layer_fieldname):
+            # The row already names a layer, so it is stock coming *back* into a
+            # pool — a compensating receipt (§23.2) — not a primary receipt.
+            # §11 registers origins; registering this one would mint a second
+            # identity for stock that already has one and date it today, which
+            # silently moves it to the front of the global FIFO queue.
+            continue
         check_tracking(row, abs(child.get("qty") or 0))
         assert_can_receive(pool, row.company)
         child.set(row.layer_fieldname, ensure_pending_layer(row, pool))
