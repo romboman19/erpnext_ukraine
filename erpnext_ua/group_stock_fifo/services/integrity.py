@@ -232,3 +232,21 @@ def _check_stale_allocations(report: IntegrityReport, *, company_group: str | No
             f"{allocation.status} but expired at {allocation.expires_at}; "
             "expire_due_allocations has not run",
         )
+
+
+def log_critical_findings() -> int:
+    """Scheduled pass: surface critical findings where an operator will see them.
+
+    Logs rather than fixes. Every critical finding here means two records that
+    should agree do not, and choosing which one is right is a judgement about
+    real stock or real money — §20.2 and §44 both say a machine must not make it.
+    """
+    if not frappe.db.get_single_value("GSF Settings", "enabled"):
+        return 0
+    report = check()
+    for finding in report.critical:
+        frappe.log_error(
+            title=f"GSF integrity: {finding.code}",
+            message=f"{finding.subject}: {finding.detail}",
+        )
+    return len(report.critical)

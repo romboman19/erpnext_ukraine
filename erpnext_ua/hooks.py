@@ -185,6 +185,7 @@ doc_events = {
 		"before_validate": "erpnext_ua.ua_receiving.pricing.apply_supplier_price_vat",
 		"before_submit": [
 			"erpnext_ua.ua_receiving.service.validate_purchase_receipt",
+			f"{GSF}.services.period.guard_backdated_document",
 			f"{GSF}.receipts.register_receipt_layers",
 		],
 		"on_submit": f"{GSF}.receipts.open_receipt_layers",
@@ -195,6 +196,7 @@ doc_events = {
 		"before_validate": "erpnext_ua.ua_receiving.pricing.apply_supplier_price_vat",
 		"before_submit": [
 			f"{CC}.tracking.validate_purchase_invoice_tracking_ownership",
+			f"{GSF}.services.period.guard_backdated_document",
 			f"{GSF}.receipts.register_receipt_layers",
 		],
 		"on_submit": f"{GSF}.receipts.open_receipt_layers",
