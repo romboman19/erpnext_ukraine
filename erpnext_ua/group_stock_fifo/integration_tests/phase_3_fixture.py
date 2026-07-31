@@ -247,6 +247,9 @@ def teardown(confirm_write):
                 doc.cancel()
             frappe.delete_doc("Sales Invoice", invoice.name, force=True, ignore_permissions=True)
 
+        for name in frappe.get_all("GSF Physical Stock Count",
+                                   filters={"company_group": GROUP}, pluck="name"):
+            frappe.delete_doc("GSF Physical Stock Count", name, force=True, ignore_permissions=True)
         for name in frappe.get_all("GSF Checkout",
                                    filters={"company_group": GROUP}, pluck="name"):
             frappe.delete_doc("GSF Checkout", name, force=True, ignore_permissions=True)
@@ -326,5 +329,6 @@ def teardown(confirm_write):
         "scope_locks": frappe.db.count("GSF Scope Lock"),
         "reallocations": frappe.db.count("GSF Stock Reallocation"),
         "checkouts": frappe.db.count("GSF Checkout"),
+        "counts": frappe.db.count("GSF Physical Stock Count"),
         "gsf_enabled": frappe.db.get_single_value("GSF Settings", "enabled"),
     }
