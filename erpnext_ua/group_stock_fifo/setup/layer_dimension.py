@@ -35,10 +35,12 @@ MANAGED_FIELD = "gsf_managed"
 #: user-visible line, and without these the rows cannot be traced back to the
 #: slice that justified them — nor grouped again for printing (§18.4).
 MANAGED_SALE_FIELD = "gsf_managed_sale"
+MANAGED_RETURN_FIELD = "gsf_managed_return"
 CHECKOUT_FIELD = "gsf_checkout"
 ALLOCATION_FIELD = "gsf_allocation"
 SLICE_FIELD = "gsf_allocation_slice"
 DISPLAY_GROUP_FIELD = "gsf_display_group"
+RETURN_ORIGIN_LAYER_FIELD = "gsf_return_origin_layer"
 
 LAYER_BALANCE_INDEX = "gsf_layer_balance"
 LAYER_FIFO_INDEX = "gsf_layer_fifo"
@@ -50,10 +52,16 @@ REQUIRED_COLUMNS = {
     "Stock Ledger Entry": (LAYER_FIELD,),
     "Purchase Receipt Item": (LAYER_FIELD,),
     "Purchase Invoice Item": (LAYER_FIELD,),
-    "Sales Invoice Item": (LAYER_FIELD,),
     "Stock Entry": (MANAGED_FIELD,),
     "Stock Reconciliation": (MANAGED_FIELD,),
-    "Sales Invoice": (MANAGED_SALE_FIELD, CHECKOUT_FIELD),
+    "Sales Invoice": (MANAGED_SALE_FIELD, MANAGED_RETURN_FIELD, CHECKOUT_FIELD),
+    "Sales Invoice Item": (
+        LAYER_FIELD,
+        ALLOCATION_FIELD,
+        SLICE_FIELD,
+        DISPLAY_GROUP_FIELD,
+        RETURN_ORIGIN_LAYER_FIELD,
+    ),
 }
 
 
@@ -103,6 +111,14 @@ def _ensure_managed_flag(frappe: Any) -> None:
                     "search_index": 1,
                 },
                 {
+                    "fieldname": MANAGED_RETURN_FIELD,
+                    "label": "GSF Managed Return",
+                    "fieldtype": "Check",
+                    "read_only": 1,
+                    "no_copy": 1,
+                    "search_index": 1,
+                },
+                {
                     "fieldname": CHECKOUT_FIELD,
                     "label": "GSF Checkout",
                     "fieldtype": "Data",
@@ -136,6 +152,15 @@ def _ensure_managed_flag(frappe: Any) -> None:
                     "no_copy": 1,
                     "search_index": 1,
                     "description": "§18.2: every technical row of one user-visible line shares this.",
+                },
+                {
+                    "fieldname": RETURN_ORIGIN_LAYER_FIELD,
+                    "label": "GSF Return Origin Layer",
+                    "fieldtype": "Link",
+                    "options": "GSF Stock Layer",
+                    "read_only": 1,
+                    "no_copy": 1,
+                    "search_index": 1,
                 },
             ],
         },

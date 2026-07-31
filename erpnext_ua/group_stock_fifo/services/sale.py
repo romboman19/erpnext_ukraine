@@ -44,6 +44,9 @@ class SaleLine:
 
     allocation: str
     rate: Decimal
+    uom: str | None = None
+    barcode: str | None = None
+    discount_amount: Decimal = Decimal("0")
 
 
 def sell(
@@ -53,6 +56,7 @@ def sell(
     checkout: str,
     posting_date: str | None = None,
     posting_time: str | None = None,
+    invoice_values: dict[str, Any] | None = None,
 ) -> Any:
     """Turn every prepared allocation of one checkout into one checked invoice.
 
@@ -76,6 +80,7 @@ def sell(
         checkout=checkout,
         posting_date=posting_date,
         posting_time=posting_time,
+        invoice_values=invoice_values or {},
     )
     _assert_cogs_matches(invoice, prepared=prepared)
     for allocation, reallocation in zip(allocations, reallocations):
@@ -157,16 +162,23 @@ def _submit_invoice(
     checkout: str,
     posting_date: str | None,
     posting_time: str | None,
+    invoice_values: dict[str, Any],
 ) -> Any:
     """§18.2: one row per slice, all out of the stage lane, all tagged."""
     company = allocations[0].seller_company
     rows = []
     for allocation, line in zip(allocations, lines):
+        discount_percentage = _discount_percentage(allocation, line)
+        net_rate = line.rate * (Decimal("100") - discount_percentage) / Decimal("100")
         rows.extend(
             {
                 "item_code": allocation.item_code,
                 "qty": float(slice_row.qty),
-                "rate": float(line.rate),
+                "rate": float(net_rate),
+                "price_list_rate": float(line.rate),
+                "discount_percentage": float(discount_percentage),
+                "uom": line.uom,
+                "barcode": line.barcode,
                 "warehouse": stage,
                 "income_account": _income_account(company),
                 LAYER_FIELD: slice_row.stock_layer,
@@ -179,23 +191,49 @@ def _submit_invoice(
             for slice_row in allocation.slices
         )
 
-    invoice = frappe.get_doc(
-        {
-            "doctype": "Sales Invoice",
-            "company": company,
-            "customer": customer,
-            "update_stock": 1,
-            "set_posting_time": 1 if posting_date else 0,
-            "posting_date": posting_date,
-            "posting_time": posting_time,
-            MANAGED_SALE_FIELD: 1,
-            CHECKOUT_FIELD: checkout,
-            "items": rows,
-        }
-    )
+    values = {
+        "doctype": "Sales Invoice",
+        "company": company,
+        "customer": customer,
+        "update_stock": 1,
+        "ignore_pricing_rule": 1,
+        "set_posting_time": 1 if posting_date else 0,
+        "posting_date": posting_date,
+        "posting_time": posting_time,
+        MANAGED_SALE_FIELD: 1,
+        CHECKOUT_FIELD: checkout,
+        "items": rows,
+    }
+    values.update(_allowed_invoice_values(invoice_values))
+    invoice = frappe.get_doc(values)
+    invoice.set_missing_values()
     invoice.insert(ignore_permissions=True)
     invoice.submit()
     return invoice
+
+
+def _discount_percentage(allocation: Any, line: SaleLine) -> Decimal:
+    qty = sum((Decimal(str(row.qty)) for row in allocation.slices), Decimal("0"))
+    gross = qty * line.rate
+    if line.discount_amount < 0 or line.discount_amount > gross:
+        raise GSFError(
+            f"Allocation {allocation.name} has an invalid discount of {line.discount_amount}",
+            "MANUAL_REVIEW_REQUIRED",
+        )
+    return line.discount_amount * Decimal("100") / gross if gross else Decimal("0")
+
+
+def _allowed_invoice_values(values: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "is_pos",
+        "ua_pos_order",
+        "ua_pos_desk",
+        "ua_pos_shift",
+        "payments",
+        "change_amount",
+        "remarks",
+    }
+    return {key: value for key, value in values.items() if key in allowed}
 
 
 def _income_account(company: str) -> str:
@@ -245,7 +283,9 @@ def _settle_allocation(allocation: Any, reallocation: Any, *, invoice: Any, stag
     """Record the consumption and empty the stage cache for one line."""
     posting = now_datetime()
     for row in allocation.slices:
-        value = _row_cogs(invoice.name, row.stock_layer)
+        invoice_row = _invoice_row_for_slice(invoice, row.name)
+        value = _row_cogs(invoice.name, invoice_row.name)
+        row.sales_invoice_item = invoice_row.name
         record_movement(
             stock_layer=row.stock_layer,
             movement_type="SALE_CONSUMPTION",
@@ -256,7 +296,8 @@ def _settle_allocation(allocation: Any, reallocation: Any, *, invoice: Any, stag
             source_warehouse=stage,
             voucher_type="Sales Invoice",
             voucher_no=invoice.name,
-            idempotency_key=f"SALE_CONSUMPTION:{invoice.name}:{row.stock_layer}",
+            voucher_detail_no=invoice_row.name,
+            idempotency_key=f"SALE_CONSUMPTION:{invoice.name}:{row.name}",
         )
         apply_to_balance(
             stock_layer=row.stock_layer,
@@ -275,14 +316,24 @@ def _settle_allocation(allocation: Any, reallocation: Any, *, invoice: Any, stag
         allocation.save(ignore_permissions=True)
 
 
-def _row_cogs(invoice_name: str, stock_layer: str) -> Decimal:
+def _invoice_row_for_slice(invoice: Any, slice_name: str) -> Any:
+    rows = [row for row in invoice.items if row.get(SLICE_FIELD) == slice_name]
+    if len(rows) != 1:
+        raise GSFError(
+            f"Sale {invoice.name} has {len(rows)} rows for allocation slice {slice_name}",
+            "MANUAL_REVIEW_REQUIRED",
+        )
+    return rows[0]
+
+
+def _row_cogs(invoice_name: str, invoice_item: str) -> Decimal:
     value = frappe.db.sql(
-        f"""
+        """
         select coalesce(sum(stock_value_difference), 0) from `tabStock Ledger Entry`
         where voucher_type = 'Sales Invoice' and voucher_no = %(invoice)s
-          and `{LAYER_FIELD}` = %(layer)s and is_cancelled = 0
+          and voucher_detail_no = %(invoice_item)s and is_cancelled = 0
         """,
-        {"invoice": invoice_name, "layer": stock_layer},
+        {"invoice": invoice_name, "invoice_item": invoice_item},
     )[0][0]
     return abs(Decimal(str(value or 0)))
 

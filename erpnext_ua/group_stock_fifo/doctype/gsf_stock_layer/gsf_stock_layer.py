@@ -82,6 +82,8 @@ def _identity_snapshot(doc) -> dict[str, object]:
             "origin_row_name",
             "tracking_type",
             "batch_no",
+            "return_origin_layer",
+            "lineage_root_layer",
         )
     }
     # The saved document carries a `datetime`, the edited one usually a string.

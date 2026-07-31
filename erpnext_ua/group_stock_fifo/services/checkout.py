@@ -55,6 +55,9 @@ class CheckoutLine:
     qty: Decimal
     rate: Decimal
     external_row_id: str | None = None
+    uom: str | None = None
+    barcode: str | None = None
+    discount_amount: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +119,9 @@ def open_checkout(request: CheckoutRequest) -> Any:
                         "qty": float(line.qty),
                         "rate": float(line.rate),
                         "external_row_id": line.external_row_id,
+                        "uom": line.uom,
+                        "barcode": line.barcode,
+                        "discount_amount": float(line.discount_amount),
                     }
                     for line in request.lines
                 ],
@@ -135,6 +141,9 @@ def _fingerprint(request: CheckoutRequest) -> str:
                 "qty": str(Decimal(str(line.qty)).normalize()),
                 "rate": str(Decimal(str(line.rate)).normalize()),
                 "external_row_id": line.external_row_id,
+                "uom": line.uom,
+                "barcode": line.barcode,
+                "discount_amount": str(Decimal(str(line.discount_amount)).normalize()),
             }
             for line in request.lines
         ],
@@ -247,11 +256,18 @@ def _sell(checkout: Any) -> Any:
     """§23: `STOCK_PREPARED → ERP_SALE_SUBMITTED`, the last reversible step."""
     invoice = sell(
         [
-            SaleLine(allocation=line.allocation, rate=Decimal(str(line.rate)))
+            SaleLine(
+                allocation=line.allocation,
+                rate=Decimal(str(line.rate)),
+                uom=line.uom,
+                barcode=line.barcode,
+                discount_amount=Decimal(str(line.discount_amount or 0)),
+            )
             for line in checkout.lines
         ],
         customer=checkout.customer,
         checkout=checkout.name,
+        invoice_values=_external_invoice_values(checkout),
     )
     _move(
         checkout,
@@ -261,6 +277,14 @@ def _sell(checkout: Any) -> Any:
         stock_state="CONSUMED",
     )
     return checkout
+
+
+def _external_invoice_values(checkout: Any) -> dict[str, Any]:
+    if checkout.external_order_doctype != "POS Order" or not checkout.external_order_name:
+        return {}
+    from .pos_ua import sale_invoice_values
+
+    return sale_invoice_values(checkout.external_order_name)
 
 
 def _complete(checkout: Any) -> Any:
@@ -349,6 +373,22 @@ def fail(checkout_name: str, *, code: str, reason: str) -> Any:
     checkout = frappe.get_doc("GSF Checkout", checkout_name)
     _move(checkout, states.FAILED, failure_code=code, manual_review_reason=reason)
     return checkout
+
+
+def record_fiscal_result(
+    checkout_name: str, *, fiscal_state: str, prro_receipt: str | None = None
+) -> Any:
+    """Mirror the POS-owned fiscal result and let the checkout finish."""
+    if fiscal_state not in {"DONE", "FAILED", "UNCERTAIN"}:
+        raise GSFError(f"Unsupported fiscal state {fiscal_state}", "MANUAL_REVIEW_REQUIRED")
+    checkout = frappe.get_doc("GSF Checkout", checkout_name)
+    checkout.fiscal_state = fiscal_state
+    checkout.prro_receipt_id = prro_receipt
+    _save(checkout)
+    if fiscal_state == "DONE" and checkout.status == states.MANUAL_REVIEW:
+        _move(checkout, states.COMPLETED, completed_at=now_datetime())
+        return checkout
+    return run(checkout.name)
 
 
 def _save(checkout: Any) -> None:

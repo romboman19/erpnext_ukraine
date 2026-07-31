@@ -1,23 +1,4 @@
-"""Customer returns (§19, ADR-009).
-
-Two decisions in §19 look arbitrary until you ask what the alternative costs.
-
-**The return goes back to the company that sold it, not the one that bought it**
-(§19.1). The buying company's books closed that stock out when it was reallocated
-away; re-opening them would mean a second intercompany movement to undo a sale
-that company was never party to.
-
-**The returned units become a new layer dated at the return, not the original
-one** (§19.2). Restoring the original FIFO date would insert stock into the
-middle of the global queue — behind units already sold, in front of units still
-on the shelf — and the local valuation queue would not agree, because ERPNext
-puts returned stock where it physically arrived. §17.2's preflight would then
-refuse every subsequent sale from that pool. A new layer keeps both orders
-saying the same thing.
-
-`return_origin_layer` preserves the link to what was sold, so the trail survives
-even though the identity does not.
-"""
+"""Controlled customer returns for GSF-managed sales (§19, ADR-009/015)."""
 
 from __future__ import annotations
 
@@ -28,7 +9,15 @@ from typing import Any
 import frappe
 from frappe.utils import now_datetime
 
-from ..setup.layer_dimension import LAYER_FIELD, MANAGED_SALE_FIELD
+from ..setup.layer_dimension import (
+    ALLOCATION_FIELD,
+    DISPLAY_GROUP_FIELD,
+    LAYER_FIELD,
+    MANAGED_RETURN_FIELD,
+    MANAGED_SALE_FIELD,
+    RETURN_ORIGIN_LAYER_FIELD,
+    SLICE_FIELD,
+)
 from .domain import (
     LAYER_OPEN,
     LAYER_PENDING,
@@ -43,7 +32,7 @@ from .layers import apply_to_balance, own_pool, record_movement, tracking_of
 
 @dataclass(frozen=True, slots=True)
 class ReturnLine:
-    """One returned row, named by the invoice row it came from."""
+    """A quantity returned against one technical Sales Invoice Item."""
 
     sales_invoice_item: str
     qty: Decimal
@@ -55,129 +44,193 @@ def accept_return(
     lines: list[ReturnLine],
     posting_date: str | None = None,
     posting_time: str | None = None,
+    invoice_values: dict[str, Any] | None = None,
 ) -> Any:
-    """Take stock back into the seller's own pool as a fresh layer (§19.2)."""
-    original = frappe.get_doc("Sales Invoice", sales_invoice)
-    if not original.get(MANAGED_SALE_FIELD):
-        raise GSFError(
-            f"{sales_invoice} is not a GSF managed sale", "MANUAL_REVIEW_REQUIRED"
-        )
-    if original.docstatus != 1:
-        raise GSFError(f"{sales_invoice} is not submitted", "MANUAL_REVIEW_REQUIRED")
-    if not lines:
-        raise GSFError("A return needs at least one line", "MANUAL_REVIEW_REQUIRED")
+    """Post a seller-owned return and preserve the exact sold cost lineage."""
+    invoice_values = invoice_values or {}
+    existing = _existing_external_return(invoice_values)
+    if existing:
+        return existing
 
-    sold_rows = {row.name: row for row in original.items}
+    original = frappe.get_doc("Sales Invoice", sales_invoice)
+    _validate_original(original)
+    _lock_original(original.name)
+    normalized = _normalise_lines(original, lines)
+    _assert_returnable(original, normalized)
+
     credit_note = _draft_credit_note(
-        original, lines=lines, sold_rows=sold_rows,
-        posting_date=posting_date, posting_time=posting_time,
+        original,
+        lines=normalized,
+        posting_date=posting_date,
+        posting_time=posting_time,
+        invoice_values=invoice_values,
     )
     layers = _tag_return_layers(original, credit_note)
     credit_note.save(ignore_permissions=True)
     credit_note.submit()
+    _assert_return_values(original, credit_note)
     _open_layers(credit_note, layers)
     return credit_note
 
 
-def _draft_credit_note(
-    original: Any,
-    *,
-    lines: list[ReturnLine],
-    sold_rows: dict[str, Any],
-    posting_date: str | None,
-    posting_time: str | None,
-) -> Any:
-    """A standard ERPNext return, routed to the right warehouse per §19.3."""
-    rows = []
+def returned_qty(sales_invoice: str, invoice_items: set[str]) -> dict[str, Decimal]:
+    """Submitted return quantity by original technical invoice row."""
+    totals = {name: Decimal("0") for name in invoice_items}
+    if not invoice_items:
+        return totals
+    returns = frappe.get_all(
+        "Sales Invoice",
+        filters={"return_against": sales_invoice, "is_return": 1, "docstatus": 1},
+        pluck="name",
+    )
+    if not returns:
+        return totals
+    rows = frappe.get_all(
+        "Sales Invoice Item",
+        filters={
+            "parent": ("in", returns),
+            "sales_invoice_item": ("in", list(invoice_items)),
+        },
+        fields=["sales_invoice_item", "qty"],
+    )
+    for row in rows:
+        totals[row.sales_invoice_item] += abs(Decimal(str(row.qty or 0)))
+    return totals
+
+
+def _validate_original(original: Any) -> None:
+    if not original.get(MANAGED_SALE_FIELD):
+        raise GSFError(f"{original.name} is not a GSF managed sale", "MANUAL_REVIEW_REQUIRED")
+    if original.docstatus != 1:
+        raise GSFError(f"{original.name} is not submitted", "MANUAL_REVIEW_REQUIRED")
+
+
+def _lock_original(name: str) -> None:
+    frappe.db.sql("select name from `tabSales Invoice` where name=%s for update", name)
+
+
+def _normalise_lines(original: Any, lines: list[ReturnLine]) -> list[ReturnLine]:
+    if not lines:
+        raise GSFError("A return needs at least one line", "MANUAL_REVIEW_REQUIRED")
+    sold_rows = {row.name: row for row in original.items}
+    totals: dict[str, Decimal] = {}
     for line in lines:
+        qty = Decimal(str(line.qty))
         sold = sold_rows.get(line.sales_invoice_item)
         if not sold:
             raise GSFError(
                 f"Row {line.sales_invoice_item} is not part of {original.name}",
                 "MANUAL_REVIEW_REQUIRED",
             )
-        if Decimal(str(line.qty)) > Decimal(str(sold.qty)):
+        if qty <= 0:
+            raise GSFError("Return quantity must be positive", "MANUAL_REVIEW_REQUIRED")
+        if not sold.get(LAYER_FIELD) or not sold.get(ALLOCATION_FIELD) or not sold.get(SLICE_FIELD):
             raise GSFError(
-                f"Cannot return {line.qty} of a row that sold {sold.qty}",
+                f"Row {sold.name} has no complete GSF layer/allocation/slice trail",
                 "MANUAL_REVIEW_REQUIRED",
             )
-        rows.append(
-            {
-                "item_code": sold.item_code,
-                # Negative on a return document: ERPNext's own convention, and
-                # what makes the credit note reverse the ledger rather than add
-                # to it.
-                "qty": -float(line.qty),
-                "rate": sold.rate,
-                "warehouse": _return_warehouse(original.company, sold.item_code),
-                "income_account": sold.income_account,
-                "sales_invoice_item": sold.name,
-            }
-        )
+        totals[sold.name] = totals.get(sold.name, Decimal("0")) + qty
+    return [ReturnLine(name, qty) for name, qty in totals.items()]
 
-    return frappe.get_doc(
+
+def _assert_returnable(original: Any, lines: list[ReturnLine]) -> None:
+    sold_rows = {row.name: row for row in original.items}
+    prior = returned_qty(original.name, set(sold_rows))
+    for line in lines:
+        sold_qty = abs(Decimal(str(sold_rows[line.sales_invoice_item].qty or 0)))
+        available = sold_qty - prior[line.sales_invoice_item]
+        if line.qty > available:
+            raise GSFError(
+                f"Cannot return {line.qty} from row {line.sales_invoice_item}; only {available} remains",
+                "MANUAL_REVIEW_REQUIRED",
+            )
+
+
+def _draft_credit_note(
+    original: Any,
+    *,
+    lines: list[ReturnLine],
+    posting_date: str | None,
+    posting_time: str | None,
+    invoice_values: dict[str, Any],
+) -> Any:
+    from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_sales_return
+
+    credit_note = make_sales_return(original.name)
+    mapped = {row.sales_invoice_item: row for row in credit_note.items}
+    selected = []
+    sold_rows = {row.name: row for row in original.items}
+    for line in lines:
+        row = mapped.get(line.sales_invoice_item)
+        sold = sold_rows[line.sales_invoice_item]
+        if not row:
+            raise GSFError(
+                f"ERPNext did not map return row {line.sales_invoice_item}",
+                "MANUAL_REVIEW_REQUIRED",
+            )
+        row.qty = -float(line.qty)
+        row.warehouse = _return_warehouse(
+            original.company, sold.item_code, sold.get(LAYER_FIELD)
+        )
+        row.set(ALLOCATION_FIELD, sold.get(ALLOCATION_FIELD))
+        row.set(SLICE_FIELD, sold.get(SLICE_FIELD))
+        row.set(DISPLAY_GROUP_FIELD, sold.get(DISPLAY_GROUP_FIELD))
+        row.set(RETURN_ORIGIN_LAYER_FIELD, sold.get(LAYER_FIELD))
+        selected.append(row)
+
+    credit_note.set("items", selected)
+    credit_note.update(
         {
-            "doctype": "Sales Invoice",
-            "company": original.company,
-            "customer": original.customer,
-            "is_return": 1,
-            "return_against": original.name,
             "update_stock": 1,
             "set_posting_time": 1 if posting_date else 0,
             "posting_date": posting_date,
             "posting_time": posting_time,
-            MANAGED_SALE_FIELD: 1,
-            "items": rows,
+            MANAGED_RETURN_FIELD: 1,
         }
-    ).insert(ignore_permissions=True)
+    )
+    credit_note.update(_allowed_invoice_values(invoice_values))
+    if "payments" in invoice_values:
+        credit_note.set("payments", invoice_values["payments"])
+    credit_note.run_method("calculate_taxes_and_totals")
+    return credit_note.insert(ignore_permissions=True)
 
 
-def _return_warehouse(company: str, item_code: str) -> str:
-    """§19.3: tracked items go to quarantine, untracked back into the pool.
+def _allowed_invoice_values(values: dict[str, Any]) -> dict[str, Any]:
+    allowed = {"is_pos", "ua_pos_order", "ua_pos_desk", "ua_pos_shift", "change_amount", "remarks"}
+    return {key: value for key, value in values.items() if key in allowed}
 
-    A tracked item's identity has to be verified before it rejoins the queue —
-    the serial on the box is not evidence that the box holds that serial — and
-    §19.3 says exact restore needs its own ADR first.
-    """
-    if tracking_of(item_code) != TRACKING_NONE:
-        quarantine = frappe.db.get_value(
-            "GSF Warehouse Binding",
-            {
-                "company": company,
-                "enabled": 1,
-                "manager_app": "GSF",
-                "warehouse_role": RETURN_QUARANTINE_ROLE,
-            },
-            "warehouse",
-        )
-        if not quarantine:
-            raise GSFError(
-                f"{company} has no GSF return quarantine warehouse; a tracked item "
-                "cannot be taken back without one (§19.3)",
-                "WAREHOUSE_BINDING_MISSING",
-            )
-        return quarantine
 
-    pool = frappe.db.get_value(
+def _return_warehouse(company: str, item_code: str, sold_layer: str) -> str:
+    role = RETURN_QUARANTINE_ROLE if tracking_of(item_code) != TRACKING_NONE else "GSF_OWN_POOL"
+    physical_location = frappe.db.get_value("GSF Stock Layer", sold_layer, "physical_location")
+    warehouse = frappe.db.get_value(
         "GSF Warehouse Binding",
-        {"company": company, "enabled": 1, "manager_app": "GSF", "warehouse_role": "GSF_OWN_POOL"},
+        {
+            "company": company,
+            "physical_location": physical_location,
+            "enabled": 1,
+            "manager_app": "GSF",
+            "warehouse_role": role,
+        },
         "warehouse",
     )
-    if not pool:
-        raise GSFError(f"{company} has no GSF own pool to return into", "WAREHOUSE_BINDING_MISSING")
-    return pool
+    if not warehouse:
+        raise GSFError(
+            f"{company} has no enabled {role} warehouse for this return",
+            "WAREHOUSE_BINDING_MISSING",
+        )
+    return warehouse
 
 
 def _tag_return_layers(original: Any, credit_note: Any) -> dict[str, str]:
-    """One new layer per returned row, linked back to what was sold (§19.2)."""
-    sold_layers = {row.name: row.get(LAYER_FIELD) for row in original.items}
+    sold_rows = {row.name: row for row in original.items}
     layers: dict[str, str] = {}
-
     for row in credit_note.items:
+        sold_layer = row.get(RETURN_ORIGIN_LAYER_FIELD)
+        if not sold_layer:
+            raise GSFError(f"Return row {row.name} has no origin layer", "MANUAL_REVIEW_REQUIRED")
         pool = own_pool(row.warehouse)
         if not pool:
-            # Quarantine is not an own pool, so no layer is minted: §19.3 keeps
-            # tracked returns out of the FIFO queue until someone checks them.
             continue
         origin = LayerOrigin(
             company_group=pool.company_group,
@@ -188,6 +241,8 @@ def _tag_return_layers(original: Any, credit_note: Any) -> dict[str, str]:
         )
         name = layer_identity(origin, site_id=frappe.local.site)
         if not frappe.db.exists("GSF Stock Layer", name):
+            root = frappe.db.get_value("GSF Stock Layer", sold_layer, "lineage_root_layer") or sold_layer
+            sold = sold_rows[row.sales_invoice_item]
             frappe.get_doc(
                 {
                     "doctype": "GSF Stock Layer",
@@ -205,7 +260,8 @@ def _tag_return_layers(original: Any, credit_note: Any) -> dict[str, str]:
                     "original_received_datetime": now_datetime(),
                     "original_received_qty": 0,
                     "tracking_type": TRACKING_NONE,
-                    "return_origin_layer": sold_layers.get(row.sales_invoice_item),
+                    "return_origin_layer": sold.get(LAYER_FIELD),
+                    "lineage_root_layer": root,
                     "created_by_service": "group_stock_fifo.services.returns",
                 }
             ).insert(ignore_permissions=True)
@@ -214,34 +270,55 @@ def _tag_return_layers(original: Any, credit_note: Any) -> dict[str, str]:
     return layers
 
 
-def _open_layers(credit_note: Any, layers: dict[str, str]) -> None:
-    """Freeze each return layer from the ledger the credit note actually wrote."""
-    for row_name, layer_name in layers.items():
-        sle = frappe.db.get_value(
-            "Stock Ledger Entry",
-            {
-                "voucher_type": "Sales Invoice",
-                "voucher_no": credit_note.name,
-                "voucher_detail_no": row_name,
-                "is_cancelled": 0,
-            },
-            ["name", "warehouse", "actual_qty", "stock_value_difference", "posting_date", "posting_time"],
-            as_dict=True,
-        )
-        if not sle:
+def _assert_return_values(original: Any, credit_note: Any) -> None:
+    tolerance = Decimal(str(frappe.db.get_single_value("GSF Settings", "currency_tolerance") or "0.01"))
+    for row in credit_note.items:
+        if not row.get(LAYER_FIELD):
+            continue
+        source = _single_sle(original.name, row.sales_invoice_item)
+        returned = _single_sle(credit_note.name, row.name)
+        source_qty = abs(Decimal(str(source.actual_qty or 0)))
+        if source_qty <= 0:
             raise GSFError(
-                f"Return row {row_name} produced no ledger entry", "SOURCE_VALUE_MISSING"
+                f"Original sale row {row.sales_invoice_item} has no issued quantity",
+                "SOURCE_VALUE_MISSING",
+            )
+        expected = abs(Decimal(str(source.stock_value_difference or 0))) * abs(
+            Decimal(str(returned.actual_qty or 0))
+        ) / source_qty
+        actual = abs(Decimal(str(returned.stock_value_difference or 0)))
+        if abs(actual - expected) > tolerance:
+            raise GSFError(
+                f"Return row {row.name} received value {actual}; expected {expected} from {row.sales_invoice_item}",
+                "RETURN_COGS_MISMATCH",
             )
 
+
+def _single_sle(invoice: str, row: str) -> Any:
+    entries = frappe.get_all(
+        "Stock Ledger Entry",
+        filters={
+            "voucher_type": "Sales Invoice",
+            "voucher_no": invoice,
+            "voucher_detail_no": row,
+            "is_cancelled": 0,
+        },
+        fields=["name", "warehouse", "actual_qty", "stock_value_difference", "posting_date", "posting_time"],
+    )
+    if len(entries) != 1:
+        raise GSFError(f"Invoice row {row} produced {len(entries)} ledger entries", "SOURCE_VALUE_MISSING")
+    return entries[0]
+
+
+def _open_layers(credit_note: Any, layers: dict[str, str]) -> None:
+    for row_name, layer_name in layers.items():
+        sle = _single_sle(credit_note.name, row_name)
         layer = frappe.get_doc("GSF Stock Layer", layer_name)
         layer.original_received_qty = abs(sle.actual_qty)
-        layer.original_received_datetime = frappe.utils.get_datetime(
-            f"{sle.posting_date} {sle.posting_time}"
-        )
+        layer.original_received_datetime = frappe.utils.get_datetime(f"{sle.posting_date} {sle.posting_time}")
         layer.origin_warehouse = sle.warehouse
         layer.layer_status = LAYER_OPEN
         layer.save(ignore_permissions=True)
-
         value = abs(Decimal(str(sle.stock_value_difference or 0)))
         record_movement(
             stock_layer=layer_name,
@@ -264,3 +341,11 @@ def _open_layers(credit_note: Any, layers: dict[str, str]) -> None:
             stock_value=float(value),
             last_sle=sle.name,
         )
+
+
+def _existing_external_return(values: dict[str, Any]) -> Any | None:
+    pos_order = values.get("ua_pos_order")
+    if not pos_order or not frappe.db.has_column("Sales Invoice", "ua_pos_order"):
+        return None
+    name = frappe.db.get_value("Sales Invoice", {"ua_pos_order": pos_order, "docstatus": ("!=", 2)}, "name")
+    return frappe.get_doc("Sales Invoice", name) if name else None

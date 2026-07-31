@@ -128,6 +128,20 @@ class LayerImmutabilityTests(TestCase):
             self.before, {**self.before, "blocked_reason": "audit"}, previous_status=LAYER_OPEN
         )
 
+    def test_return_lineage_is_immutable_after_opening(self) -> None:
+        before = {
+            **self.before,
+            "return_origin_layer": "GSFL-SOLD",
+            "lineage_root_layer": "GSFL-ROOT",
+        }
+        with self.assertRaises(GSFError) as caught:
+            check_layer_immutability(
+                before,
+                {**before, "return_origin_layer": "GSFL-OTHER"},
+                previous_status=LAYER_OPEN,
+            )
+        self.assertIn("return_origin_layer", str(caught.exception))
+
 
 class TrackingIdentityTests(TestCase):
     """§11.2: a tracked receipt must carry the exact identity it claims."""

@@ -162,12 +162,16 @@ doc_events = {
         "before_submit": [
             f"{CC}.sales_invoice.validate_managed_sales_invoice",
             f"{CC}.tracking.validate_sales_invoice_tracking_ownership",
+            f"{GSF}.services.sales_invoice.validate_managed_sales_invoice",
         ],
         "on_submit": [
             f"{CC}.sales_invoice.consume_sales_invoice_allocations",
             "erpnext_ua.ua_fiscal.sales_invoice.on_submit",
         ],
-        "before_cancel": f"{CC}.sales_invoice.before_cancel_managed_sales_invoice",
+        "before_cancel": [
+            f"{CC}.sales_invoice.before_cancel_managed_sales_invoice",
+            f"{GSF}.services.sales_invoice.before_cancel_managed_sales_invoice",
+        ],
         "on_cancel": f"{CC}.sales_invoice.on_cancel_managed_sales_invoice",
         "on_trash": f"{CC}.sales_invoice.release_draft_sales_invoice_allocations",
     },

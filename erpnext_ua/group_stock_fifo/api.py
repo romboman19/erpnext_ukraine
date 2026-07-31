@@ -182,6 +182,9 @@ def checkout_open(
                     qty=_decimal(row["qty"], "qty"),
                     rate=_decimal(row["rate"], "rate"),
                     external_row_id=row.get("external_row_id"),
+                    uom=row.get("uom"),
+                    barcode=row.get("barcode"),
+                    discount_amount=_decimal(row.get("discount_amount") or 0, "discount_amount"),
                 )
                 for row in parsed
             ),

@@ -28,6 +28,7 @@
   "serial_numbers",
   "section_audit",
   "return_origin_layer",
+  "lineage_root_layer",
   "created_by_service",
   "blocked_reason"
  ],
@@ -182,6 +183,13 @@
    "label": "Return Origin Layer",
    "options": "GSF Stock Layer",
    "description": "Set on a return layer to point back at the layer that was sold (ADR-009)."
+  },
+  {
+   "fieldname": "lineage_root_layer",
+   "fieldtype": "Link",
+   "label": "Lineage Root Layer",
+   "options": "GSF Stock Layer",
+   "description": "The first receipt layer in this stock lineage (ADR-015)."
   },
   {
    "fieldname": "created_by_service",

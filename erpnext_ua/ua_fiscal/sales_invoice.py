@@ -72,7 +72,51 @@ def _invoice_lines(si) -> list[dict]:
 				}
 			)
 		lines.append(line)
-	return lines
+	return _group_gsf_lines(si, lines)
+
+
+def _group_gsf_lines(si, lines: list[dict]) -> list[dict]:
+	"""Collapse technical FIFO rows only when their fiscal identity is equal."""
+	groups: dict[str, list[dict]] = {}
+	order: list[str] = []
+	for item, line in zip(si.get("items") or [], lines, strict=True):
+		key = item.get("gsf_display_group") or item.name
+		if key not in groups:
+			groups[key] = []
+			order.append(key)
+		groups[key].append(line)
+	result = []
+	for key in order:
+		rows = groups[key]
+		if len(rows) == 1:
+			result.append(rows[0])
+			continue
+		_assert_same_fiscal_identity(key, rows)
+		merged = dict(rows[0])
+		merged["qty"] = sum(row["qty"] for row in rows)
+		merged["amount"] = frappe.utils.flt(sum(row["amount"] for row in rows), 2)
+		if any(row.get("discount_sum") for row in rows):
+			merged["subtotal"] = frappe.utils.flt(sum(row.get("subtotal") or 0 for row in rows), 2)
+			merged["discount_sum"] = frappe.utils.flt(
+				sum(row.get("discount_sum") or 0 for row in rows), 2
+			)
+			merged["discount_percent"] = (
+				frappe.utils.flt(merged["discount_sum"] * 100 / merged["subtotal"], 2)
+				if merged["subtotal"]
+				else 0
+			)
+		result.append(merged)
+	return result
+
+
+def _assert_same_fiscal_identity(group: str, rows: list[dict]) -> None:
+	fields = ("code", "barcode", "uktzed", "dkpp", "unit_cd", "letters", "name", "uom", "price")
+	first = rows[0]
+	mismatches = [field for field in fields if any(row.get(field) != first.get(field) for row in rows[1:])]
+	if mismatches:
+		frappe.throw(
+			f"GSF display group {group} cannot be fiscalized as one line: {', '.join(mismatches)} differ"
+		)
 
 
 def _invoice_payments(si) -> list[dict]:

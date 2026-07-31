@@ -253,6 +253,8 @@ LAYER_IMMUTABLE_FIELDS = (
     "tracking_type",
     "batch_no",
     "serial_numbers",
+    "return_origin_layer",
+    "lineage_root_layer",
 )
 
 

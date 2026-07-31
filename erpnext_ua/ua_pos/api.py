@@ -1421,6 +1421,17 @@ def _post_sales_invoice(order, desk):
 	original_invoice = frappe.db.get_value("POS Order", order.return_against, "sales_invoice") if is_return else None
 	if is_return and not original_invoice:
 		frappe.throw(_("Первинний чек не має проведеного Sales Invoice"))
+	from erpnext_ua.group_stock_fifo.services.pos_ua import (
+		is_gsf_return,
+		post_return,
+		post_sale,
+		scope_for_desk,
+	)
+
+	if is_return and is_gsf_return(order):
+		return post_return(order, desk)
+	if not is_return and scope_for_desk(desk):
+		return post_sale(order, desk)
 	si = frappe.get_doc(
 		{
 			"doctype": "Sales Invoice",
@@ -1806,6 +1817,7 @@ def _complete_paid_order(doc, desk, session) -> dict:
 			if doc.status == "Fiscal Pending":
 				doc.recovery_note = f"Фіскальний документ {receipt} має статус {receipt_status}"
 		doc.save(ignore_permissions=True)
+		_sync_gsf_fiscal_state(doc)
 		if doc.status == "Completed":
 			_queue_print_if_configured(doc)
 		_record_birthday_benefit(doc)
@@ -1822,6 +1834,16 @@ def _complete_paid_order(doc, desk, session) -> dict:
 	)
 	frappe.db.commit()
 	return doc.as_dict()
+
+
+def _sync_gsf_fiscal_state(doc) -> None:
+	if not doc.get("gsf_checkout") or doc.fiscal_mode != "Fiscal":
+		return
+	from erpnext_ua.group_stock_fifo.services.pos_ua import record_fiscal_result
+
+	status = frappe.db.get_value("PRRO Receipt", doc.prro_receipt, "status") if doc.prro_receipt else None
+	state = "DONE" if status in {"Fiscalized", "Offline"} else "UNCERTAIN"
+	record_fiscal_result(doc, state=state, receipt=doc.prro_receipt)
 
 
 def _queue_print_if_configured(doc):
@@ -1877,6 +1899,7 @@ def retry_fiscalization(pos_session_token: str, order: str) -> dict:
 	doc.status = "Completed" if not receipt or status in {"Fiscalized", "Offline"} else "Fiscal Pending"
 	doc.recovery_note = None if doc.status == "Completed" else f"Фіскальний документ {receipt}: {status}"
 	doc.save(ignore_permissions=True)
+	_sync_gsf_fiscal_state(doc)
 	if doc.status == "Completed":
 		_queue_print_if_configured(doc)
 	frappe.db.commit()
@@ -1901,6 +1924,7 @@ def recover_pos_fiscal_pending():
 				doc.status = "Completed"
 				doc.recovery_note = None
 				doc.save(ignore_permissions=True)
+				_sync_gsf_fiscal_state(doc)
 				_queue_print_if_configured(doc)
 		except Exception:
 			frappe.log_error(frappe.get_traceback(), f"POS fiscal recovery {name}")
