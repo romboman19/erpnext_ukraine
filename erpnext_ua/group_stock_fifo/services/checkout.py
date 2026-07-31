@@ -143,11 +143,15 @@ def _fingerprint(request: CheckoutRequest) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
-def run(checkout_name: str) -> Any:
+def run(checkout_name: str, *, stop_at: str | None = None) -> Any:
     """Walk the saga as far as it will go, from wherever it currently is.
 
     Safe to call again after a failure: `next_step` reads the recorded state,
     and every step refuses to repeat work it already did.
+
+    `stop_at` halts once that state is reached. A till may legitimately want the
+    stock staged before the customer has paid, and stopping there is a normal
+    outcome rather than a failure — the checkout simply waits, holding its lane.
     """
     checkout = frappe.get_doc("GSF Checkout", checkout_name)
     guard = 0
@@ -158,6 +162,8 @@ def run(checkout_name: str) -> Any:
                 f"Checkout {checkout_name} is not converging from {checkout.status}",
                 "MANUAL_REVIEW_REQUIRED",
             )
+        if stop_at and checkout.status == stop_at:
+            return checkout
         step = states.next_step(checkout.status)
         if not step:
             return checkout
