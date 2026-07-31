@@ -1,0 +1,18 @@
+{
+ "actions": [], "allow_rename": 0, "creation": "2026-07-31 00:00:00.000000",
+ "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["domain", "company", "warehouse", "system_qty", "column_break_line", "warehouse_role", "note"],
+ "fields": [
+  {"fieldname": "domain", "fieldtype": "Select", "label": "Domain", "options": "GSF\nCC\nEXTERNAL\nOTHER", "reqd": 1, "in_list_view": 1, "columns": 1},
+  {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "in_list_view": 1, "columns": 3},
+  {"fieldname": "warehouse", "fieldtype": "Link", "label": "Warehouse", "options": "Warehouse", "in_list_view": 1, "columns": 3},
+  {"fieldname": "system_qty", "fieldtype": "Float", "label": "System Qty", "read_only": 1, "in_list_view": 1, "columns": 2},
+  {"fieldname": "column_break_line", "fieldtype": "Column Break"},
+  {"fieldname": "warehouse_role", "fieldtype": "Data", "label": "Warehouse Role", "read_only": 1},
+  {"fieldname": "note", "fieldtype": "Data", "label": "Note"}
+ ],
+ "istable": 1, "issingle": 0, "links": [],
+ "modified": "2026-07-31 00:00:00.000000", "modified_by": "Administrator",
+ "module": "Group Stock FIFO", "name": "GSF Stock Count Line", "owner": "Administrator",
+ "permissions": [], "sort_field": "modified", "sort_order": "DESC", "states": []
+}
