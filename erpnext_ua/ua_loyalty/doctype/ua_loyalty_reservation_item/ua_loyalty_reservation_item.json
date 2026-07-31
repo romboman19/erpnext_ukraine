@@ -1,0 +1,5 @@
+{
+ "doctype":"DocType","name":"UA Loyalty Reservation Item","module":"UA Loyalty","engine":"InnoDB","istable":1,
+ "field_order":["source_row_name","item_code","requested_amount","reserved_amount","line_limit","sequence"],
+ "fields":[{"fieldname":"source_row_name","fieldtype":"Data","label":"Рядок","reqd":1},{"fieldname":"item_code","fieldtype":"Link","label":"Товар","options":"Item","reqd":1},{"fieldname":"requested_amount","fieldtype":"Currency","label":"Запитано"},{"fieldname":"reserved_amount","fieldtype":"Currency","label":"Зарезервовано","reqd":1},{"fieldname":"line_limit","fieldtype":"Currency","label":"Ліміт"},{"fieldname":"sequence","fieldtype":"Int","label":"Порядок"}],"permissions":[]
+}

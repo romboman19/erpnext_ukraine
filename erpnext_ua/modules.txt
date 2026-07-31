@@ -1,6 +1,7 @@
 UA FOP
 UA Fiscal
 UA POS
+UA Loyalty
 UA Item Specs
 UA Accounting
 UA Price Tags

@@ -6,15 +6,23 @@ from pathlib import Path
 
 import erpnext_ua.hooks as hooks
 
-
 APP = Path(__file__).resolve().parents[1]
 
 
 class TestReceivingContracts(unittest.TestCase):
 	def test_receipt_validation_and_upgrade_hooks_are_registered(self):
+		before_submit = hooks.doc_events["Purchase Receipt"]["before_submit"]
 		self.assertEqual(
-			hooks.doc_events["Purchase Receipt"]["before_submit"],
+			before_submit[0],
 			"erpnext_ua.ua_receiving.service.validate_purchase_receipt",
+		)
+		self.assertIn(
+			"erpnext_ua.group_stock_fifo.services.period.guard_backdated_document",
+			before_submit,
+		)
+		self.assertIn(
+			"erpnext_ua.group_stock_fifo.receipts.register_receipt_layers",
+			before_submit,
 		)
 		self.assertEqual(
 			hooks.doc_events["Purchase Receipt"]["before_validate"],

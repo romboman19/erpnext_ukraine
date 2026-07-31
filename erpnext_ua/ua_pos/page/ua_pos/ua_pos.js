@@ -159,6 +159,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
             <button class="ua-pos-action js-stock">⌕ Пошук по складу <span class="ua-pos-shortcut">F3</span></button>
             <button class="ua-pos-action js-customer">♙ Клієнт <span class="ua-pos-shortcut">F4</span></button>
             <button class="ua-pos-action primary js-identify">◎ Ідентифікувати <span class="ua-pos-shortcut">F5</span></button>
+            <button class="ua-pos-action primary js-loyalty">★ Бонуси</button>
             <button class="ua-pos-action js-create-invoice">▧ Створити рахунок</button>
             <button class="ua-pos-action js-discount">% Знижка <span class="ua-pos-shortcut">F6</span></button>
             <button class="ua-pos-action js-hold">◫ Відкласти <span class="ua-pos-shortcut">F7</span></button>
@@ -193,7 +194,9 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
             <div class="ua-pos-totals">
               <div class="ua-pos-total-row"><span>Повна сума</span><strong><span class="js-net">0,00</span> грн</strong></div>
               <div class="ua-pos-total-row discount"><span>Знижка</span><strong>− <span class="js-discount">0,00</span> грн</strong></div>
-              <div class="ua-pos-total-row"><span>Бонуси</span><strong>0,00 грн</strong></div>
+              <div class="ua-pos-total-row discount"><span>Списано бонусів</span><strong>− <span class="js-loyalty-discount">0,00</span> грн</strong></div>
+              <div class="ua-pos-total-row"><span>Буде нараховано</span><strong><span class="js-loyalty-earned">0,00</span> бонусів</strong></div>
+              <div class="ua-pos-total-row"><span>Доступно / борг</span><strong><span class="js-loyalty-balance">—</span></strong></div>
               <div class="ua-pos-total-row"><span>Оплачено</span><strong><span class="js-paid">0,00</span> грн</strong></div>
               <div class="ua-pos-total-row js-cash-received-row" style="display:none"><span>Отримано готівкою</span><strong><span class="js-cash-received">0,00</span> грн</strong></div>
               <div class="ua-pos-total-row"><span>Решта</span><strong><span class="js-change">0,00</span> грн</strong></div>
@@ -339,6 +342,11 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     $root.find(".js-fop").text(order?.items?.find((item) => item.fop_profile)?.fop_profile || (order?.fiscal_mode === "Fiscal" ? "Визначиться під час фіскалізації" : "Не застосовується"));
     $root.find(".js-net").text(money(order?.net_total));
     $root.find(".js-discount").text(money(order?.discount_total));
+    $root.find(".js-loyalty-discount").text(money(order?.loyalty_redeemed_amount));
+    $root.find(".js-loyalty-earned").text(money(flt(order?.loyalty_earned_active) + flt(order?.loyalty_earned_pending)));
+    $root.find(".js-loyalty-balance").text(order?.loyalty_account
+      ? (flt(order.loyalty_debt_after) > 0 ? `борг ${money(order.loyalty_debt_after)}` : `${money(order.loyalty_redeemable_before)} бонусів`)
+      : "не підключено");
     $root.find(".js-paid").text(money(order?.paid_total));
     const confirmedCash = (order?.payments_plan || []).filter((payment) => payment.kind === "Cash" && payment.status === "Confirmed");
     const cashReceived = confirmedCash.reduce((sum, payment) => sum + flt(payment.tendered_amount || payment.amount), 0);
@@ -362,6 +370,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     $root.find(".js-hold").prop("disabled", !order || !["Building", "Held"].includes(order.status));
     const customerActionAvailable = Boolean(state.session?.shift && (!order || (editable && order?.order_type !== "Return")));
     $root.find(".js-customer,.js-identify").prop("disabled", !customerActionAvailable);
+    $root.find(".js-loyalty").prop("disabled", !customerActionAvailable);
     $root.find(".js-discount,.js-create-invoice,.js-cancel").prop("disabled", !editable || order?.order_type === "Return");
     $root.find(".js-hold").html(order?.status === "Held" ? "▶ Повернути чек <span class=\"ua-pos-shortcut\">F7</span>" : "◫ Відкласти <span class=\"ua-pos-shortcut\">F7</span>");
     if (order?.fiscal_mode) {
@@ -768,6 +777,33 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
       primary_action: async (values) => { renderOrder(await api("set_order_discount", { pos_session_token: state.token, order: state.order.name, discount_percent: values.discount_percent || 0, discount_amount: values.discount_amount || 0 })); dialog.hide(); },
     });
     dialog.show();
+  }
+
+  async function loyaltyDialog() {
+    if (!state.order || !canEditOrder()) return;
+    const dialog = new frappe.ui.Dialog({
+      title: "Бонусна програма",
+      fields: [
+        { fieldname: "identifier", fieldtype: "Data", label: "Штрихкод картки або клієнт", default: state.order.customer, reqd: 1 },
+        { fieldname: "identifier_type", fieldtype: "Select", label: "Тип", options: "AUTO\nCARD\nCUSTOMER\nPHONE", default: "AUTO" },
+        { fieldname: "amount", fieldtype: "Currency", label: "Списати бонусів", default: state.order.loyalty_requested_amount || 0 },
+        { fieldname: "summary", fieldtype: "HTML", options: '<div class="ua-pos-modal-note">Спочатку ідентифікуйте картку або клієнта. Сервер перевірить scope, баланс і ліміти товарних рядків.</div>' },
+      ],
+      primary_action_label: "Застосувати",
+      primary_action: async (values) => {
+        dialog.get_primary_btn().prop("disabled", true);
+        try {
+          const identified = await api("loyalty_identify", { pos_session_token: state.token, order: state.order.name, identifier: values.identifier, identifier_type: values.identifier_type });
+          renderOrder(identified.order);
+          const quoted = await api("set_loyalty_redemption", { pos_session_token: state.token, order: state.order.name, amount: values.amount || 0 });
+          renderOrder(quoted);
+          dialog.hide();
+          frappe.show_alert({ message: `Доступно ${money(quoted.loyalty_redeemable_before)}, списано ${money(quoted.loyalty_redeemed_amount)}`, indicator: "green" });
+        } finally { dialog.get_primary_btn().prop("disabled", false); }
+      },
+    });
+    dialog.show();
+    dialog.fields_dict.identifier.$input.focus();
   }
 
   function itemTrackingDialog(rowName) {
@@ -1243,6 +1279,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   $root.on("click", ".js-identify", identifyCustomer);
   $root.on("click", ".js-create-invoice", createInvoice);
   $root.on("click", ".js-discount", discountDialog);
+  $root.on("click", ".js-loyalty", loyaltyDialog);
   $root.on("click", ".js-hold", async () => { if (state.order) renderOrder(await api("hold_order", { pos_session_token: state.token, order: state.order.name })); });
   $root.on("click", ".js-orders", showHeldOrders);
   $root.on("click", ".js-cancel", async () => {

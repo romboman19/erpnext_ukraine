@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "erpnext_ua"
-version = "0.10.0"
+version = "0.11.0"
 description = "ERPNext Ukraine: FOP, POS, PRRO, accounting, documents, price tags, translations, commission trade, delivery, banking, payments, marketplaces and communications"
 requires-python = ">=3.14"
 readme = "README.md"
@@ -50,6 +50,7 @@ target-version = "py314"
 include = [
     "erpnext_ua/consignment_and_commission/**/*.py",
     "erpnext_ua/group_stock_fifo/**/*.py",
+    "erpnext_ua/ua_loyalty/**/*.py",
     "erpnext_ua/integrations/**/*.py",
     "erpnext_ua/ecommerce/**/*.py",
     "erpnext_ua/ukrainian_integrations/**/*.py",

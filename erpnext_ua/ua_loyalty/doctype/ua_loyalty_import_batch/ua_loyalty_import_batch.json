@@ -1,0 +1,25 @@
+{
+ "doctype":"DocType","name":"UA Loyalty Import Batch","module":"UA Loyalty","engine":"InnoDB","autoname":"format:LOY-IMP-{##########}","track_changes":1,
+ "field_order":["source_label","source_checksum","dry_run","status","source_data","started_at","finished_at","row_count","success_count","error_count","marketing_total","metric_total","errors_json","reconciliation_json"],
+ "fields":[
+  {"fieldname":"source_label","fieldtype":"Data","label":"Джерело","reqd":1},
+  {"fieldname":"source_checksum","fieldtype":"Data","label":"Checksum","read_only":1},
+  {"fieldname":"dry_run","fieldtype":"Check","label":"Dry run","default":"1"},
+  {"fieldname":"status","fieldtype":"Select","label":"Стан","options":"DRAFT\nRUNNING\nDRY_RUN_COMPLETE\nCOMPLETED\nFAILED","default":"DRAFT","reqd":1,"read_only":1,"search_index":1},
+  {"fieldname":"source_data","fieldtype":"Long Text","label":"JSON rows","reqd":1},
+  {"fieldname":"started_at","fieldtype":"Datetime","label":"Початок","read_only":1},
+  {"fieldname":"finished_at","fieldtype":"Datetime","label":"Завершення","read_only":1},
+  {"fieldname":"row_count","fieldtype":"Int","label":"Рядків","read_only":1},
+  {"fieldname":"success_count","fieldtype":"Int","label":"Успішно","read_only":1},
+  {"fieldname":"error_count","fieldtype":"Int","label":"Помилок","read_only":1},
+  {"fieldname":"marketing_total","fieldtype":"Currency","label":"Баланс, всього","read_only":1},
+  {"fieldname":"metric_total","fieldtype":"Currency","label":"Метрика, всього","read_only":1},
+  {"fieldname":"errors_json","fieldtype":"Long Text","label":"Помилки","read_only":1},
+  {"fieldname":"reconciliation_json","fieldtype":"Long Text","label":"Reconciliation","read_only":1}
+ ],
+ "permissions":[
+  {"role":"System Manager","read":1,"write":1,"create":1},
+  {"role":"UA Loyalty Administrator","read":1,"write":1,"create":1},
+  {"role":"UA Loyalty Auditor","read":1}
+ ]
+}

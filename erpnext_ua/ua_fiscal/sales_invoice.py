@@ -61,6 +61,7 @@ def _invoice_lines(si) -> list[dict]:
 			"qty": qty,
 			"price": gross_rate if discount_sum else final_rate,
 			"amount": amount,
+			"loyalty_discount_sum": abs(frappe.utils.flt(it.get("ua_loyalty_redeemed_amount"))),
 		}
 		if discount_sum:
 			line.update(
@@ -95,6 +96,9 @@ def _group_gsf_lines(si, lines: list[dict]) -> list[dict]:
 		merged = dict(rows[0])
 		merged["qty"] = sum(row["qty"] for row in rows)
 		merged["amount"] = frappe.utils.flt(sum(row["amount"] for row in rows), 2)
+		merged["loyalty_discount_sum"] = frappe.utils.flt(
+			sum(row.get("loyalty_discount_sum") or 0 for row in rows), 2
+		)
 		if any(row.get("discount_sum") for row in rows):
 			merged["subtotal"] = frappe.utils.flt(sum(row.get("subtotal") or 0 for row in rows), 2)
 			merged["discount_sum"] = frappe.utils.flt(
@@ -227,7 +231,7 @@ def fiscalize_invoice(sales_invoice: str, client=None) -> str | None:
 	no_rounding_total = abs(frappe.utils.flt(si.grand_total))
 	total = abs(frappe.utils.flt(si.rounded_total or si.grand_total))
 	has_rounding = abs(total - no_rounding_total) > 0.001
-	return orch.fiscalize_sale(
+	receipt = orch.fiscalize_sale(
 		cash_register=register,
 		kep_key=kep_key,
 		items=_invoice_lines(si),
@@ -243,6 +247,18 @@ def fiscalize_invoice(sales_invoice: str, client=None) -> str | None:
 		idem_key=f"{'return' if si.is_return else 'sale'}:{register}:{sales_invoice}",
 		client=client,
 	)
+	if receipt and si.get("ua_loyalty_account"):
+		frappe.db.set_value(
+			"PRRO Receipt",
+			receipt,
+			{
+				"loyalty_redeemed_amount": abs(frappe.utils.flt(si.get("ua_loyalty_redeemed_amount"))),
+				"loyalty_scope": si.get("ua_loyalty_scope"),
+				"loyalty_snapshot_hash": si.get("ua_loyalty_snapshot_hash"),
+			},
+			update_modified=False,
+		)
+	return receipt
 
 
 def on_submit(doc, method=None):

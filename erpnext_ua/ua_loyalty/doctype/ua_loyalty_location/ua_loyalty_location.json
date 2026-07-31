@@ -1,0 +1,14 @@
+{
+ "doctype":"DocType","name":"UA Loyalty Location","module":"UA Loyalty","engine":"InnoDB","autoname":"format:LOY-LOC-{#####}","track_changes":1,
+ "field_order":["scope","pos_cash_desk","branch","warehouse","company","fop_profile","sales_channel","priority","valid_from","valid_to","active"],
+ "fields":[
+  {"fieldname":"scope","fieldtype":"Link","label":"Область","options":"UA Loyalty Scope","reqd":1,"in_list_view":1,"search_index":1},
+  {"fieldname":"pos_cash_desk","fieldtype":"Link","label":"Каса","options":"POS Cash Desk","in_list_view":1,"search_index":1},
+  {"fieldname":"branch","fieldtype":"Link","label":"Філія","options":"Branch"},{"fieldname":"warehouse","fieldtype":"Link","label":"Склад","options":"Warehouse"},
+  {"fieldname":"company","fieldtype":"Link","label":"Компанія","options":"Company"},{"fieldname":"fop_profile","fieldtype":"Link","label":"ФОП","options":"FOP Profile"},
+  {"fieldname":"sales_channel","fieldtype":"Select","label":"Канал","options":"POS\nWeb\nManual\nMarketplace","default":"POS"},
+  {"fieldname":"priority","fieldtype":"Int","label":"Пріоритет","default":"10"},{"fieldname":"valid_from","fieldtype":"Datetime","label":"Чинна з"},{"fieldname":"valid_to","fieldtype":"Datetime","label":"Чинна до"},
+  {"fieldname":"active","fieldtype":"Check","label":"Активна","default":"1","in_list_view":1}
+ ],
+ "permissions":[{"role":"System Manager","read":1,"write":1,"create":1},{"role":"UA Loyalty Administrator","read":1,"write":1,"create":1},{"role":"UA Loyalty Auditor","read":1}]
+}

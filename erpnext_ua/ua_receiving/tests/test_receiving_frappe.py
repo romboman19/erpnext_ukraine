@@ -19,9 +19,70 @@ class TestReceivingFrappe(unittest.TestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
 		frappe.db.savepoint("ua_receiving_smoke")
+		self.company = self._get_company()
+		self.supplier = self._ensure_supplier()
+		self.item_code = self._ensure_item()
+		self.warehouse = self._ensure_warehouse()
 
 	def tearDown(self):
 		frappe.db.rollback(save_point="ua_receiving_smoke")
+
+	def _get_company(self):
+		companies = frappe.get_all(
+			"Company",
+			filters={"default_currency": ("is", "set"), "cost_center": ("is", "set")},
+			pluck="name",
+			order_by="creation asc",
+		)
+		company = next((name for name in companies if not name.startswith("_")), None)
+		self.assertTrue(company, "A configured test Company is required")
+		return company
+
+	def _ensure_supplier(self):
+		name = "UA Receiving Integration Test Supplier"
+		if frappe.db.exists("Supplier", name):
+			return name
+		supplier_group = frappe.db.get_value("Supplier Group", {"is_group": 0}, "name")
+		return frappe.get_doc(
+			{
+				"doctype": "Supplier",
+				"supplier_name": name,
+				"supplier_group": supplier_group,
+				"supplier_type": "Company",
+				"default_currency": frappe.get_cached_value(
+					"Company", self.company, "default_currency"
+				),
+			}
+		).insert(ignore_permissions=True).name
+
+	def _ensure_item(self):
+		item_code = "UA-RECEIVING-INTEGRATION-ITEM"
+		if frappe.db.exists("Item", item_code):
+			return item_code
+		item_group = frappe.db.get_value("Item Group", {"is_group": 0}, "name")
+		return frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": item_code,
+				"item_name": "UA Receiving Integration Item",
+				"item_group": item_group,
+				"stock_uom": "Nos",
+				"is_stock_item": 1,
+			}
+		).insert(ignore_permissions=True).name
+
+	def _ensure_warehouse(self):
+		abbr = frappe.get_cached_value("Company", self.company, "abbr")
+		name = f"UA Receiving Integration - {abbr}"
+		if frappe.db.exists("Warehouse", name):
+			return name
+		return frappe.get_doc(
+			{
+				"doctype": "Warehouse",
+				"warehouse_name": "UA Receiving Integration",
+				"company": self.company,
+			}
+		).insert(ignore_permissions=True).name
 
 	def test_receipt_posts_stock_then_creates_prices_labels_and_draft_invoice(self):
 		from erpnext_ua.ua_receiving.service import (
@@ -29,10 +90,10 @@ class TestReceivingFrappe(unittest.TestCase):
 			preview_receipt_completion,
 		)
 
-		company = "POS Test Ukraine"
-		supplier = "TP Gate 0D Supplier UAH"
-		item_code = "POS-TEST-001"
-		warehouse = "Stores - PTU"
+		company = self.company
+		supplier = self.supplier
+		item_code = self.item_code
+		warehouse = self.warehouse
 		price_list = "Standard Selling"
 		uom = frappe.get_cached_value("Item", item_code, "stock_uom")
 		cost_center = frappe.get_cached_value("Company", company, "cost_center")
@@ -145,10 +206,10 @@ class TestReceivingFrappe(unittest.TestCase):
 	def test_vat_checkbox_posts_only_the_gross_item_price(self):
 		from erpnext_ua.ua_receiving.service import _create_purchase_invoice_draft
 
-		company = "POS Test Ukraine"
-		supplier = "TP Gate 0D Supplier UAH"
-		item_code = "POS-TEST-001"
-		warehouse = "Stores - PTU"
+		company = self.company
+		supplier = self.supplier
+		item_code = self.item_code
+		warehouse = self.warehouse
 		uom = frappe.get_cached_value("Item", item_code, "stock_uom")
 		cost_center = frappe.get_cached_value("Company", company, "cost_center")
 

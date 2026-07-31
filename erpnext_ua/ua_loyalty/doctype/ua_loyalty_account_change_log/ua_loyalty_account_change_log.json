@@ -1,0 +1,19 @@
+{
+ "doctype":"DocType","name":"UA Loyalty Account Change Log","module":"UA Loyalty","engine":"InnoDB","autoname":"format:LOY-CHG-{##########}",
+ "field_order":["account","card","change_type","old_value","new_value","reason","changed_by","changed_at","source_doctype","source_name","idempotency_key","metadata_json"],
+ "fields":[
+  {"fieldname":"account","fieldtype":"Link","label":"Рахунок","options":"UA Loyalty Account","reqd":1,"search_index":1},
+  {"fieldname":"card","fieldtype":"Link","label":"Картка","options":"UA Loyalty Card"},
+  {"fieldname":"change_type","fieldtype":"Data","label":"Тип зміни","reqd":1,"search_index":1},
+  {"fieldname":"old_value","fieldtype":"Small Text","label":"Старе значення"},
+  {"fieldname":"new_value","fieldtype":"Small Text","label":"Нове значення"},
+  {"fieldname":"reason","fieldtype":"Small Text","label":"Причина","reqd":1},
+  {"fieldname":"changed_by","fieldtype":"Link","label":"Користувач","options":"User","reqd":1},
+  {"fieldname":"changed_at","fieldtype":"Datetime","label":"Дата","reqd":1,"search_index":1},
+  {"fieldname":"source_doctype","fieldtype":"Link","label":"Тип джерела","options":"DocType"},
+  {"fieldname":"source_name","fieldtype":"Dynamic Link","label":"Джерело","options":"source_doctype"},
+  {"fieldname":"idempotency_key","fieldtype":"Data","label":"Idempotency key","reqd":1,"unique":1},
+  {"fieldname":"metadata_json","fieldtype":"Long Text","label":"Metadata"}
+ ],
+ "permissions":[{"role":"System Manager","read":1},{"role":"UA Loyalty Auditor","read":1},{"role":"UA Loyalty Administrator","read":1},{"role":"UA Loyalty Manager","read":1}]
+}

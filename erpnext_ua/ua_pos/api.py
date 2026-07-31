@@ -962,6 +962,7 @@ def scan_item(pos_session_token: str, order: str, query: str, qty: float = 1) ->
 	for row in doc.items:
 		if row.item_code == item_code and not row.serial_no and not row.batch_no:
 			row.qty += qty
+			_invalidate_loyalty(doc)
 			if int(doc.birthday_benefit_year or 0):
 				_allocate_order_discount(doc, discount_percent=doc.birthday_discount_percent)
 			doc.save(ignore_permissions=True)
@@ -979,6 +980,7 @@ def scan_item(pos_session_token: str, order: str, query: str, qty: float = 1) ->
 			"warehouse": desk.warehouse,
 		},
 	)
+	_invalidate_loyalty(doc)
 	if int(doc.birthday_benefit_year or 0):
 		_allocate_order_discount(doc, discount_percent=doc.birthday_discount_percent)
 	doc.save(ignore_permissions=True)
@@ -1094,6 +1096,7 @@ def set_item_qty(pos_session_token: str, order: str, row_name: str, qty: float) 
 		doc.remove(row)
 	else:
 		row.qty = frappe.utils.flt(qty)
+	_invalidate_loyalty(doc)
 	if int(doc.birthday_benefit_year or 0):
 		_allocate_order_discount(doc, discount_percent=doc.birthday_discount_percent)
 	doc.save(ignore_permissions=True)
@@ -1120,7 +1123,9 @@ def set_order_customer(pos_session_token: str, order: str, customer: str) -> dic
 		doc.birthday_benefit_year = 0
 		doc.birthday_discount_percent = 0
 	doc.customer = customer
+	_invalidate_loyalty(doc)
 	doc.save(ignore_permissions=True)
+	_try_identify_loyalty_account(doc)
 	return doc.as_dict()
 
 
@@ -1149,13 +1154,44 @@ def _allocate_order_discount(doc, discount_percent: float = 0, discount_amount: 
 	allocated = 0.0
 	for idx, row in enumerate(doc.items):
 		gross = frappe.utils.flt(row.qty) * frappe.utils.flt(row.rate)
-		row.discount_amount = (
+		row.non_loyalty_discount_amount = (
 			frappe.utils.flt(target - allocated, 2)
 			if idx == len(doc.items) - 1
 			else frappe.utils.flt(target * gross / gross_total, 2)
 		)
-		allocated += row.discount_amount
+		allocated += row.non_loyalty_discount_amount
+	_invalidate_loyalty(doc)
 	return target
+
+
+def _invalidate_loyalty(doc):
+	if doc.get("loyalty_state") in {"RESERVED", "PAYMENT_IN_PROGRESS"}:
+		frappe.throw(_("Спочатку звільніть резерв бонусів"), title="LOYALTY_RESERVATION_STATE_CONFLICT")
+	from erpnext_ua.ua_loyalty.services.quote_service import invalidate_order
+
+	invalidate_order(doc)
+
+
+def _try_identify_loyalty_account(doc):
+	from erpnext_ua.ua_loyalty.exceptions import LoyaltyError
+	from erpnext_ua.ua_loyalty.services.account_service import account_for
+	from erpnext_ua.ua_loyalty.services.quote_service import quote_order, resolve_location
+	from erpnext_ua.ua_loyalty.services.settings import enabled_for
+
+	if not enabled_for("POS Order"):
+		return
+	try:
+		location = resolve_location(cash_desk=doc.cash_desk)
+		account = account_for(doc.customer, location.scope)
+	except LoyaltyError:
+		return
+	doc.loyalty_account = account.name
+	doc.loyalty_scope = account.scope
+	doc.loyalty_location = location.name
+	doc.loyalty_program = account.program
+	doc.loyalty_state = "IDENTIFIED"
+	doc.save(ignore_permissions=True)
+	quote_order(doc, doc.loyalty_requested_amount or 0)
 
 
 @frappe.whitelist()
@@ -1177,6 +1213,38 @@ def set_order_discount(
 	doc.save(ignore_permissions=True)
 	audit("order_discount", session, (doc.doctype, doc.name), {"amount": target, "percent": frappe.utils.flt(discount_percent)})
 	return doc.as_dict()
+
+
+@frappe.whitelist(methods=["POST"])
+def set_loyalty_redemption(pos_session_token: str, order: str, amount: str = "0") -> dict:
+	session = get_session(pos_session_token)
+	doc = _owned_order(session, order, {"Building", "Awaiting Payment"})
+	from erpnext_ua.ua_loyalty.exceptions import LoyaltyError
+	from erpnext_ua.ua_loyalty.services.quote_service import quote_order
+
+	try:
+		quote_order(doc, amount)
+	except LoyaltyError as error:
+		frappe.throw(str(error), title=error.code)
+	return frappe.get_doc("POS Order", doc.name).as_dict()
+
+
+@frappe.whitelist(methods=["POST"])
+def loyalty_identify(pos_session_token: str, order: str, identifier: str, identifier_type: str = "AUTO") -> dict:
+	from erpnext_ua.ua_loyalty.api import identify
+
+	result = identify(pos_session_token, identifier, identifier_type)
+	doc = _owned_order(get_session(pos_session_token), order, {"Building"})
+	if doc.customer != result["customer"]:
+		doc.customer = result["customer"]
+	doc.loyalty_account = result["account"]
+	doc.loyalty_card = result["card"]
+	doc.loyalty_scope = result["scope"]
+	doc.loyalty_program = result["program"]
+	doc.loyalty_state = "IDENTIFIED"
+	doc.save(ignore_permissions=True)
+	set_loyalty_redemption(pos_session_token, doc.name, "0")
+	return {"identity": result, "order": frappe.get_doc("POS Order", doc.name).as_dict()}
 
 
 @frappe.whitelist()
@@ -1388,6 +1456,7 @@ def create_draft_invoice(pos_session_token: str, order: str) -> dict:
 				"rate": row.rate,
 				"discount_percentage": discount_percentage,
 				"warehouse": row.warehouse,
+				"ua_pos_order_item": row.name,
 			}
 		)
 	si = frappe.get_doc(
@@ -1407,6 +1476,9 @@ def create_draft_invoice(pos_session_token: str, order: str) -> dict:
 		}
 	)
 	si.set_missing_values()
+	from erpnext_ua.ua_loyalty.adapters.sales_invoice import prepare_invoice
+
+	prepare_invoice(si, doc)
 	si.insert(ignore_permissions=True)
 	doc.draft_invoice = si.name
 	doc.status = "Invoice Draft"
@@ -1454,6 +1526,9 @@ def _post_sales_invoice(order, desk):
 					"warehouse": row.warehouse,
 					"batch_no": row.batch_no,
 					"serial_no": row.serial_no,
+					"price_list_rate": row.rate,
+					"discount_percentage": frappe.utils.flt(row.discount_amount) * 100 / (frappe.utils.flt(row.qty) * frappe.utils.flt(row.rate)) if frappe.utils.flt(row.qty) * frappe.utils.flt(row.rate) else 0,
+					"ua_pos_order_item": row.name,
 				}
 				for row in order.items
 			],
@@ -1465,6 +1540,9 @@ def _post_sales_invoice(order, desk):
 		}
 	)
 	si.set_missing_values()
+	from erpnext_ua.ua_loyalty.adapters.sales_invoice import prepare_invoice
+
+	prepare_invoice(si, order)
 	si.insert(ignore_permissions=True)
 	si.submit()
 	return si
@@ -1637,6 +1715,9 @@ def _return_summary(original) -> dict:
 				"uom": row.uom,
 				"rate": row.rate,
 				"amount": row.amount,
+				"money_paid_amount": max(0, frappe.utils.flt(row.amount)),
+				"loyalty_redeemed_amount": frappe.utils.flt(row.loyalty_redeemed_amount),
+				"loyalty_earned_amount": frappe.utils.flt(row.loyalty_earned_amount),
 			}
 		)
 	paid_by_method = defaultdict(float)
@@ -1680,7 +1761,17 @@ def return_details(pos_session_token: str, token: str) -> dict:
 	if original.order_type == "Return":
 		frappe.throw(_("Повернення можна оформити лише за чеком продажу"))
 	if original.cash_desk != session["cash_desk"]:
-		frappe.throw(_("Первинний чек належить іншій касі"), frappe.PermissionError)
+		allow_cross_location = bool(
+			original.loyalty_scope
+			and frappe.db.get_value("UA Loyalty Scope", original.loyalty_scope, "allow_cross_location_return")
+		)
+		if not allow_cross_location:
+			frappe.throw(_("Первинний чек належить іншій касі"), frappe.PermissionError)
+		from erpnext_ua.ua_loyalty.services.quote_service import resolve_location
+
+		current_location = resolve_location(cash_desk=session["cash_desk"])
+		if current_location.scope != original.loyalty_scope:
+			frappe.throw(_("Повернення має бути в тій самій області лояльності"), frappe.PermissionError)
 	return {"order": original.as_dict(), **_return_summary(original)}
 
 
@@ -1733,9 +1824,12 @@ def create_return_order(pos_session_token: str, token: str, items, idem_key: str
 				"warehouse": original_row.warehouse,
 				"batch_no": original_row.batch_no,
 				"serial_no": original_row.serial_no,
+				"non_loyalty_discount_amount": frappe.utils.flt(frappe.utils.flt(original_row.non_loyalty_discount_amount) / frappe.utils.flt(original_row.qty) * qty, 2),
+				"loyalty_redeemed_amount": frappe.utils.flt(frappe.utils.flt(original_row.loyalty_redeemed_amount) / frappe.utils.flt(original_row.qty) * qty, 2),
 				"discount_amount": frappe.utils.flt(discount_per_unit * qty, 2),
 				"fop_profile": original_row.fop_profile,
 				"return_against_item": original_row.name,
+				"loyalty_original_order_item": original_row.name,
 			},
 		)
 	doc.insert(ignore_permissions=True)
@@ -1937,11 +2031,13 @@ def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) 
 	doc = _owned_order(session, order)
 	if doc.status not in {"Building", "Awaiting Payment"}:
 		return doc.as_dict()
-	if not doc.items or doc.grand_total <= 0:
+	if not doc.items or doc.grand_total < 0:
 		frappe.throw(_("У чеку немає товарів до оплати"))
 	_validate_order_items(doc)
+	_prepare_loyalty_checkout(doc, idem_key)
+	doc.reload()
 	payment_rows = parse_rows(payments)
-	if not payment_rows:
+	if not payment_rows and frappe.utils.flt(doc.grand_total) > 0:
 		frappe.throw(_("Вкажіть спосіб оплати"))
 	desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
 	return_methods = {}
@@ -2055,9 +2151,53 @@ def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) 
 	doc.status = "Payment Unknown" if unknown else ("Paid" if all(r.status == "Confirmed" for r in doc.payments_plan) else "Awaiting Payment")
 	doc.save(ignore_permissions=True)
 	if doc.status != "Paid":
+		if not unknown and doc.loyalty_reservation:
+			from erpnext_ua.ua_loyalty.services.reservation_service import release
+
+			release(
+				doc.loyalty_reservation,
+				allow_payment_in_progress=True,
+				reason_code="PAYMENT_FAILED",
+				idempotency_key=f"payment-failed:{doc.name}",
+			)
+			doc.loyalty_state = "QUOTED"
+			doc.loyalty_reservation = None
+			doc.loyalty_reserved_amount = 0
+			doc.save(ignore_permissions=True)
 		frappe.db.commit()
 		return doc.as_dict()
 	return _complete_paid_order(doc, desk, session)
+
+
+def _prepare_loyalty_checkout(doc, idem_key: str) -> None:
+	from erpnext_ua.ua_loyalty.exceptions import LoyaltyError
+	from erpnext_ua.ua_loyalty.services.quote_service import quote_order
+	from erpnext_ua.ua_loyalty.services.reservation_service import mark_payment_in_progress, reserve
+	from erpnext_ua.ua_loyalty.services.settings import enabled_for
+
+	if not enabled_for("POS Order"):
+		return
+	if not doc.loyalty_account:
+		_try_identify_loyalty_account(doc)
+		doc.reload()
+	if not doc.loyalty_account:
+		return
+	try:
+		if doc.loyalty_state != "QUOTED" or not doc.loyalty_quote_hash:
+			quote_order(doc, doc.loyalty_requested_amount or 0)
+			doc.reload()
+		reservation = reserve(
+			doc,
+			quote_hash=doc.loyalty_quote_hash,
+			idempotency_key=f"loyalty:{idem_key}",
+		)
+		if reservation:
+			mark_payment_in_progress(doc, reservation)
+			# This is the intentional transaction boundary required before the
+			# first terminal network call. A later failure leaves a durable lease.
+			frappe.db.commit()
+	except LoyaltyError as error:
+		frappe.throw(str(error), title=error.code)
 
 
 @frappe.whitelist()

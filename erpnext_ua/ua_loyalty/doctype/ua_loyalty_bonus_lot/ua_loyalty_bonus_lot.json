@@ -1,0 +1,10 @@
+{
+ "doctype":"DocType","name":"UA Loyalty Bonus Lot","module":"UA Loyalty","engine":"InnoDB","autoname":"format:LOY-LOT-{##########}",
+ "field_order":["account","source_ledger_entry","lot_kind","credited_amount","pending_amount","activated_amount","available_amount","consumed_amount","expired_amount","reversed_amount","debt_offset_amount","effective_datetime","expires_at","status","issuer_company","row_version"],
+ "fields":[
+  {"fieldname":"account","fieldtype":"Link","label":"Рахунок","options":"UA Loyalty Account","reqd":1,"search_index":1},{"fieldname":"source_ledger_entry","fieldtype":"Link","label":"Credit рух","options":"UA Loyalty Ledger Entry","reqd":1,"unique":1},{"fieldname":"lot_kind","fieldtype":"Select","label":"Вид","options":"EARNED\nRETURNED\nMANUAL\nOPENING","reqd":1},
+  {"fieldname":"credited_amount","fieldtype":"Currency","label":"Нараховано","reqd":1},{"fieldname":"pending_amount","fieldtype":"Currency","label":"Pending","default":"0"},{"fieldname":"activated_amount","fieldtype":"Currency","label":"Активовано","default":"0"},{"fieldname":"available_amount","fieldtype":"Currency","label":"Доступно"},{"fieldname":"consumed_amount","fieldtype":"Currency","label":"Спожито","default":"0"},{"fieldname":"expired_amount","fieldtype":"Currency","label":"Згоріло","default":"0"},{"fieldname":"reversed_amount","fieldtype":"Currency","label":"Сторновано","default":"0"},{"fieldname":"debt_offset_amount","fieldtype":"Currency","label":"Погашено борг","default":"0"},
+  {"fieldname":"effective_datetime","fieldtype":"Datetime","label":"Діє з","search_index":1},{"fieldname":"expires_at","fieldtype":"Datetime","label":"Згорає","search_index":1},{"fieldname":"status","fieldtype":"Select","label":"Стан","options":"PENDING\nACTIVE\nDEPLETED\nEXPIRED\nREVERSED","reqd":1,"search_index":1},{"fieldname":"issuer_company","fieldtype":"Link","label":"Issuer","options":"Company"},{"fieldname":"row_version","fieldtype":"Int","label":"Версія","default":"0"}
+ ],
+ "permissions":[{"role":"System Manager","read":1},{"role":"UA Loyalty Auditor","read":1},{"role":"UA Loyalty Administrator","read":1}]
+}

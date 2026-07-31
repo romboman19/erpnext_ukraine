@@ -1,0 +1,26 @@
+{
+ "doctype":"DocType","name":"UA Loyalty Adjustment","module":"UA Loyalty","engine":"InnoDB","autoname":"format:LOY-ADJ-{##########}","is_submittable":1,"track_changes":1,
+ "field_order":["account","operation","amount","effective_datetime","expires_at","reason_code","comment","attachment","status","requested_by","approved_by","posted_ledger_entry","posted_metric_entry","idempotency_key"],
+ "fields":[
+  {"fieldname":"account","fieldtype":"Link","label":"Рахунок","options":"UA Loyalty Account","reqd":1,"search_index":1},
+  {"fieldname":"operation","fieldtype":"Select","label":"Операція","options":"CREDIT\nDEBIT\nMETRIC_INCREASE\nMETRIC_DECREASE","reqd":1},
+  {"fieldname":"amount","fieldtype":"Currency","label":"Сума","reqd":1},
+  {"fieldname":"effective_datetime","fieldtype":"Datetime","label":"Дата набуття чинності","default":"Now"},
+  {"fieldname":"expires_at","fieldtype":"Datetime","label":"Дата згорання"},
+  {"fieldname":"reason_code","fieldtype":"Data","label":"Код причини","reqd":1},
+  {"fieldname":"comment","fieldtype":"Small Text","label":"Коментар","reqd":1},
+  {"fieldname":"attachment","fieldtype":"Attach","label":"Підтвердження"},
+  {"fieldname":"status","fieldtype":"Select","label":"Стан","options":"DRAFT\nPENDING_APPROVAL\nAPPROVED\nPOSTED\nREJECTED","default":"DRAFT","reqd":1,"read_only":1,"search_index":1},
+  {"fieldname":"requested_by","fieldtype":"Link","label":"Запросив","options":"User","read_only":1},
+  {"fieldname":"approved_by","fieldtype":"Link","label":"Погодив","options":"User","read_only":1},
+  {"fieldname":"posted_ledger_entry","fieldtype":"Link","label":"Рух бонусів","options":"UA Loyalty Ledger Entry","read_only":1},
+  {"fieldname":"posted_metric_entry","fieldtype":"Link","label":"Рух метрики","options":"UA Loyalty Metric Entry","read_only":1},
+  {"fieldname":"idempotency_key","fieldtype":"Data","label":"Idempotency key","read_only":1,"unique":1}
+ ],
+ "permissions":[
+  {"role":"System Manager","read":1,"write":1,"create":1,"submit":1},
+  {"role":"UA Loyalty Manager","read":1,"write":1,"create":1,"submit":1},
+  {"role":"UA Loyalty Administrator","read":1,"write":1,"create":1,"submit":1},
+  {"role":"UA Loyalty Auditor","read":1}
+ ]
+}

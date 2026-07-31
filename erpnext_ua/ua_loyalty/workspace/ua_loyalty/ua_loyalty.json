@@ -1,0 +1,24 @@
+{
+ "app":"erpnext_ua","charts":[],"content":"[{\"id\":\"ua-loyalty-header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>UA Loyalty</b></span>\",\"col\":12}},{\"id\":\"ua-loyalty-setup\",\"type\":\"card\",\"data\":{\"card_name\":\"Налаштування\",\"col\":4}},{\"id\":\"ua-loyalty-operations\",\"type\":\"card\",\"data\":{\"card_name\":\"Операції\",\"col\":4}},{\"id\":\"ua-loyalty-audit\",\"type\":\"card\",\"data\":{\"card_name\":\"Аудит і звіти\",\"col\":4}}]",
+ "creation":"2026-07-31 00:00:00.000000","custom_blocks":[],"docstatus":0,"doctype":"Workspace","for_user":"","hide_custom":0,"icon":"star","idx":0,"is_hidden":0,"label":"UA Loyalty",
+ "links":[
+  {"hidden":0,"is_query_report":0,"label":"Налаштування","link_count":0,"onboard":0,"type":"Card Break"},
+  {"hidden":0,"is_query_report":0,"label":"Загальні налаштування","link_count":0,"link_to":"UA Loyalty Settings","link_type":"DocType","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":0,"label":"Області","link_count":0,"link_to":"UA Loyalty Scope","link_type":"DocType","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":0,"label":"Торгові точки","link_count":0,"link_to":"UA Loyalty Location","link_type":"DocType","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":0,"label":"Програми","link_count":0,"link_to":"UA Loyalty Program","link_type":"DocType","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":0,"label":"Типи карток","link_count":0,"link_to":"UA Loyalty Card Type","link_type":"DocType","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":0,"label":"Правила eligibility","link_count":0,"link_to":"UA Loyalty Eligibility Rule","link_type":"DocType","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":0,"label":"Операції","link_count":0,"onboard":0,"type":"Card Break"},
+  {"hidden":0,"is_query_report":0,"label":"Рахунки","link_count":0,"link_to":"UA Loyalty Account","link_type":"DocType","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":0,"label":"Картки","link_count":0,"link_to":"UA Loyalty Card","link_type":"DocType","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":0,"label":"Коригування","link_count":0,"link_to":"UA Loyalty Adjustment","link_type":"DocType","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":0,"label":"Імпорт","link_count":0,"link_to":"UA Loyalty Import Batch","link_type":"DocType","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":0,"label":"Аудит і звіти","link_count":0,"onboard":0,"type":"Card Break"},
+  {"hidden":0,"is_query_report":1,"label":"Рух бонусів","link_count":0,"link_to":"UA Loyalty Movements","link_type":"Report","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":1,"label":"Від’ємні баланси","link_count":0,"link_to":"UA Loyalty Negative Balances","link_type":"Report","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":1,"label":"Reservations","link_count":0,"link_to":"UA Loyalty Reservations","link_type":"Report","onboard":0,"type":"Link"},
+  {"hidden":0,"is_query_report":1,"label":"Reconciliation","link_count":0,"link_to":"UA Loyalty Reconciliation","link_type":"Report","onboard":0,"type":"Link"}
+ ],
+ "modified":"2026-07-31 00:00:00.000000","modified_by":"Administrator","module":"UA Loyalty","name":"UA Loyalty","number_cards":[],"owner":"Administrator","parent_page":"","public":1,"quick_lists":[],"roles":[],"sequence_id":15.0,"shortcuts":[],"title":"UA Loyalty","type":"Workspace"
+}

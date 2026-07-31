@@ -1,0 +1,12 @@
+{
+ "doctype":"DocType","name":"UA Loyalty Card","module":"UA Loyalty","engine":"InnoDB","autoname":"format:LOY-CARD-{########}","track_changes":1,
+ "field_order":["card_uid","card_number","barcode","account","status","is_primary","issued_at","expires_at","closed_at","replaces_card","replaced_by","reissued_from","block_reason","close_reason"],
+ "fields":[
+  {"fieldname":"card_uid","fieldtype":"Data","label":"UID","reqd":1,"unique":1,"read_only":1},{"fieldname":"card_number","fieldtype":"Data","label":"Номер","search_index":1},{"fieldname":"barcode","fieldtype":"Data","label":"Штрихкод","reqd":1,"unique":1,"search_index":1,"in_list_view":1},
+  {"fieldname":"account","fieldtype":"Link","label":"Рахунок","options":"UA Loyalty Account","reqd":1,"in_list_view":1,"search_index":1},{"fieldname":"status","fieldtype":"Select","label":"Стан","options":"ACTIVE\nBLOCKED\nLOST\nREPLACED\nEXPIRED\nCLOSED\nRETIRED","default":"ACTIVE","reqd":1,"in_list_view":1},{"fieldname":"is_primary","fieldtype":"Check","label":"Основна","default":"1"},
+  {"fieldname":"issued_at","fieldtype":"Datetime","label":"Видана","default":"Now"},{"fieldname":"expires_at","fieldtype":"Datetime","label":"Діє до"},{"fieldname":"closed_at","fieldtype":"Datetime","label":"Закрита"},
+  {"fieldname":"replaces_card","fieldtype":"Link","label":"Замінює","options":"UA Loyalty Card"},{"fieldname":"replaced_by","fieldtype":"Link","label":"Замінена на","options":"UA Loyalty Card","read_only":1},{"fieldname":"reissued_from","fieldtype":"Link","label":"Перевидана з","options":"UA Loyalty Card"},
+  {"fieldname":"block_reason","fieldtype":"Small Text","label":"Причина блокування"},{"fieldname":"close_reason","fieldtype":"Small Text","label":"Причина закриття"}
+ ],
+ "permissions":[{"role":"System Manager","read":1},{"role":"UA Loyalty User","read":1},{"role":"UA Loyalty Manager","read":1,"write":1,"create":1},{"role":"UA Loyalty Auditor","read":1},{"role":"UA Loyalty Administrator","read":1,"write":1,"create":1}]
+}

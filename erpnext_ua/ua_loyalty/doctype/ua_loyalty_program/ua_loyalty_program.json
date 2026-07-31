@@ -1,0 +1,21 @@
+{
+ "doctype":"DocType","name":"UA Loyalty Program","module":"UA Loyalty","engine":"InnoDB","autoname":"field:program_code","title_field":"program_name","track_changes":1,
+ "field_order":["program_code","program_name","scope","default_card_type","active","valid_from","valid_to","rule_version","published_snapshot_hash","default_earn_eligibility","default_redeem_eligibility","default_metric_eligibility","tiers","rate_timing","credit_consumption_mode","expiry_writeoff_mode","amount_base_mode","max_redemption_percent","minimum_redemption_amount","minimum_cash_remainder","require_one_non_bonus_item","activation_mode","activation_days","expiry_mode","bonus_validity_days","returned_bonus_validity_days","extra_bonus_percent","metric_redeem_effect","allow_negative_balance_from_reversal"],
+ "fields":[
+  {"fieldname":"program_code","fieldtype":"Data","label":"Код","reqd":1,"unique":1},{"fieldname":"program_name","fieldtype":"Data","label":"Назва","reqd":1,"in_list_view":1},
+  {"fieldname":"scope","fieldtype":"Link","label":"Область","options":"UA Loyalty Scope","reqd":1,"in_list_view":1},{"fieldname":"default_card_type","fieldtype":"Link","label":"Тип картки","options":"UA Loyalty Card Type"},{"fieldname":"active","fieldtype":"Check","label":"Активна","default":"1"},
+  {"fieldname":"valid_from","fieldtype":"Datetime","label":"Чинна з"},{"fieldname":"valid_to","fieldtype":"Datetime","label":"Чинна до"},{"fieldname":"rule_version","fieldtype":"Int","label":"Версія","default":"1","read_only":1},
+  {"fieldname":"published_snapshot_hash","fieldtype":"Data","label":"Snapshot hash","read_only":1},{"fieldname":"default_earn_eligibility","fieldtype":"Select","label":"Earn default","options":"ALLOW\nDENY","default":"ALLOW"},{"fieldname":"default_redeem_eligibility","fieldtype":"Select","label":"Redeem default","options":"ALLOW\nDENY","default":"ALLOW"},{"fieldname":"default_metric_eligibility","fieldtype":"Select","label":"Metric default","options":"ALLOW\nDENY","default":"ALLOW"},{"fieldname":"tiers","fieldtype":"Table","label":"Пороги","options":"UA Loyalty Tier","reqd":1},
+  {"fieldname":"rate_timing","fieldtype":"Select","label":"Момент ставки","options":"BEFORE_CURRENT_SALE\nAFTER_CURRENT_SALE","default":"BEFORE_CURRENT_SALE"},
+  {"fieldname":"credit_consumption_mode","fieldtype":"Select","label":"Споживання credit","options":"AGGREGATE_BALANCE\nEARLIEST_EXPIRY_FIRST\nFIFO","default":"AGGREGATE_BALANCE"},
+  {"fieldname":"expiry_writeoff_mode","fieldtype":"Select","label":"Згорання","options":"AGGREGATE_NOMINAL_CAP\nLOT_REMAINING","default":"AGGREGATE_NOMINAL_CAP"},
+  {"fieldname":"amount_base_mode","fieldtype":"Select","label":"База","options":"POS_ITEM_FINAL_SELLING_AMOUNT","default":"POS_ITEM_FINAL_SELLING_AMOUNT"},
+  {"fieldname":"max_redemption_percent","fieldtype":"Percent","label":"Максимум списання","default":"100"},{"fieldname":"minimum_redemption_amount","fieldtype":"Currency","label":"Мінімум списання","default":"0"},
+  {"fieldname":"minimum_cash_remainder","fieldtype":"Currency","label":"Мінімум грошима","default":"0"},{"fieldname":"require_one_non_bonus_item","fieldtype":"Check","label":"Один товар без бонусів","default":"0"},
+  {"fieldname":"activation_mode","fieldtype":"Select","label":"Активація","options":"IMMEDIATE\nAFTER_DAYS\nNEXT_MONTH_DAY","default":"IMMEDIATE"},{"fieldname":"activation_days","fieldtype":"Int","label":"Днів до активації","default":"0"},
+  {"fieldname":"expiry_mode","fieldtype":"Select","label":"Строк дії","options":"NONE\nAFTER_DAYS\nEND_OF_MONTH\nEND_OF_YEAR","default":"NONE"},{"fieldname":"bonus_validity_days","fieldtype":"Int","label":"Днів дії"},{"fieldname":"returned_bonus_validity_days","fieldtype":"Int","label":"Днів для відновлених"},
+  {"fieldname":"extra_bonus_percent","fieldtype":"Percent","label":"Додатковий відсоток","default":"0"},{"fieldname":"metric_redeem_effect","fieldtype":"Select","label":"Вплив списання на метрику","options":"SUBTRACT_REDEEMED_AMOUNT","default":"SUBTRACT_REDEEMED_AMOUNT"},
+  {"fieldname":"allow_negative_balance_from_reversal","fieldtype":"Check","label":"Дозволити борг при reversal","default":"1","read_only":1}
+ ],
+ "permissions":[{"role":"System Manager","read":1,"write":1,"create":1},{"role":"UA Loyalty Administrator","read":1,"write":1,"create":1},{"role":"UA Loyalty Auditor","read":1}]
+}

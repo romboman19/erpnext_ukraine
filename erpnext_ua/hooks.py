@@ -67,6 +67,7 @@ after_install = [
 	# order of domain provisioning to be fixed and explicit, not incidental.
 	"erpnext_ua.group_stock_fifo.setup.roles.ensure_roles",
 	"erpnext_ua.group_stock_fifo.setup.layer_dimension.ensure_layer_dimension",
+	"erpnext_ua.ua_loyalty.setup.ensure_loyalty_setup",
 	"erpnext_ua.integrations.install.after_install",
 	"erpnext_ua.ua_setup.service.report_readiness",
 ]
@@ -92,6 +93,7 @@ after_migrate = [
 	# ADR-002: the cleanup patch must run in the same after_migrate, right after
 	# ERPNext finishes registering the dimension's custom fields.
 	"erpnext_ua.group_stock_fifo.setup.layer_dimension.ensure_layer_dimension",
+	"erpnext_ua.ua_loyalty.setup.ensure_loyalty_setup",
 	"erpnext_ua.integrations.migrations.after_migrate",
 ]
 
@@ -153,6 +155,7 @@ has_permission = {
 
 CC = "erpnext_ua.consignment_and_commission.integrations"
 GSF = "erpnext_ua.group_stock_fifo"
+LOYALTY = "erpnext_ua.ua_loyalty.adapters.sales_invoice"
 
 # Порядок у списках — це контракт, а не випадковість. Комісійні перевірки й
 # споживання резервів мають завершитися до фіскалізації ПРРО: скасувати вже
@@ -163,16 +166,19 @@ doc_events = {
             f"{CC}.sales_invoice.validate_managed_sales_invoice",
             f"{CC}.tracking.validate_sales_invoice_tracking_ownership",
             f"{GSF}.services.sales_invoice.validate_managed_sales_invoice",
+			f"{LOYALTY}.validate_before_submit",
         ],
         "on_submit": [
             f"{CC}.sales_invoice.consume_sales_invoice_allocations",
+			f"{LOYALTY}.on_submit",
             "erpnext_ua.ua_fiscal.sales_invoice.on_submit",
         ],
         "before_cancel": [
             f"{CC}.sales_invoice.before_cancel_managed_sales_invoice",
             f"{GSF}.services.sales_invoice.before_cancel_managed_sales_invoice",
+			f"{LOYALTY}.validate_before_cancel",
         ],
-        "on_cancel": f"{CC}.sales_invoice.on_cancel_managed_sales_invoice",
+		"on_cancel": [f"{CC}.sales_invoice.on_cancel_managed_sales_invoice", f"{LOYALTY}.on_cancel"],
         "on_trash": f"{CC}.sales_invoice.release_draft_sales_invoice_allocations",
     },
 	"Employee": {
@@ -269,6 +275,9 @@ scheduler_events = {
 	],
 	"hourly_long": [
 		f"{CC}.reservations.expire_due_allocations",
+		"erpnext_ua.ua_loyalty.scheduler.activate_pending",
+		"erpnext_ua.ua_loyalty.scheduler.expire_obligations",
+		"erpnext_ua.ua_loyalty.scheduler.release_stale_reservations",
 	],
 	"cron": {
 		"*/5 * * * *": [

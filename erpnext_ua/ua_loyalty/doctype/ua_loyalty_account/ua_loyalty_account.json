@@ -1,0 +1,15 @@
+{
+ "doctype":"DocType","name":"UA Loyalty Account","module":"UA Loyalty","engine":"InnoDB","autoname":"format:LOY-ACC-{########}","track_changes":1,
+ "field_order":["customer","scope","program","card_type","status","opt_in_at","opt_out_at","metric_balance","current_tier_code","current_percent","marketing_balance","pending_balance","reserved_balance","redeemable_balance","debt_balance","last_qualifying_purchase_at","row_version","last_ledger_entry","last_reconciled_at","reconciliation_status"],
+ "fields":[
+  {"fieldname":"customer","fieldtype":"Link","label":"Клієнт","options":"Customer","reqd":1,"in_list_view":1,"search_index":1},
+  {"fieldname":"scope","fieldtype":"Link","label":"Область","options":"UA Loyalty Scope","reqd":1,"in_list_view":1,"search_index":1},{"fieldname":"program","fieldtype":"Link","label":"Програма","options":"UA Loyalty Program","reqd":1},{"fieldname":"card_type","fieldtype":"Link","label":"Тип картки","options":"UA Loyalty Card Type"},
+  {"fieldname":"status","fieldtype":"Select","label":"Стан","options":"ACTIVE\nBLOCKED\nCLOSED","default":"ACTIVE","reqd":1,"in_list_view":1},{"fieldname":"opt_in_at","fieldtype":"Datetime","label":"Згода"},{"fieldname":"opt_out_at","fieldtype":"Datetime","label":"Відмова"},
+  {"fieldname":"metric_balance","fieldtype":"Currency","label":"Накопичувальна метрика","default":"0","read_only":1},{"fieldname":"current_tier_code","fieldtype":"Data","label":"Рівень","read_only":1},{"fieldname":"current_percent","fieldtype":"Percent","label":"Відсоток","read_only":1},
+  {"fieldname":"marketing_balance","fieldtype":"Currency","label":"Баланс","default":"0","read_only":1,"in_list_view":1},{"fieldname":"pending_balance","fieldtype":"Currency","label":"Очікує","default":"0","read_only":1},{"fieldname":"reserved_balance","fieldtype":"Currency","label":"Зарезервовано","default":"0","read_only":1},
+  {"fieldname":"redeemable_balance","fieldtype":"Currency","label":"Доступно","default":"0","read_only":1},{"fieldname":"debt_balance","fieldtype":"Currency","label":"Борг","default":"0","read_only":1,"in_list_view":1},
+  {"fieldname":"last_qualifying_purchase_at","fieldtype":"Datetime","label":"Остання покупка","read_only":1},{"fieldname":"row_version","fieldtype":"Int","label":"Версія","default":"0","read_only":1},{"fieldname":"last_ledger_entry","fieldtype":"Link","label":"Останній рух","options":"UA Loyalty Ledger Entry","read_only":1},
+  {"fieldname":"last_reconciled_at","fieldtype":"Datetime","label":"Звірено","read_only":1},{"fieldname":"reconciliation_status","fieldtype":"Select","label":"Звірка","options":"OK\nMISMATCH\nPENDING","default":"PENDING","read_only":1}
+ ],
+ "permissions":[{"role":"System Manager","read":1},{"role":"UA Loyalty User","read":1},{"role":"UA Loyalty Manager","read":1},{"role":"UA Loyalty Auditor","read":1},{"role":"UA Loyalty Administrator","read":1}]
+}
