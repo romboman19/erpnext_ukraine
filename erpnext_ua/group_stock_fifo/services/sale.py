@@ -89,12 +89,16 @@ def prepared_stage_value(allocation: Any, stage: str) -> Decimal:
     """§16.4's `prepared_stage_value`, read from the ledger of the stage itself.
 
     Not from the reallocation's totals: those record what the *sources* issued,
-    and the number this has to match is what the stage actually received.
+    and the number this has to match is what the stage actually holds.
+
+    The **net** of every row, not the sum of the incoming ones. A lane is reused
+    across checkouts, so counting only receipts adds up every preparation the
+    lane has ever held — including ones already sold or compensated away.
     """
     value = frappe.db.sql(
         """
         select coalesce(sum(stock_value_difference), 0) from `tabStock Ledger Entry`
-        where warehouse = %s and is_cancelled = 0 and actual_qty > 0
+        where warehouse = %s and is_cancelled = 0
         """,
         (stage,),
     )[0][0]
