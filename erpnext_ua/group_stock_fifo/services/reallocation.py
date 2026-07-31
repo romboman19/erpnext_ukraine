@@ -51,7 +51,7 @@ ALLOCATION_WRITE_FLAG = "gsf_allocation_service"
 
 
 @contextmanager
-def _service_write():
+def service_write():
     for flag in (WRITE_FLAG, ALLOCATION_WRITE_FLAG):
         setattr(frappe.flags, flag, True)
     try:
@@ -111,7 +111,7 @@ def prepare(allocation_name: str, *, checkout: str, staging_lane: str | None = N
         allocation, lane=lane, moves=moves, posting_datetime=posting
     )
 
-    with _service_write():
+    with service_write():
         allocation.status = ALLOCATION_PREPARING
         allocation.save(ignore_permissions=True)
 
@@ -189,10 +189,11 @@ def _new_reallocation(allocation: Any, *, lane: str, moves: list[SliceMove], pos
             "staging_lane": lane,
             "posting_datetime": posting_datetime,
             "total_qty": float(sum((move.qty for move in moves), Decimal("0"))),
+            "allocation": allocation.name,
             "allocation_set_hash": _slice_set_hash(moves),
         }
     )
-    with _service_write():
+    with service_write():
         doc.insert(ignore_permissions=True)
     return doc
 
@@ -216,7 +217,7 @@ def _transfer_own(
     unwinds.
     """
     source_warehouse = moves[0].source_warehouse
-    entry = _submit_stock_entry(
+    entry = submit_stock_entry(
         company=allocation.seller_company,
         purpose="Material Transfer",
         posting=posting,
@@ -292,7 +293,7 @@ def _reallocate_foreign(
     )
     source_warehouse = moves[0].source_warehouse
 
-    issue = _submit_stock_entry(
+    issue = submit_stock_entry(
         company=source_company,
         purpose="Material Issue",
         posting=posting,
@@ -315,7 +316,7 @@ def _reallocate_foreign(
     row_values = {move.stock_layer: _row_value(issue, move, source_warehouse) for move in moves}
     source_value = sum(row_values.values(), Decimal("0"))
 
-    receipt = _submit_stock_entry(
+    receipt = submit_stock_entry(
         company=allocation.seller_company,
         purpose="Material Receipt",
         posting=posting,
@@ -451,7 +452,7 @@ def _shift_balance(move: SliceMove, *, allocation: Any, stage_warehouse: str, en
     )
 
 
-def _submit_stock_entry(*, company: str, purpose: str, posting, reallocation: str, rows: list) -> Any:
+def submit_stock_entry(*, company: str, purpose: str, posting, reallocation: str, rows: list) -> Any:
     entry = frappe.get_doc(
         {
             "doctype": "Stock Entry",
@@ -519,7 +520,7 @@ def _settle(allocation: Any, reallocation: Any, legs: list[dict[str, Any]]) -> N
         (Decimal(str(leg["destination_stock_value"])) for leg in legs), Decimal("0")
     )
 
-    with _service_write():
+    with service_write():
         for leg in legs:
             reallocation.append("legs", leg)
         reallocation.total_source_value = float(source_total)
