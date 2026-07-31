@@ -33,7 +33,7 @@ def guard_backdated_document(doc, method=None) -> None:
         return
     if not frappe.db.get_single_value("GSF Settings", "block_backdated_mutations"):
         return
-    closed_through = frappe.db.get_single_value("GSF Settings", "closed_through_date")
+    closed_through = _closed_through()
     if not closed_through:
         return
 
@@ -49,6 +49,19 @@ def guard_backdated_document(doc, method=None) -> None:
         "of a posting.",
         title="CLOSED_PERIOD",
     )
+
+
+def _closed_through():
+    """The close date, or None.
+
+    An unset Frappe Date field reads back as `0001-01-01` rather than nothing,
+    and treating that as a real close date would make every posting look
+    backdated against the year one.
+    """
+    value = frappe.db.get_single_value("GSF Settings", "closed_through_date")
+    if not value or getdate(value).year <= 1:
+        return None
+    return value
 
 
 def _touches_gsf(doc) -> bool:
@@ -135,7 +148,7 @@ def close_period(*, closed_through: str, company_group: str | None = None) -> di
             "CLOSED_PERIOD",
         )
 
-    previous = frappe.db.get_single_value("GSF Settings", "closed_through_date")
+    previous = _closed_through()
     if previous and getdate(closed_through) < getdate(previous):
         raise GSFError(
             f"The period is already closed through {previous}; closing backwards would "
