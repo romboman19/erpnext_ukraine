@@ -31,6 +31,15 @@ INCOMING_LAYER_FIELD = "to_gsf_stock_layer"
 #: managed flow from a hand-written Stock Entry.
 MANAGED_FIELD = "gsf_managed"
 
+#: §18.2 audit links. A managed sale carries several technical rows for one
+#: user-visible line, and without these the rows cannot be traced back to the
+#: slice that justified them — nor grouped again for printing (§18.4).
+MANAGED_SALE_FIELD = "gsf_managed_sale"
+CHECKOUT_FIELD = "gsf_checkout"
+ALLOCATION_FIELD = "gsf_allocation"
+SLICE_FIELD = "gsf_allocation_slice"
+DISPLAY_GROUP_FIELD = "gsf_display_group"
+
 LAYER_BALANCE_INDEX = "gsf_layer_balance"
 LAYER_FIFO_INDEX = "gsf_layer_fifo"
 
@@ -44,6 +53,7 @@ REQUIRED_COLUMNS = {
     "Sales Invoice Item": (LAYER_FIELD,),
     "Stock Entry": (MANAGED_FIELD,),
     "Stock Reconciliation": (MANAGED_FIELD,),
+    "Sales Invoice": (MANAGED_SALE_FIELD, CHECKOUT_FIELD),
 }
 
 
@@ -78,6 +88,56 @@ def _ensure_managed_flag(frappe: Any) -> None:
                 }
             ]
             for doctype in ("Stock Entry", "Stock Reconciliation")
+        },
+        update=True,
+    )
+    create_custom_fields(
+        {
+            "Sales Invoice": [
+                {
+                    "fieldname": MANAGED_SALE_FIELD,
+                    "label": "GSF Managed Sale",
+                    "fieldtype": "Check",
+                    "read_only": 1,
+                    "no_copy": 1,
+                    "search_index": 1,
+                },
+                {
+                    "fieldname": CHECKOUT_FIELD,
+                    "label": "GSF Checkout",
+                    "fieldtype": "Data",
+                    "read_only": 1,
+                    "no_copy": 1,
+                    "search_index": 1,
+                },
+            ],
+            "Sales Invoice Item": [
+                {
+                    "fieldname": ALLOCATION_FIELD,
+                    "label": "GSF Allocation",
+                    "fieldtype": "Link",
+                    "options": "GSF Allocation",
+                    "read_only": 1,
+                    "no_copy": 1,
+                    "search_index": 1,
+                },
+                {
+                    "fieldname": SLICE_FIELD,
+                    "label": "GSF Allocation Slice Row",
+                    "fieldtype": "Data",
+                    "read_only": 1,
+                    "no_copy": 1,
+                },
+                {
+                    "fieldname": DISPLAY_GROUP_FIELD,
+                    "label": "GSF Display Group",
+                    "fieldtype": "Data",
+                    "read_only": 1,
+                    "no_copy": 1,
+                    "search_index": 1,
+                    "description": "§18.2: every technical row of one user-visible line shares this.",
+                },
+            ],
         },
         update=True,
     )

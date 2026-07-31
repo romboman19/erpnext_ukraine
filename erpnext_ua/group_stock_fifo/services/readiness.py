@@ -27,6 +27,7 @@ def readiness() -> ReadinessReport:
     _check_warehouse_bindings(frappe, report)
     _check_lanes(frappe, report)
     _check_counterparty_dimension(frappe, report)
+    _check_repeated_items(frappe, report)
     return report
 
 
@@ -125,6 +126,27 @@ def _check_counterparty_dimension(frappe: Any, report: ReadinessReport) -> None:
             f"No {COUNTERPARTY_DIMENSION} accounting dimension; clearing balances are "
             "reconcilable only through GSF Reallocation Leg, not through GL reports"
         )
+
+
+def _check_repeated_items(frappe: Any, report: ReadinessReport) -> None:
+    """§18.3: one Item has to be allowed on several rows of one transaction.
+
+    A managed sale splits a user line into one row per layer, and gate 0k showed
+    that split is forced by the platform, not chosen. If Selling Settings
+    collapses repeated items, §18.2 cannot be expressed at all — so this blocks.
+
+    GSF does not flip the setting itself: §44 forbids changing a global ERPNext
+    setting silently, and this one changes behaviour for every sale on the site,
+    including the commission domain's.
+    """
+    if not frappe.db.exists("DocType", "Selling Settings"):
+        return
+    if frappe.db.get_single_value("Selling Settings", "allow_multiple_items"):
+        return
+    report.block(
+        "Selling Settings does not allow one Item on several rows of a transaction; "
+        "§18.2 technical rows cannot be created. Enable it deliberately, with an audit note."
+    )
 
 
 def _check_member_bindings(frappe: Any, report: ReadinessReport, group: str, member: Any) -> None:
