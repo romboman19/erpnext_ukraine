@@ -322,7 +322,8 @@ def abort(checkout_name: str, *, reason: str) -> Any:
     case is a return, not a cancellation.
     """
     checkout = frappe.get_doc("GSF Checkout", checkout_name)
-    if states.is_terminal(checkout.status):
+    if checkout.status in (states.CANCELLED, states.COMPENSATED):
+        # Already stopped. Asking again is a retry, not a mistake.
         return checkout
     if not states.is_reversible(checkout.status):
         raise GSFError(

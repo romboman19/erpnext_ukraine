@@ -138,6 +138,8 @@ def run() -> dict:
     )
 
     attempt("walking_a_completed_checkout_again", lambda: walk(sold.name).status)
+    # A finished sale is not a stopped one: aborting it is a category error and
+    # should say so, rather than quietly return "already done".
     attempt(
         "a_completed_checkout_cannot_be_aborted",
         lambda: abort(sold.name, reason="too late").status,
