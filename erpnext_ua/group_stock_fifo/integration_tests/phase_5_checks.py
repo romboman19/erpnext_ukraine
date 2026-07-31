@@ -31,6 +31,7 @@ from .phase_3_fixture import (
     LOCATION_CODE,
     assert_site,
     companies,
+    drain_reposts,
     pool_name,
     stage_name,
 )
@@ -79,6 +80,18 @@ def run() -> dict:
             (warehouse,),
         )[0][0]
 
+    def settle():
+        """Stand in for the scheduler between steps.
+
+        Every managed flow leaves ERPNext a repost to run, same-day ones
+        included, and §17.2 refuses to trade against an unsettled queue. On a
+        stack with a scheduler this happens by itself within seconds; here it
+        has to be asked for, or the second transaction of the run is blocked by
+        the first.
+        """
+        frappe.db.commit()
+        out.setdefault("reposts_drained", []).append(drain_reposts())
+
     # ---- the sale -------------------------------------------------------
     frappe.db.commit()
     allocation = reserve(request("p5-sale", 6, "P5-CHECKOUT-1"))
@@ -86,7 +99,7 @@ def run() -> dict:
     invoice = sell(
         allocation.name, customer=CUSTOMER, rate=2000, checkout="P5-CHECKOUT-1"
     )
-    frappe.db.commit()
+    settle()
 
     out["invoice"] = {
         "name": invoice.name,
@@ -128,14 +141,14 @@ def run() -> dict:
     pools_before = {name: float(warehouse_qty(name)) for name in sorted(pools)}
     second = reserve(request("p5-compensate", 3, "P5-CHECKOUT-2"))
     second_reallocation = prepare(second.name, checkout="P5-CHECKOUT-2")
-    frappe.db.commit()
+    settle()
     out["before_compensation"] = {
         "pools": {name: float(warehouse_qty(name)) for name in sorted(pools)},
         "stage": float(warehouse_qty(stage)),
     }
 
     compensated = compensate(second_reallocation.name, reason="phase 5 check")
-    frappe.db.commit()
+    settle()
     out["after_compensation"] = {
         "status": compensated.status,
         "pools": {name: float(warehouse_qty(name)) for name in sorted(pools)},

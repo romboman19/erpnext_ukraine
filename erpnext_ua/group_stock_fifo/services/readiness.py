@@ -28,6 +28,7 @@ def readiness() -> ReadinessReport:
     _check_lanes(frappe, report)
     _check_counterparty_dimension(frappe, report)
     _check_repeated_items(frappe, report)
+    _check_scheduler(frappe, report)
     return report
 
 
@@ -126,6 +127,37 @@ def _check_counterparty_dimension(frappe: Any, report: ReadinessReport) -> None:
             f"No {COUNTERPARTY_DIMENSION} accounting dimension; clearing balances are "
             "reconcilable only through GSF Reallocation Leg, not through GL reports"
         )
+
+
+def _check_scheduler(frappe: Any, report: ReadinessReport) -> None:
+    """GSF needs a working scheduler, and the reason is §17.2 rather than tidiness.
+
+    Every managed flow leaves ERPNext a `Repost Item Valuation` to run, including
+    same-day ones. Until that repost executes, the valuation queue on disk is not
+    what ERPNext will consume, and the preflight correctly refuses the *next*
+    transaction. With no scheduler the queue never drains, so the second sale of
+    the day can never happen.
+
+    A warning rather than a block: the preflight already refuses at the moment it
+    matters, with a precise error, and blocking here would make a site that is
+    merely being configured look permanently broken.
+    """
+    from frappe.utils.scheduler import is_scheduler_inactive
+
+    try:
+        inactive = is_scheduler_inactive()
+    except Exception:  # noqa: BLE001 - an unreadable scheduler state is itself the warning
+        inactive = True
+    if inactive:
+        report.warn(
+            "The scheduler is not running. Repost Item Valuation never drains, so §17.2 "
+            "preflight will refuse every transaction after the first (PENDING_REPOST)."
+        )
+    stuck = frappe.db.count(
+        "Repost Item Valuation", {"status": ("in", ("Queued", "In Progress")), "docstatus": 1}
+    )
+    if stuck:
+        report.warn(f"{stuck} stock reposts are still queued; preflight will refuse until they run")
 
 
 def _check_repeated_items(frappe: Any, report: ReadinessReport) -> None:
