@@ -22,7 +22,7 @@ from ..services.compensation import compensate
 from ..services.domain import GSFError
 from ..services.reallocation import prepare
 from ..services.reservation import ReservationRequest
-from ..services.sale import actual_sale_cogs, sell
+from ..services.sale import SaleLine, actual_sale_cogs, sell
 from ..setup.layer_dimension import DISPLAY_GROUP_FIELD, LAYER_FIELD
 from .phase_3_fixture import (
     CUSTOMER,
@@ -134,7 +134,9 @@ def run() -> dict:
     allocation = reserve(request("p5-sale", 6, "P5-CHECKOUT-1"))
     reallocation = prepare(allocation.name, checkout="P5-CHECKOUT-1")
     invoice = sell(
-        allocation.name, customer=CUSTOMER, rate=2000, checkout="P5-CHECKOUT-1"
+        [SaleLine(allocation=allocation.name, rate=Decimal("2000"))],
+        customer=CUSTOMER,
+        checkout="P5-CHECKOUT-1",
     )
     settle()
 

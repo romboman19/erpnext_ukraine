@@ -16,6 +16,7 @@ return, not a rollback.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
@@ -37,38 +38,80 @@ from .reservation import ALLOCATION_CONSUMED, ALLOCATION_PREPARED
 from .staging import release_lane
 
 
+@dataclass(frozen=True, slots=True)
+class SaleLine:
+    """One user-visible line: a prepared allocation and the price it sells at."""
+
+    allocation: str
+    rate: Decimal
+
+
 def sell(
-    allocation_name: str,
+    lines: list[SaleLine],
     *,
     customer: str,
-    rate: Decimal | float | str,
     checkout: str,
     posting_date: str | None = None,
     posting_time: str | None = None,
 ) -> Any:
-    """Turn one prepared allocation into one submitted, checked Sales Invoice."""
-    allocation = frappe.get_doc("GSF Allocation", allocation_name)
-    if allocation.status != ALLOCATION_PREPARED:
-        raise GSFError(
-            f"Allocation {allocation_name} is {allocation.status}, not prepared",
-            "ALLOCATION_CONFLICT",
-        )
-    reallocation = _reallocation_of(allocation)
-    stage = frappe.db.get_value("GSF Staging Lane", reallocation.staging_lane, "warehouse")
+    """Turn every prepared allocation of one checkout into one checked invoice.
 
-    prepared = prepared_stage_value(allocation, stage)
+    One invoice rather than one per line, because the customer bought one
+    basket: splitting it would give them several receipts for a single purchase
+    and make §16.4's comparison meaningless, since all the lines share a lane.
+    """
+    if not lines:
+        raise GSFError("A sale needs at least one line", "MANUAL_REVIEW_REQUIRED")
+
+    allocations = [_prepared_allocation(line.allocation) for line in lines]
+    reallocations = [_reallocation_of(allocation) for allocation in allocations]
+    stage = _single_stage(reallocations)
+
+    prepared = prepared_stage_value(stage)
     invoice = _submit_invoice(
-        allocation,
+        allocations,
+        lines=lines,
         customer=customer,
-        rate=Decimal(str(rate)),
         stage=stage,
         checkout=checkout,
         posting_date=posting_date,
         posting_time=posting_time,
     )
     _assert_cogs_matches(invoice, prepared=prepared)
-    _settle(allocation, reallocation, invoice=invoice, stage=stage, checkout=checkout)
+    for allocation, reallocation in zip(allocations, reallocations):
+        _settle_allocation(allocation, reallocation, invoice=invoice, stage=stage)
+    # §14.1 ends with "verify zero balance". `release_lane` is that check: it
+    # refuses and marks the lane DIRTY if anything is left behind.
+    release_lane(reallocations[0].staging_lane, checkout=checkout)
     return invoice
+
+
+def _prepared_allocation(name: str) -> Any:
+    allocation = frappe.get_doc("GSF Allocation", name)
+    if allocation.status != ALLOCATION_PREPARED:
+        raise GSFError(
+            f"Allocation {name} is {allocation.status}, not prepared", "ALLOCATION_CONFLICT"
+        )
+    return allocation
+
+
+def _single_stage(reallocations: list) -> str:
+    """Every line of one checkout shares one lane, and §9.8 requires it.
+
+    A lane holds exactly one checkout, so lines landing in different lanes would
+    mean two checkouts pretending to be one — and the §16.4 comparison, which is
+    per lane, could not be made at all.
+    """
+    lanes = {reallocation.staging_lane for reallocation in reallocations}
+    if len(lanes) != 1:
+        raise GSFError(
+            f"One checkout must prepare into one lane, found {sorted(lanes)}",
+            "STAGE_LANE_BUSY",
+        )
+    stage = frappe.db.get_value("GSF Staging Lane", lanes.pop(), "warehouse")
+    if not stage:
+        raise GSFError("Staging lane has no warehouse", "WAREHOUSE_BINDING_MISSING")
+    return stage
 
 
 def _reallocation_of(allocation: Any) -> Any:
@@ -85,7 +128,7 @@ def _reallocation_of(allocation: Any) -> Any:
     return frappe.get_doc("GSF Stock Reallocation", name)
 
 
-def prepared_stage_value(allocation: Any, stage: str) -> Decimal:
+def prepared_stage_value(stage: str) -> Decimal:
     """§16.4's `prepared_stage_value`, read from the ledger of the stage itself.
 
     Not from the reallocation's totals: those record what the *sources* issued,
@@ -106,17 +149,36 @@ def prepared_stage_value(allocation: Any, stage: str) -> Decimal:
 
 
 def _submit_invoice(
-    allocation: Any,
+    allocations: list,
     *,
+    lines: list[SaleLine],
     customer: str,
-    rate: Decimal,
     stage: str,
     checkout: str,
     posting_date: str | None,
     posting_time: str | None,
 ) -> Any:
     """§18.2: one row per slice, all out of the stage lane, all tagged."""
-    company = allocation.seller_company
+    company = allocations[0].seller_company
+    rows = []
+    for allocation, line in zip(allocations, lines):
+        rows.extend(
+            {
+                "item_code": allocation.item_code,
+                "qty": float(slice_row.qty),
+                "rate": float(line.rate),
+                "warehouse": stage,
+                "income_account": _income_account(company),
+                LAYER_FIELD: slice_row.stock_layer,
+                ALLOCATION_FIELD: allocation.name,
+                SLICE_FIELD: slice_row.name,
+                # One user-visible line, so one group across every row it was
+                # split into (§18.2, §18.4).
+                DISPLAY_GROUP_FIELD: allocation.name,
+            }
+            for slice_row in allocation.slices
+        )
+
     invoice = frappe.get_doc(
         {
             "doctype": "Sales Invoice",
@@ -128,22 +190,7 @@ def _submit_invoice(
             "posting_time": posting_time,
             MANAGED_SALE_FIELD: 1,
             CHECKOUT_FIELD: checkout,
-            "items": [
-                {
-                    "item_code": allocation.item_code,
-                    "qty": float(row.qty),
-                    "rate": float(rate),
-                    "warehouse": stage,
-                    "income_account": _income_account(company),
-                    LAYER_FIELD: row.stock_layer,
-                    ALLOCATION_FIELD: allocation.name,
-                    SLICE_FIELD: row.name,
-                    # One user-visible line, so one group across every row it
-                    # was split into (§18.2, §18.4).
-                    DISPLAY_GROUP_FIELD: allocation.name,
-                }
-                for row in allocation.slices
-            ],
+            "items": rows,
         }
     )
     invoice.insert(ignore_permissions=True)
@@ -194,16 +241,17 @@ def actual_sale_cogs(invoice_name: str) -> Decimal:
     return abs(Decimal(str(value or 0)))
 
 
-def _settle(allocation: Any, reallocation: Any, *, invoice: Any, stage: str, checkout: str) -> None:
-    """Record the consumption, empty the stage cache, release the lane."""
+def _settle_allocation(allocation: Any, reallocation: Any, *, invoice: Any, stage: str) -> None:
+    """Record the consumption and empty the stage cache for one line."""
     posting = now_datetime()
     for row in allocation.slices:
+        value = _row_cogs(invoice.name, row.stock_layer)
         record_movement(
             stock_layer=row.stock_layer,
             movement_type="SALE_CONSUMPTION",
             posting_datetime=posting,
             qty=float(row.qty),
-            stock_value=float(_row_cogs(invoice.name, row.stock_layer)),
+            stock_value=float(value),
             source_company=allocation.seller_company,
             source_warehouse=stage,
             voucher_type="Sales Invoice",
@@ -215,7 +263,7 @@ def _settle(allocation: Any, reallocation: Any, *, invoice: Any, stage: str, che
             company=allocation.seller_company,
             warehouse=stage,
             qty=float(-Decimal(str(row.qty))),
-            stock_value=float(-_row_cogs(invoice.name, row.stock_layer)),
+            stock_value=float(-value),
         )
 
     with service_write():
@@ -225,10 +273,6 @@ def _settle(allocation: Any, reallocation: Any, *, invoice: Any, stage: str, che
         allocation.consumer_doctype = "Sales Invoice"
         allocation.consumer_document = invoice.name
         allocation.save(ignore_permissions=True)
-
-    # §14.1 ends with "verify zero balance". `release_lane` is that check: it
-    # refuses and marks the lane DIRTY if anything is left behind.
-    release_lane(reallocation.staging_lane, checkout=checkout)
 
 
 def _row_cogs(invoice_name: str, stock_layer: str) -> Decimal:
