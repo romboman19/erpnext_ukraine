@@ -176,18 +176,34 @@ def run(checkout_name: str, *, stop_at: str | None = None) -> Any:
 
 
 def _reserve(checkout: Any) -> Any:
-    """§23: `DRAFT → RESERVING → RESERVED`, one allocation per basket line."""
+    """§23: `DRAFT → RESERVING → RESERVED`, one allocation per basket line.
+
+    This step commits between lines, and that is deliberate rather than
+    convenient. §13.1 requires each reservation to begin a transaction of its
+    own, so its locks are not held across unrelated work; and §23 requires the
+    saga to be findable after a crash, which a row that was never committed is
+    not. Both point the same way here.
+
+    §14.6's ban on committing inside a service still holds where it was aimed —
+    at preparation and sale, which stay in one transaction below so that a
+    failed invoice takes the stock movements back with it.
+    """
     _move(checkout, states.RESERVING)
     lane = checkout.staging_lane or acquire_lane(
         company=checkout.seller_company,
         physical_location=checkout.physical_location,
         checkout=checkout.name,
     )
+    # The lane is claimed before the first reservation so that a basket cannot
+    # hold stock it will never have anywhere to stage. It is claimed by data,
+    # not by a row lock, so committing below does not give it up.
+    checkout.staging_lane = lane
+    _save(checkout)
+
     for line in checkout.lines:
         if line.allocation:
             continue
-        # The lane is taken before the first reservation so that a basket
-        # cannot hold stock it will never have anywhere to stage.
+        frappe.db.commit()
         allocation = reserve(
             ReservationRequest(
                 idempotency_key=f"{checkout.idempotency_key}:{line.idx}",
@@ -202,7 +218,8 @@ def _reserve(checkout: Any) -> Any:
             )
         )
         line.allocation = allocation.name
-    _move(checkout, states.RESERVED, staging_lane=lane, stock_state="RESERVED")
+        _save(checkout)
+    _move(checkout, states.RESERVED, stock_state="RESERVED")
     return checkout
 
 
@@ -331,6 +348,12 @@ def fail(checkout_name: str, *, code: str, reason: str) -> Any:
     checkout = frappe.get_doc("GSF Checkout", checkout_name)
     _move(checkout, states.FAILED, failure_code=code, manual_review_reason=reason)
     return checkout
+
+
+def _save(checkout: Any) -> None:
+    """Persist the saga's own bookkeeping without changing its state."""
+    with _service_write():
+        checkout.save(ignore_permissions=True)
 
 
 def _move(checkout: Any, status: str, **fields) -> None:
