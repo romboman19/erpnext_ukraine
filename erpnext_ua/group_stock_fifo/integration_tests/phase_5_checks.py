@@ -92,8 +92,45 @@ def run() -> dict:
         frappe.db.commit()
         out.setdefault("reposts_drained", []).append(drain_reposts())
 
-    # ---- the sale -------------------------------------------------------
+    # ---- the compensation, first -----------------------------------------
+    # Run before the sale, while the other companies' pools still hold stock:
+    # afterwards the only leg left would be the seller's own transfer, which
+    # touches no clearing account and proves the easier half.
     frappe.db.commit()
+    pools_before = {name: float(warehouse_qty(name)) for name in sorted(pools)}
+    second = reserve(request("p5-compensate", 6, "P5-CHECKOUT-2"))
+    second_reallocation = prepare(second.name, checkout="P5-CHECKOUT-2")
+    settle()
+    out["before_compensation"] = {
+        "pools": {name: float(warehouse_qty(name)) for name in sorted(pools)},
+        "stage": float(warehouse_qty(stage)),
+    }
+
+    compensated = compensate(second_reallocation.name, reason="phase 5 check")
+    settle()
+    out["after_compensation"] = {
+        "status": compensated.status,
+        "pools": {name: float(warehouse_qty(name)) for name in sorted(pools)},
+        "pools_match_before": {name: float(warehouse_qty(name)) for name in sorted(pools)}
+        == pools_before,
+        "stage": float(warehouse_qty(stage)),
+        "allocation": frappe.db.get_value("GSF Allocation", second.name, "status"),
+        "lane": frappe.db.get_value(
+            "GSF Staging Lane", {"warehouse": stage}, ["status", "current_checkout"], as_dict=True
+        ),
+        "reversals": frappe.db.count("GSF Layer Movement", {"is_reversal": 1}),
+    }
+    out["clearing_after_compensation"] = frappe.db.sql(
+        """
+        select acc.account_name as account, sum(gl.debit - gl.credit) as balance
+        from `tabGL Entry` gl join `tabAccount` acc on acc.name = gl.account
+        where gl.is_cancelled = 0 and acc.account_name like 'GSF Internal Stock Due%%'
+        group by acc.account_name order by acc.account_name
+        """,
+        as_dict=True,
+    )
+
+    # ---- the sale, second ------------------------------------------------
     allocation = reserve(request("p5-sale", 6, "P5-CHECKOUT-1"))
     reallocation = prepare(allocation.name, checkout="P5-CHECKOUT-1")
     invoice = sell(
@@ -135,40 +172,6 @@ def run() -> dict:
         filters={"movement_type": "SALE_CONSUMPTION"},
         fields=["qty", "stock_value"],
         order_by="qty",
-    )
-
-    # ---- the compensation ----------------------------------------------
-    pools_before = {name: float(warehouse_qty(name)) for name in sorted(pools)}
-    second = reserve(request("p5-compensate", 3, "P5-CHECKOUT-2"))
-    second_reallocation = prepare(second.name, checkout="P5-CHECKOUT-2")
-    settle()
-    out["before_compensation"] = {
-        "pools": {name: float(warehouse_qty(name)) for name in sorted(pools)},
-        "stage": float(warehouse_qty(stage)),
-    }
-
-    compensated = compensate(second_reallocation.name, reason="phase 5 check")
-    settle()
-    out["after_compensation"] = {
-        "status": compensated.status,
-        "pools": {name: float(warehouse_qty(name)) for name in sorted(pools)},
-        "pools_match_before": {name: float(warehouse_qty(name)) for name in sorted(pools)}
-        == pools_before,
-        "stage": float(warehouse_qty(stage)),
-        "allocation": frappe.db.get_value("GSF Allocation", second.name, "status"),
-        "lane": frappe.db.get_value(
-            "GSF Staging Lane", {"warehouse": stage}, ["status", "current_checkout"], as_dict=True
-        ),
-        "reversals": frappe.db.count("GSF Layer Movement", {"is_reversal": 1}),
-    }
-    out["clearing_after_compensation"] = frappe.db.sql(
-        """
-        select acc.account_name as account, sum(gl.debit - gl.credit) as balance
-        from `tabGL Entry` gl join `tabAccount` acc on acc.name = gl.account
-        where gl.is_cancelled = 0 and acc.account_name like 'GSF Internal Stock Due%%'
-        group by acc.account_name order by acc.account_name
-        """,
-        as_dict=True,
     )
 
     attempt(
