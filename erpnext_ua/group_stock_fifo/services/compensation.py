@@ -318,9 +318,26 @@ def _release_lane_quietly(reallocation: Any) -> None:
 
     §44 forbids cleaning a dirty lane automatically, so a refusal here is
     recorded on the reallocation and left for an operator rather than swallowed.
+
+    The checkout name comes from the *lane's own* `current_checkout`, not from
+    `reallocation.checkout`. The two are not guaranteed to be the same string:
+    `prepare()` takes its own explicit `checkout` argument to acquire the lane,
+    independent of whatever the allocation's `ReservationRequest` happened to
+    carry. The GSF Checkout saga always threads one consistent name through
+    both, so this only diverges for a caller that invokes `reserve`/`prepare`
+    directly with mismatched checkout identifiers — but when it does, trusting
+    `reallocation.checkout` released nothing: `release_lane` refused with
+    `STAGE_LANE_BUSY` against the lane's real holder, and the stock reversal
+    still succeeded while the lane stayed locked. The lane record is the source
+    of truth for who holds it, so ask it instead of the reallocation's copy.
     """
+    lane_checkout = (
+        frappe.db.get_value("GSF Staging Lane", reallocation.staging_lane, "current_checkout")
+        or reallocation.checkout
+        or ""
+    )
     try:
-        release_lane(reallocation.staging_lane, checkout=reallocation.checkout or "")
+        release_lane(reallocation.staging_lane, checkout=lane_checkout)
     except GSFError as error:
         with service_write():
             reallocation.failure_code = error.code
