@@ -34,6 +34,15 @@ def diagnostics_readiness() -> dict[str, Any]:
     return readiness_payload()
 
 
+@frappe.whitelist()
+def diagnostics_integrity(company_group: str | None = None) -> dict[str, Any]:
+    """`GET /diagnostics/integrity` — the §31 Financial Integrity report."""
+    frappe.only_for(AUDIT_ROLES)
+    from .services.integrity import check
+
+    return check(company_group).as_dict()
+
+
 @frappe.whitelist(methods=["POST"])
 def allocation_preview(
     *,
