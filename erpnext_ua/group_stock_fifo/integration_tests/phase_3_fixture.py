@@ -233,6 +233,20 @@ def teardown(confirm_write):
         raise RuntimeError("confirm_write token required")
     frappe.flags.in_uninstall = True
     try:
+        # Documents come apart in the reverse of the order they were built, and
+        # the sale is the newest of them. Cancelling a stage receipt while the
+        # invoice that consumed it is still submitted asks ERPNext for stock
+        # that is no longer there, and it refuses with NegativeStockError —
+        # correctly.
+        for invoice in frappe.get_all(
+            "Sales Invoice", filters={"customer": CUSTOMER}, fields=["name", "docstatus"],
+            order_by="creation desc",
+        ):
+            doc = frappe.get_doc("Sales Invoice", invoice.name)
+            if doc.docstatus == 1:
+                doc.cancel()
+            frappe.delete_doc("Sales Invoice", invoice.name, force=True, ignore_permissions=True)
+
         for name in frappe.get_all("GSF Stock Reallocation",
                                    filters={"company_group": GROUP}, pluck="name"):
             frappe.delete_doc("GSF Stock Reallocation", name, force=True, ignore_permissions=True)
@@ -293,14 +307,6 @@ def teardown(confirm_write):
             frappe.delete_doc("GSF Company Group", GROUP, force=True, ignore_permissions=True)
         if frappe.db.exists("Item", ITEM):
             frappe.delete_doc("Item", ITEM, force=True, ignore_permissions=True)
-        for invoice in frappe.get_all(
-            "Sales Invoice", filters={"customer": CUSTOMER}, fields=["name", "docstatus"],
-            order_by="creation desc",
-        ):
-            doc = frappe.get_doc("Sales Invoice", invoice.name)
-            if doc.docstatus == 1:
-                doc.cancel()
-            frappe.delete_doc("Sales Invoice", invoice.name, force=True, ignore_permissions=True)
         if frappe.db.exists("Customer", CUSTOMER):
             frappe.delete_doc("Customer", CUSTOMER, force=True, ignore_permissions=True)
         frappe.db.set_single_value("Selling Settings", "allow_multiple_items", 0)
