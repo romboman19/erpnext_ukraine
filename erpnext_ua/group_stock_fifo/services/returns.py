@@ -26,8 +26,9 @@ from .domain import (
     LayerOrigin,
     layer_identity,
 )
-from .layers import apply_to_balance, own_pool, record_movement, tracking_of
+from .layers import apply_to_balance, record_movement, tracking_of
 from .pos_return_domain import ReturnLine
+from .serial_identity import return_tracking
 
 
 def accept_return(
@@ -168,6 +169,9 @@ def _draft_credit_note(
         row.set(SLICE_FIELD, sold.get(SLICE_FIELD))
         row.set(DISPLAY_GROUP_FIELD, sold.get(DISPLAY_GROUP_FIELD))
         row.set(RETURN_ORIGIN_LAYER_FIELD, sold.get(LAYER_FIELD))
+        row.serial_no = sold.serial_no
+        row.batch_no = sold.batch_no
+        row.use_serial_batch_fields = int(bool(sold.serial_no or sold.batch_no))
         selected.append(row)
 
     credit_note.set("items", selected)
@@ -228,20 +232,23 @@ def _tag_return_layers(original: Any, credit_note: Any) -> dict[str, str]:
         sold_layer = row.get(RETURN_ORIGIN_LAYER_FIELD)
         if not sold_layer:
             raise GSFError(f"Return row {row.name} has no origin layer", "MANUAL_REVIEW_REQUIRED")
-        pool = own_pool(row.warehouse)
-        if not pool:
-            continue
+        pool = _return_scope(row.warehouse, credit_note.company)
+        sold = sold_rows[row.sales_invoice_item]
+        tracking_type, batch_no, serial_numbers = _return_tracking(sold)
         origin = LayerOrigin(
             company_group=pool.company_group,
             origin_doctype="Sales Invoice",
             origin_document=credit_note.name,
             origin_row_name=row.name,
             item_code=row.item_code,
+            batch_no=batch_no,
+            serial_numbers=tuple(
+                line.strip() for line in (serial_numbers or "").splitlines() if line.strip()
+            ),
         )
         name = layer_identity(origin, site_id=frappe.local.site)
         if not frappe.db.exists("GSF Stock Layer", name):
             root = frappe.db.get_value("GSF Stock Layer", sold_layer, "lineage_root_layer") or sold_layer
-            sold = sold_rows[row.sales_invoice_item]
             frappe.get_doc(
                 {
                     "doctype": "GSF Stock Layer",
@@ -257,8 +264,10 @@ def _tag_return_layers(original: Any, credit_note: Any) -> dict[str, str]:
                     "origin_row_name": row.name,
                     "origin_row_index": row.idx,
                     "original_received_datetime": now_datetime(),
-                    "original_received_qty": 0,
-                    "tracking_type": TRACKING_NONE,
+                    "original_received_qty": abs(Decimal(str(row.qty))),
+                    "tracking_type": tracking_type,
+                    "batch_no": batch_no,
+                    "serial_numbers": serial_numbers,
                     "return_origin_layer": sold.get(LAYER_FIELD),
                     "lineage_root_layer": root,
                     "created_by_service": "group_stock_fifo.services.returns",
@@ -267,6 +276,31 @@ def _tag_return_layers(original: Any, credit_note: Any) -> dict[str, str]:
         row.set(LAYER_FIELD, name)
         layers[row.name] = name
     return layers
+
+
+def _return_scope(warehouse: str, company: str) -> Any:
+    pool = frappe.db.get_value(
+        "GSF Warehouse Binding",
+        {
+            "warehouse": warehouse,
+            "company": company,
+            "enabled": 1,
+            "manager_app": "GSF",
+            "warehouse_role": ("in", ("GSF_OWN_POOL", RETURN_QUARANTINE_ROLE)),
+        },
+        ["company_group", "physical_location"],
+        as_dict=True,
+    )
+    if not pool:
+        raise GSFError(
+            f"Return warehouse {warehouse} is not managed for seller {company}",
+            "WAREHOUSE_BINDING_MISSING",
+        )
+    return pool
+
+
+def _return_tracking(sold: Any) -> tuple[str, str | None, str | None]:
+    return return_tracking(sold.serial_no, sold.batch_no)
 
 
 def _assert_return_values(original: Any, credit_note: Any) -> None:

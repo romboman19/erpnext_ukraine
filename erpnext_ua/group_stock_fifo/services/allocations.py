@@ -23,9 +23,7 @@ from typing import Any
 import frappe
 from frappe.utils import add_to_date, get_datetime, now_datetime
 
-from erpnext_ua.consignment_and_commission.services.candidates import CandidateQuery
-
-from .candidates import GSFLayerCandidateAdapter, source_warehouses
+from .candidates import source_warehouses
 from .domain import GSFError, balance_identity
 from .reservation import (
     ALLOCATION_CONSUMED,
@@ -223,25 +221,26 @@ def _plan(request: ReservationRequest) -> list:
             "No GSF OWN Pool of an active sourcing member matches the request",
             "WAREHOUSE_BINDING_MISSING",
         )
-    adapter = GSFLayerCandidateAdapter(
-        company_group=request.company_group, physical_location=request.physical_location
-    )
-    query = CandidateQuery(
-        item_code=request.item_code,
-        company=request.seller_company,
-        location=request.physical_location,
-        allowed_warehouses=allowed,
-        serial_no=request.serial_no,
-        batch_no=request.batch_no,
-    )
     from erpnext_ua.consignment_and_commission.services.allocation import (
         AllocationError,
         InsufficientStockError,
     )
-    from erpnext_ua.consignment_and_commission.services.candidates import preview_from_adapters
+
+    from .stock_domain_runtime import plan_stock_domains, require_gsf_only
 
     try:
-        return preview_from_adapters([adapter], query=query, qty=Decimal(str(request.qty)))
+        return require_gsf_only(
+            plan_stock_domains(
+                company_group=request.company_group,
+                physical_location=request.physical_location,
+                seller_company=request.seller_company,
+                item_code=request.item_code,
+                qty=Decimal(str(request.qty)),
+                serial_no=request.serial_no,
+                batch_no=request.batch_no,
+                allowed_gsf_warehouses=allowed,
+            )
+        )
     except InsufficientStockError as error:
         raise GSFError(str(error), "INSUFFICIENT_GLOBAL_STOCK") from error
     except AllocationError as error:

@@ -7,6 +7,10 @@ app_description = (
 )
 app_email = "it@hunter.rv.ua"
 app_license = "MIT"
+
+stock_domain_providers = [
+	"erpnext_ua.consignment_and_commission.providers.CCStockDomainProvider",
+]
 required_apps = ["erpnext"]
 app_logo_url = "/assets/erpnext_ua/images/app-logo.svg"
 app_home = "/app/ua-fop"

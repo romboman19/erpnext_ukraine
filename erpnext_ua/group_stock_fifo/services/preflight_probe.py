@@ -51,6 +51,64 @@ def check(
     )
 
 
+def check_serials(
+    *,
+    item_code: str,
+    warehouse: str,
+    selected: dict[str, Decimal],
+    serial_layers: dict[str, str],
+) -> PreflightReport:
+    """Preflight an exact Serial selection without applying generic FIFO.
+
+    ERPNext values a serial issue from that Serial No's latest inward bundle,
+    not from the warehouse's next anonymous FIFO bin.  The ordinary preflight
+    would therefore reject a valid scan of a newer serial and predict the wrong
+    value.  We still fail closed on stale identity, reposts, and negative stock.
+    """
+    requested = sum(selected.values(), Decimal("0"))
+    selected_by_identity: dict[str, Decimal] = {}
+    for layer in serial_layers.values():
+        selected_by_identity[layer] = selected_by_identity.get(layer, Decimal("0")) + Decimal("1")
+
+    report = evaluate(
+        QueueFacts(
+            item_code=item_code,
+            warehouse=warehouse,
+            requested_qty=requested,
+            selected={layer: Decimal(str(qty)) for layer, qty in selected.items()},
+            expected=selected_by_identity,
+            pending_repost=has_pending_repost(item_code=item_code, warehouse=warehouse),
+            negative_stock=has_negative_stock(item_code=item_code, warehouse=warehouse),
+            predicted_value=predict_serial_value(
+                item_code=item_code,
+                warehouse=warehouse,
+                serial_nos=tuple(serial_layers),
+            ),
+        )
+    )
+    if not report.ok:
+        return report
+
+    active = set(
+        frappe.get_all(
+            "Serial No",
+            filters={
+                "name": ("in", tuple(serial_layers)),
+                "item_code": item_code,
+                "warehouse": warehouse,
+            },
+            pluck="name",
+        )
+    )
+    missing = sorted(set(serial_layers) - active)
+    if missing:
+        report.error_code = "SERIAL_IDENTITY_DIVERGENCE"
+        report.reasons.append(
+            f"Serial Nos {', '.join(missing)} are no longer active in {warehouse}"
+        )
+    return report
+
+
 def expected_consumption(
     *,
     item_code: str,
@@ -131,6 +189,30 @@ def predict_value(*, item_code: str, warehouse: str, qty: Decimal) -> Decimal:
     return Decimal(
         str(round(sum(float(bin_qty) * float(rate) for bin_qty, rate in consumed), 6))
     )
+
+
+def predict_serial_value(
+    *, item_code: str, warehouse: str, serial_nos: tuple[str, ...]
+) -> Decimal:
+    """Read the same latest inward rates ERPNext uses for an exact Serial issue."""
+    total = Decimal("0")
+    for serial_no in serial_nos:
+        rate = frappe.db.get_value(
+            "Serial and Batch Entry",
+            {
+                "serial_no": serial_no,
+                "item_code": item_code,
+                "warehouse": warehouse,
+                "type_of_transaction": "Inward",
+                "qty": (">", 0),
+                "docstatus": 1,
+                "is_cancelled": 0,
+            },
+            "incoming_rate",
+            order_by="posting_datetime desc, creation desc",
+        )
+        total += Decimal(str(rate or 0))
+    return total
 
 
 def unclassified_qty(*, item_code: str, warehouse: str) -> Decimal:

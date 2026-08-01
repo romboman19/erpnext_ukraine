@@ -926,16 +926,26 @@ def create_order(pos_session_token: str, idem_key: str, customer: str | None = N
 	return doc.as_dict()
 
 
-def _resolve_item(query: str) -> tuple[str, str | None]:
+def _resolve_item(query: str) -> tuple[str, str | None, str | None]:
 	barcode = frappe.db.get_value("Item Barcode", {"barcode": query}, ["parent", "barcode"], as_dict=True)
 	if barcode:
-		return barcode.parent, barcode.barcode
+		return barcode.parent, barcode.barcode, None
+	serial = frappe.db.get_value(
+		"Serial No",
+		query,
+		["item_code", "warehouse"],
+		as_dict=True,
+	)
+	if serial:
+		if not serial.warehouse:
+			frappe.throw(_("Серійний номер {0} зараз не знаходиться на складі").format(query))
+		return serial.item_code, None, query
 	if frappe.db.exists("Item", query):
-		return query, None
+		return query, None, None
 	rows = frappe.get_all("Item", filters={"item_name": ("like", f"%{query}%"), "disabled": 0}, pluck="name", limit=2)
 	if len(rows) != 1:
 		frappe.throw("Item not found or query is ambiguous")
-	return rows[0], None
+	return rows[0], None, None
 
 
 @frappe.whitelist()
@@ -945,7 +955,7 @@ def scan_item(pos_session_token: str, order: str, query: str, qty: float = 1) ->
 	qty = frappe.utils.flt(qty)
 	if qty <= 0:
 		frappe.throw(_("Кількість має бути більшою за нуль"))
-	item_code, barcode = _resolve_item(query.strip())
+	item_code, barcode, serial_no = _resolve_item(query.strip())
 	item = frappe.db.get_value(
 		"Item",
 		item_code,
@@ -954,6 +964,15 @@ def scan_item(pos_session_token: str, order: str, query: str, qty: float = 1) ->
 	)
 	if item.disabled:
 		frappe.throw(_("Товар вимкнено"))
+	if item.has_serial_no and not serial_no:
+		frappe.throw(_("Для серійного товару відскануйте конкретний серійний номер"))
+	if serial_no and qty != 1:
+		frappe.throw(_("Один серійний номер можна додати лише в кількості 1"))
+	if serial_no and any(
+		serial_no in {value.strip() for value in (row.serial_no or "").splitlines() if value.strip()}
+		for row in doc.items
+	):
+		frappe.throw(_("Серійний номер {0} уже є в чеку").format(serial_no))
 	desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
 	rate = frappe.db.get_value("Item Price", {"item_code": item_code, "selling": 1}, "price_list_rate") or 0
 	if frappe.utils.flt(rate) <= 0:
@@ -973,6 +992,7 @@ def scan_item(pos_session_token: str, order: str, query: str, qty: float = 1) ->
 			"item_name": item.item_name,
 			"image": item.image,
 			"barcode": barcode,
+			"serial_no": serial_no,
 			"qty": qty,
 			"uom": item.stock_uom,
 			"rate": rate,

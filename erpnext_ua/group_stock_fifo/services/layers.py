@@ -157,7 +157,12 @@ def ensure_pending_layer(row: ReceiptRow, pool: OwnPool) -> str:
             # A placeholder: the real FIFO date is frozen from the ledger after
             # submit, because that is the date ERPNext will actually order by.
             "original_received_datetime": now_datetime(),
-            "original_received_qty": 0,
+            # Serial identity validation needs the expected unit count even
+            # while the layer is PENDING. The submitted SLE replaces this
+            # placeholder in `open_layer` and remains the valuation truth.
+            "original_received_qty": (
+                len(row.serial_numbers) if row.tracking_type == TRACKING_SERIAL else 0
+            ),
             "tracking_type": row.tracking_type,
             "batch_no": row.batch_no,
             "serial_numbers": "\n".join(row.serial_numbers),

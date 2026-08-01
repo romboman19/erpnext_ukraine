@@ -18,6 +18,9 @@
   "own_warehouse",
   "commission_warehouse",
   "consignment_warehouse",
+  "gsf_provider_section",
+  "gsf_physical_location",
+  "read_stock_enabled",
   "address"
  ],
  "fields": [
@@ -97,6 +100,25 @@
    "label": "CONSIGNMENT Warehouse",
    "options": "Warehouse",
    "reqd": 1
+  },
+  {
+   "fieldname": "gsf_provider_section",
+   "fieldtype": "Section Break",
+   "label": "Global FIFO Provider"
+  },
+  {
+   "fieldname": "gsf_physical_location",
+   "fieldtype": "Link",
+   "label": "GSF Physical Location",
+   "options": "GSF Physical Location"
+  },
+  {
+   "default": "0",
+   "description": "Includes this location's BUYOUT, DEFERRED_PURCHASE, CONSIGNMENT and COMMISSION lots in physical FIFO planning. A sale is blocked if an older selected lot cannot yet be posted through a mixed POS route.",
+   "depends_on": "gsf_physical_location",
+   "fieldname": "read_stock_enabled",
+   "fieldtype": "Check",
+   "label": "Enforce Stock in Global FIFO"
   },
   {
    "fieldname": "address",

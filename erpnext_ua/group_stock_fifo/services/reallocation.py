@@ -38,12 +38,14 @@ from .domain import GSFError, balance_identity
 from .layers import apply_to_balance, record_movement
 from .preflight import assert_ok
 from .preflight_probe import check as preflight_check
+from .preflight_probe import check_serials as serial_preflight_check
 from .reservation import (
     ALLOCATION_PREPARED,
     ALLOCATION_PREPARING,
     ALLOCATION_RESERVED,
     validate_allocation_transition,
 )
+from .serial_identity import tracking_values
 from .staging import acquire_lane
 
 WRITE_FLAG = "gsf_reallocation_service"
@@ -69,6 +71,8 @@ class SliceMove:
     source_company: str
     source_warehouse: str
     qty: Decimal
+    serial_no: str | None = None
+    batch_no: str | None = None
 
 
 def prepare(allocation_name: str, *, checkout: str, staging_lane: str | None = None) -> Any:
@@ -101,6 +105,8 @@ def prepare(allocation_name: str, *, checkout: str, staging_lane: str | None = N
             source_company=row.source_company,
             source_warehouse=row.source_warehouse,
             qty=Decimal(str(row.qty or 0)),
+            serial_no=row.serial_no or None,
+            batch_no=row.batch_no or None,
         )
         for row in allocation.slices
     ]
@@ -157,22 +163,49 @@ def _by_source_company(moves: list[SliceMove]) -> dict[str, list[SliceMove]]:
 
 def _run_preflight(allocation: Any, moves: list[SliceMove]) -> None:
     """§17.2, once per source warehouse, before anything is posted."""
-    by_warehouse: dict[str, dict[str, Decimal]] = defaultdict(dict)
+    by_warehouse: dict[str, list[SliceMove]] = defaultdict(list)
     for move in moves:
-        selected = by_warehouse[move.source_warehouse]
-        selected[move.stock_layer] = selected.get(move.stock_layer, Decimal("0")) + move.qty
+        by_warehouse[move.source_warehouse].append(move)
 
     assert_ok(
         [
-            preflight_check(
-                item_code=allocation.item_code,
-                warehouse=warehouse,
-                selected=selected,
-                company_group=allocation.company_group,
-                physical_location=allocation.physical_location,
-            )
-            for warehouse, selected in sorted(by_warehouse.items())
+            _preflight_for_warehouse(allocation, warehouse, warehouse_moves)
+            for warehouse, warehouse_moves in sorted(by_warehouse.items())
         ]
+    )
+
+
+def _preflight_for_warehouse(allocation: Any, warehouse: str, moves: list[SliceMove]):
+    selected: dict[str, Decimal] = {}
+    for move in moves:
+        selected[move.stock_layer] = selected.get(move.stock_layer, Decimal("0")) + move.qty
+
+    serial_moves = [move for move in moves if move.serial_no]
+    if serial_moves:
+        if len(serial_moves) != len(moves):
+            raise GSFError(
+                f"Warehouse {warehouse} mixes Serial and non-Serial allocation slices",
+                "SERIAL_AMBIGUOUS",
+            )
+        serial_layers = {move.serial_no: move.stock_layer for move in serial_moves}
+        if len(serial_layers) != len(serial_moves):
+            raise GSFError(
+                f"Warehouse {warehouse} contains a duplicate Serial allocation",
+                "SERIAL_AMBIGUOUS",
+            )
+        return serial_preflight_check(
+            item_code=allocation.item_code,
+            warehouse=warehouse,
+            selected=selected,
+            serial_layers=serial_layers,
+        )
+
+    return preflight_check(
+        item_code=allocation.item_code,
+        warehouse=warehouse,
+        selected=selected,
+        company_group=allocation.company_group,
+        physical_location=allocation.physical_location,
     )
 
 
@@ -201,8 +234,16 @@ def _new_reallocation(allocation: Any, *, lane: str, moves: list[SliceMove], pos
 def _slice_set_hash(moves: list[SliceMove]) -> str:
     """A stable fingerprint of what this document was built to move."""
     payload = "|".join(
-        f"{move.stock_layer}:{move.source_warehouse}:{move.qty}"
-        for move in sorted(moves, key=lambda m: (m.source_warehouse, m.stock_layer))
+        f"{move.stock_layer}:{move.source_warehouse}:{move.qty}:{move.serial_no or ''}:{move.batch_no or ''}"
+        for move in sorted(
+            moves,
+            key=lambda m: (
+                m.source_warehouse,
+                m.stock_layer,
+                m.serial_no or "",
+                m.batch_no or "",
+            ),
+        )
     )
     return hashlib.sha256(payload.encode()).hexdigest()[:32]
 
@@ -232,6 +273,7 @@ def _transfer_own(
                 # The same layer on both legs (§14.2): a transfer moves stock,
                 # it does not create a new cost identity.
                 INCOMING_LAYER_FIELD: move.stock_layer,
+                **_tracking_values(move),
             }
             for move in moves
         ],
@@ -305,6 +347,7 @@ def _reallocate_foreign(
                 "s_warehouse": move.source_warehouse,
                 "expense_account": pair.due_from_account,
                 LAYER_FIELD: move.stock_layer,
+                **_tracking_values(move),
                 **counterparty_values(allocation.seller_company),
             }
             for move in moves
@@ -330,6 +373,7 @@ def _reallocate_foreign(
                 "set_basic_rate_manually": 1,
                 "expense_account": pair.due_to_account,
                 INCOMING_LAYER_FIELD: move.stock_layer,
+                **_tracking_values(move),
                 **counterparty_values(source_company),
             }
             for move in moves
@@ -472,6 +516,10 @@ def submit_stock_entry(*, company: str, purpose: str, posting, reallocation: str
     entry.insert(ignore_permissions=True)
     entry.submit()
     return entry
+
+
+def _tracking_values(move: SliceMove) -> dict[str, str | int]:
+    return tracking_values(move.serial_no, move.batch_no)
 
 
 def _issued_value(entry: Any, warehouse: str) -> Decimal:

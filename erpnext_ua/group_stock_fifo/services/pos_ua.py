@@ -14,6 +14,7 @@ from .domain import OWN_POOL_ROLE, GSFError
 from .layers import gsf_enabled
 from .pos_return_domain import ReturnLine, consume_return_rows
 from .returns import accept_return, returned_qty
+from .serial_identity import single_serial
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +87,8 @@ def post_sale(order: Any, desk: Any) -> Any:
                     external_row_id=row.name,
                     uom=row.uom,
                     barcode=row.barcode,
+                    serial_no=single_serial(row.serial_no),
+                    batch_no=row.batch_no,
                     discount_amount=Decimal(str(row.discount_amount or 0)),
                 )
                 for row in order.items
@@ -171,23 +174,53 @@ def _plan_return_lines(original_order: Any, original: Any, return_order: Any) ->
 
 
 def _validate_stock_uoms(order: Any) -> None:
-    """GSF quantities are stock quantities; POS-UA currently sells in stock UOM."""
+    """Validate stock UOM and the tracked identity before reserving anything."""
     item_codes = {row.item_code for row in order.items}
-    stock_uoms = {
-        row.name: row.stock_uom
+    items = {
+        row.name: row
         for row in frappe.get_all(
             "Item",
             filters={"name": ("in", list(item_codes))},
-            fields=["name", "stock_uom"],
+            fields=["name", "stock_uom", "has_serial_no", "has_batch_no"],
         )
     }
+    seen_serials: set[str] = set()
     for row in order.items:
-        if not stock_uoms.get(row.item_code):
+        item = items.get(row.item_code)
+        if not item:
             raise GSFError(f"Unknown item {row.item_code}", "MANUAL_REVIEW_REQUIRED")
-        if row.uom != stock_uoms[row.item_code]:
+        if row.uom != item.stock_uom:
             raise GSFError(
-                f"POS row {row.name} uses {row.uom}; GSF requires stock UOM {stock_uoms[row.item_code]}",
+                f"POS row {row.name} uses {row.uom}; GSF requires stock UOM {item.stock_uom}",
                 "MANUAL_REVIEW_REQUIRED",
+            )
+        serial_no = single_serial(row.serial_no)
+        if item.has_serial_no:
+            if not serial_no:
+                raise GSFError(
+                    f"POS row {row.name} requires a scanned Serial No",
+                    "SERIAL_AMBIGUOUS",
+                )
+            if Decimal(str(row.qty)) != Decimal("1"):
+                raise GSFError(
+                    f"POS row {row.name} must contain one unit for Serial No {serial_no}",
+                    "SERIAL_AMBIGUOUS",
+                )
+            if serial_no in seen_serials:
+                raise GSFError(
+                    f"Serial No {serial_no} appears more than once in the basket",
+                    "SERIAL_AMBIGUOUS",
+                )
+            seen_serials.add(serial_no)
+        elif serial_no:
+            raise GSFError(
+                f"POS row {row.name} supplies Serial No {serial_no} for an untracked item",
+                "SERIAL_AMBIGUOUS",
+            )
+        if not item.has_batch_no and row.batch_no:
+            raise GSFError(
+                f"POS row {row.name} supplies Batch {row.batch_no} for a non-batch item",
+                "BATCH_MISMATCH",
             )
 
 

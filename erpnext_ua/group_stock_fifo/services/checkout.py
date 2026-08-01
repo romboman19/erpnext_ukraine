@@ -57,6 +57,8 @@ class CheckoutLine:
     external_row_id: str | None = None
     uom: str | None = None
     barcode: str | None = None
+    serial_no: str | None = None
+    batch_no: str | None = None
     discount_amount: Decimal = Decimal("0")
 
 
@@ -121,6 +123,8 @@ def open_checkout(request: CheckoutRequest) -> Any:
                         "external_row_id": line.external_row_id,
                         "uom": line.uom,
                         "barcode": line.barcode,
+                        "serial_no": line.serial_no,
+                        "batch_no": line.batch_no,
                         "discount_amount": float(line.discount_amount),
                     }
                     for line in request.lines
@@ -143,6 +147,8 @@ def _fingerprint(request: CheckoutRequest) -> str:
                 "external_row_id": line.external_row_id,
                 "uom": line.uom,
                 "barcode": line.barcode,
+                "serial_no": line.serial_no,
+                "batch_no": line.batch_no,
                 "discount_amount": str(Decimal(str(line.discount_amount)).normalize()),
             }
             for line in request.lines
@@ -222,6 +228,8 @@ def _reserve(checkout: Any) -> Any:
                 item_code=line.item_code,
                 qty=Decimal(str(line.qty)),
                 allowed_warehouses=_pools(checkout),
+                serial_no=line.serial_no,
+                batch_no=line.batch_no,
                 external_row_id=line.external_row_id,
                 checkout=checkout.name,
             )

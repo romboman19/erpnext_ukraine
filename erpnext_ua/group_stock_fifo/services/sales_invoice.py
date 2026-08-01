@@ -73,8 +73,8 @@ def _validate_return(doc: Any, roles: dict[str, str], *, original_managed: bool)
             frappe.throw(f"Row {row.idx}: GSF return origin is incomplete")
         if not row.get(ALLOCATION_FIELD) or not row.get(SLICE_FIELD):
             frappe.throw(f"Row {row.idx}: GSF allocation trail is incomplete")
-        if role == "GSF_OWN_POOL" and not row.get(LAYER_FIELD):
-            frappe.throw(f"Row {row.idx}: a non-tracked return requires a new GSF layer")
+        if not row.get(LAYER_FIELD):
+            frappe.throw(f"Row {row.idx}: a managed return requires a new GSF layer")
 
 
 def _require_sale_trail(row: Any) -> None:

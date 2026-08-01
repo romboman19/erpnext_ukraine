@@ -24,7 +24,12 @@ from erpnext_ua.consignment_and_commission.services.allocation import StockCandi
 from erpnext_ua.consignment_and_commission.services.candidates import CandidateQuery
 
 from .domain import OWN_POOL_ROLE, TRACKING_SERIAL, balance_identity
-from .reservation import GSF_RELATIONSHIP_MODEL, GSF_SOURCE_METHOD
+from .reservation import (
+    GSF_RELATIONSHIP_MODEL,
+    GSF_SOURCE_METHOD,
+    LIVE_ALLOCATION_STATUSES,
+)
+from .serial_identity import ordered_active_serials
 
 #: Statuses whose stock is still part of the pool. `BLOCKED` layers are loaded
 #: and flagged rather than filtered out, so a "why was this not allocated"
@@ -93,10 +98,22 @@ class GSFLayerCandidateAdapter:
         self.physical_location = physical_location
 
     def load(self, query: CandidateQuery) -> list[StockCandidate]:
+        positions = self.positions(query)
+        if any(position.tracking_type == TRACKING_SERIAL for position in positions):
+            if not query.serial_no:
+                from .domain import GSFError
+
+                raise GSFError(
+                    f"Serial No is required to allocate {query.item_code}",
+                    "SERIAL_AMBIGUOUS",
+                )
+            reserved = _reserved_serials(query.serial_no)
+        else:
+            reserved = set()
         return [
             candidate
-            for position in self.positions(query)
-            for candidate in _candidates_from(position)
+            for position in positions
+            for candidate in _candidates_from(position, reserved_serials=reserved)
         ]
 
     def positions(self, query: CandidateQuery) -> list[LayerPosition]:
@@ -232,21 +249,71 @@ def _reserved_qty(stock_layer: str, company: str, warehouse: str) -> Decimal:
     return Decimal(str(reserved or 0))
 
 
-def _candidates_from(position: LayerPosition) -> list[StockCandidate]:
-    if position.tracking_type == TRACKING_SERIAL:
-        # A serial is reserved as an identity, not as a quantity, so deciding
-        # which serials of a layer are still on hand needs per-serial ledger
-        # truth this adapter does not read yet. Refusing is the fail-closed
-        # answer; offering the layer's full serial list would over-offer any
-        # serial already sold. Closing this needs a tracked-item fixture on the
-        # test site, which does not exist — see the Phase 3 report.
+def _reserved_serials(serial_no: str) -> set[str]:
+    rows = frappe.db.sql(
+        """
+        select distinct slice.serial_no
+        from `tabGSF Allocation Slice` slice
+        inner join `tabGSF Allocation` allocation on allocation.name = slice.parent
+        where slice.serial_no = %(serial_no)s
+          and allocation.status in %(statuses)s
+        """,
+        {"serial_no": serial_no, "statuses": LIVE_ALLOCATION_STATUSES},
+        as_dict=True,
+    )
+    return {row.serial_no for row in rows}
+
+
+def _available_serials(position: LayerPosition) -> tuple[str, ...]:
+    if not position.serial_numbers:
         from .domain import GSFError
 
         raise GSFError(
-            f"Serial-tracked layer {position.stock_layer} cannot be allocated yet: "
-            "GSF does not track per-serial availability",
+            f"Serial-tracked layer {position.stock_layer} has no Serial Nos",
             "SERIAL_AMBIGUOUS",
         )
+    rows = frappe.get_all(
+        "Serial No",
+        filters={
+            "name": ("in", position.serial_numbers),
+            "item_code": position.item_code,
+            "warehouse": position.warehouse,
+        },
+        pluck="name",
+    )
+    return ordered_active_serials(
+        position.serial_numbers,
+        set(rows),
+        actual_qty=position.actual_qty,
+        context=f"Layer {position.stock_layer} in {position.warehouse}",
+    )
+
+
+def _candidates_from(
+    position: LayerPosition,
+    *,
+    reserved_serials: set[str] | None = None,
+) -> list[StockCandidate]:
+    if position.tracking_type == TRACKING_SERIAL:
+        reserved = reserved_serials or set()
+        return [
+            StockCandidate(
+                lot_name=position.stock_layer,
+                item_code=position.item_code,
+                warehouse=position.warehouse,
+                location=position.physical_location,
+                source_method=GSF_SOURCE_METHOD,
+                relationship_model=GSF_RELATIONSHIP_MODEL,
+                fifo_datetime=position.fifo_datetime,
+                receipt_name=position.origin_document,
+                receipt_row_index=max(position.origin_row_index, 1),
+                blocked=position.layer_status == "BLOCKED",
+                available_qty=Decimal("1"),
+                reserved_qty=Decimal("1") if serial_no in reserved else Decimal("0"),
+                serial_no=serial_no,
+            )
+            for serial_no in _available_serials(position)
+        ]
 
     return [
         StockCandidate(
