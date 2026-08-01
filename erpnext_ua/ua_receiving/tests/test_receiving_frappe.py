@@ -7,6 +7,7 @@ inside a configured Frappe test site.
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 try:
 	import frappe
@@ -329,11 +330,12 @@ class TestReceivingFrappe(unittest.TestCase):
 		self.assertEqual(receipt.items[0].rate, 120)
 		self.assertEqual(receipt.grand_total, 240)
 		self.assertEqual(receipt.taxes, [])
-		control_sheet = frappe.get_print(
-			"Purchase Receipt",
-			receipt.name,
-			"Прибуткова накладна (UA)",
-		)
+		with patch("frappe.utils.get_assets_json", return_value={}):
+			control_sheet = frappe.get_print(
+				"Purchase Receipt",
+				receipt.name,
+				"Прибуткова накладна (UA)",
+			)
 		self.assertIn("КОНТРОЛЬНИЙ ЛИСТ — ЧЕРНЕТКА", control_sheet)
 		self.assertIn("120.00", control_sheet)
 		receipt.submit()
