@@ -28,21 +28,35 @@ class TestReceivingFrappe(unittest.TestCase):
 		frappe.db.rollback(save_point="ua_receiving_smoke")
 
 	def _get_company(self):
-		companies = frappe.get_all(
-			"Company",
-			filters={"default_currency": ("is", "set"), "cost_center": ("is", "set")},
-			pluck="name",
-			order_by="creation asc",
-		)
-		company = next((name for name in companies if not name.startswith("_")), None)
-		self.assertTrue(company, "A configured test Company is required")
-		return company
+		company_name = "_UA Receiving Integration Company"
+		if frappe.db.exists("Company", company_name):
+			return company_name
+		if not frappe.db.exists("Warehouse Type", "Transit"):
+			frappe.get_doc({"doctype": "Warehouse Type", "name": "Transit"}).insert(
+				ignore_permissions=True
+			)
+		return frappe.get_doc(
+			{
+				"doctype": "Company",
+				"company_name": company_name,
+				"abbr": "UARI",
+				"country": "Ukraine",
+				"default_currency": "UAH",
+				"create_chart_of_accounts_based_on": "Standard Template",
+				"chart_of_accounts": "Standard",
+			}
+		).insert(ignore_permissions=True).name
 
 	def _ensure_supplier(self):
 		name = "UA Receiving Integration Test Supplier"
 		if frappe.db.exists("Supplier", name):
 			return name
-		supplier_group = frappe.db.get_value("Supplier Group", {"is_group": 0}, "name")
+		supplier_group = self._ensure_leaf_group(
+			"Supplier Group",
+			"_UA Receiving Suppliers",
+			"supplier_group_name",
+			"parent_supplier_group",
+		)
 		return frappe.get_doc(
 			{
 				"doctype": "Supplier",
@@ -59,7 +73,12 @@ class TestReceivingFrappe(unittest.TestCase):
 		item_code = "UA-RECEIVING-INTEGRATION-ITEM"
 		if frappe.db.exists("Item", item_code):
 			return item_code
-		item_group = frappe.db.get_value("Item Group", {"is_group": 0}, "name")
+		item_group = self._ensure_leaf_group(
+			"Item Group",
+			"_UA Receiving Items",
+			"item_group_name",
+			"parent_item_group",
+		)
 		return frappe.get_doc(
 			{
 				"doctype": "Item",
@@ -68,6 +87,25 @@ class TestReceivingFrappe(unittest.TestCase):
 				"item_group": item_group,
 				"stock_uom": "Nos",
 				"is_stock_item": 1,
+			}
+		).insert(ignore_permissions=True).name
+
+	def _ensure_leaf_group(self, doctype, name, name_field, parent_field):
+		if frappe.db.exists(doctype, name):
+			return name
+		parent = frappe.db.get_value(
+			doctype,
+			{"is_group": 1},
+			"name",
+			order_by="lft asc",
+		)
+		self.assertTrue(parent, f"{doctype} root is required")
+		return frappe.get_doc(
+			{
+				"doctype": doctype,
+				name_field: name,
+				parent_field: parent,
+				"is_group": 0,
 			}
 		).insert(ignore_permissions=True).name
 

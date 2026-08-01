@@ -17,6 +17,7 @@ try:
         record_verification,
         stop_link,
     )
+    from erpnext_ua.tests.integrations.frappe_fixtures import ensure_customer_master_links
 except ModuleNotFoundError:
     frappe = None
     FrappeTestCase = unittest.TestCase
@@ -29,14 +30,18 @@ def _unique_chat_id() -> str:
 
 @unittest.skipIf(frappe is None, "requires a Frappe test site")
 class CustomerTelegramLinkTest(FrappeTestCase):
+    def setUp(self):
+        super().setUp()
+        self.customer_group, self.territory = ensure_customer_master_links()
+
     def _new_customer(self, phone: str = "+380501112233"):
         doc = frappe.get_doc(
             {
                 "doctype": "Customer",
                 "customer_name": "Test Telegram Customer",
                 "customer_type": "Individual",
-                "customer_group": "Individual",
-                "territory": "Ukraine",
+                "customer_group": self.customer_group,
+                "territory": self.territory,
                 "mobile_no": phone,
             }
         )
@@ -111,8 +116,8 @@ class CustomerTelegramLinkTest(FrappeTestCase):
                 "doctype": "Customer",
                 "customer_name": "Legacy Telegram Customer",
                 "customer_type": "Individual",
-                "customer_group": "Individual",
-                "territory": "Ukraine",
+                "customer_group": self.customer_group,
+                "territory": self.territory,
                 "mobile_no": "+380503332211",
                 "ua_telegram_chat_id": chat_id,
             }
