@@ -108,7 +108,19 @@ jobs:
           bench --site integration.local run-tests --module erpnext_ua.tests.test_ua_chart_setup
           bench --site integration.local run-tests --module erpnext_ua.tests.test_ua_off_balance_entry
 
-      - name: Run commission trade integration tests
+      - name: Verify scheduled GSF services on a clean site
+        working-directory: frappe-bench
+        run: >-
+          bench --site integration.local execute
+          erpnext_ua.group_stock_fifo.services.allocations.expire_due_allocations
+
+      - name: Run loyalty and gift certificate integration tests
+        working-directory: frappe-bench
+        run: |
+          bench --site integration.local run-tests --module erpnext_ua.ua_loyalty.tests.test_services
+          bench --site integration.local run-tests --module erpnext_ua.ua_gift_certificates.tests.test_services
+
+      - name: Run all application integration tests
         working-directory: frappe-bench
         run: >-
           bench --site integration.local run-tests

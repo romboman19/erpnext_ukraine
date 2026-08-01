@@ -259,7 +259,11 @@ doc_events = {
     },
     "Payment Entry": {
         "validate": f"{CC}.payments.validate_settlement_payment",
-        "on_submit": f"{CC}.payments.update_settlement_after_payment",
+        "on_submit": [
+            f"{CC}.payments.update_settlement_after_payment",
+            "erpnext_ua.ua_fiscal.ecommerce.on_payment_submit",
+        ],
+        "before_cancel": "erpnext_ua.ua_fiscal.ecommerce.before_payment_cancel",
         "on_cancel": f"{CC}.payments.update_settlement_after_payment",
     },
     "Batch": {
@@ -281,6 +285,7 @@ scheduler_events = {
 	],
 	"hourly_long": [
 		f"{CC}.reservations.expire_due_allocations",
+		f"{GSF}.services.allocations.expire_due_allocations",
 		"erpnext_ua.ua_loyalty.scheduler.activate_pending",
 		"erpnext_ua.ua_loyalty.scheduler.expire_obligations",
 		"erpnext_ua.ua_loyalty.scheduler.release_stale_reservations",
@@ -289,6 +294,7 @@ scheduler_events = {
 	"cron": {
 		"*/5 * * * *": [
 			"erpnext_ua.ua_fiscal.recovery.recover_fiscal_state",
+			"erpnext_ua.ua_fiscal.ecommerce.recover_pending_ecommerce_receipts",
 		],
 		"* * * * *": [
 			"erpnext_ua.ua_pos.print_service.process_print_queue",

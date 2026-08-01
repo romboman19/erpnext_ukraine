@@ -333,6 +333,16 @@ class ProductionStaticContractsTest(unittest.TestCase):
         self.assertIn("serialize_worker", monitoring)
         self.assertIn('self.scheduler_status = "Active"', monitoring)
 
+    def test_gsf_expiry_sweeper_is_scheduled(self):
+        hooks = (APP / "hooks.py").read_text(encoding="utf-8")
+        allocations = (
+            APP / "group_stock_fifo" / "services" / "allocations.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('f"{GSF}.services.allocations.expire_due_allocations"', hooks)
+        self.assertIn("def expire_due_allocations(limit: int = 500)", allocations)
+        self.assertNotIn("not wired into `scheduler_events`", allocations)
+
     def test_prom_stock_contract_matches_official_external_id_endpoint(self):
         client = (ECOMMERCE / "providers" / "prom_ua" / "api.py").read_text(
             encoding="utf-8"

@@ -89,6 +89,9 @@ def ensure_integration_custom_fields():
             {"fieldname": "ua_ecommerce_channel", "label": "Ecommerce Channel", "fieldtype": "Data", "insert_after": "ua_external_order_key", "read_only": 1, "no_copy": 1},
             {"fieldname": "ua_external_order_id", "label": "External Order ID", "fieldtype": "Data", "insert_after": "ua_ecommerce_channel", "read_only": 1, "no_copy": 1, "length": 140},
             {"fieldname": "ua_ecommerce_status", "label": "Ecommerce Status", "fieldtype": "Data", "insert_after": "ua_external_order_id", "read_only": 1, "no_copy": 1},
+            {"fieldname": "ua_ecommerce_fiscal_status", "label": "Ecommerce Fiscal Status", "fieldtype": "Select", "options": "Not Required\nPending\nFiscalized\nOffline\nUncertain\nError", "default": "Not Required", "insert_after": "ua_ecommerce_status", "read_only": 1, "no_copy": 1},
+            {"fieldname": "ua_ecommerce_fiscal_error", "label": "Ecommerce Fiscal Error", "fieldtype": "Small Text", "insert_after": "ua_ecommerce_fiscal_status", "read_only": 1, "no_copy": 1},
+            {"fieldname": "ua_ecommerce_fiscal_updated_at", "label": "Ecommerce Fiscal Updated At", "fieldtype": "Datetime", "insert_after": "ua_ecommerce_fiscal_error", "read_only": 1, "no_copy": 1},
         ],
         "Sales Order": [
             {"fieldname": "ua_external_order_key", "label": "UA External Order Key", "fieldtype": "Data", "insert_after": "po_no", "read_only": 1, "unique": 1, "no_copy": 1, "length": 140},

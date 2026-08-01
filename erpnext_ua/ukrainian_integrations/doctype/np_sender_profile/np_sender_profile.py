@@ -16,9 +16,13 @@ class NPSenderProfile(Document):
             frappe.throw(_("The default Nova Poshta profile must be active"))
         if int(self.is_default or 0) == 1:
             frappe.db.sql("SELECT name FROM `tabDocType` WHERE name = %s FOR UPDATE", ("NP Sender Profile",))
-            existing = frappe.db.get_value("NP Sender Profile", {"is_default": 1, "name": ["!=", self.name]}, "name")
+            existing = frappe.db.get_value(
+                "NP Sender Profile",
+                {"company": self.company, "is_default": 1, "name": ["!=", self.name]},
+                "name",
+            )
             if existing:
-                frappe.throw(_("Only one default Nova Poshta profile is allowed"))
+                frappe.throw(_("Only one default Nova Poshta profile is allowed per company"))
         branches = self.get("sender_branches") or []
         if sum(1 for row in branches if int(row.get("is_default") or 0) == 1) > 1:
             frappe.throw(_("Only one default sender branch is allowed"))

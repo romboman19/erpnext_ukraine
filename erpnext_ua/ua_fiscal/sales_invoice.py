@@ -19,11 +19,20 @@ PAYFORM_CASHLESS = 1
 
 
 def _register_for_invoice(si) -> str | None:
-	if not si.get("pos_profile"):
-		return None
-	return frappe.db.get_value(
-		"PRRO Cash Register", {"pos_profile": si.pos_profile, "status": "Active"}
-	)
+	if si.get("pos_profile"):
+		return frappe.db.get_value(
+			"PRRO Cash Register", {"pos_profile": si.pos_profile, "status": "Active"}
+		)
+	if si.get("ua_ecommerce_channel") and si.get("company"):
+		return frappe.db.get_value(
+			"PRRO Cash Register",
+			{
+				"company": si.company,
+				"ecommerce_default": 1,
+				"status": "Active",
+			},
+		)
+	return None
 
 
 def _kep_key_for_invoice(si, register_name: str) -> str | None:
@@ -125,7 +134,10 @@ def _assert_same_fiscal_identity(group: str, rows: list[dict]) -> None:
 
 def _invoice_payments(si) -> list[dict]:
 	payments = []
-	for p in si.get("payments", []):
+	payment_rows = list(si.get("payments", []))
+	if not payment_rows and si.get("ua_ecommerce_channel"):
+		payment_rows = _submitted_payment_rows(si.name)
+	for p in payment_rows:
 		amount = abs(frappe.utils.flt(p.amount))
 		if not amount:
 			continue
@@ -152,10 +164,55 @@ def _invoice_payments(si) -> list[dict]:
 			row["provided"] = amount + frappe.utils.flt(si.change_amount)
 			row["remains"] = frappe.utils.flt(si.change_amount)
 		payments.append(row)
-	if not payments:  # рахунок без POS-оплат — вважаємо готівкою на всю суму
+	if not payments and si.get("ua_ecommerce_channel"):
+		frappe.throw(
+			f"Для ecommerce-рахунку {si.name} немає проведеної оплати",
+			FiscalServerError,
+		)
+	if not payments:  # legacy non-POS manual fiscalization
 		payments.append({"code": PAYFORM_CASH, "name": "ГОТІВКА", "form": "ГОТІВКА",
 						 "sum": abs(frappe.utils.flt(si.rounded_total or si.grand_total))})
+	if si.get("ua_ecommerce_channel"):
+		total = abs(frappe.utils.flt(si.rounded_total or si.grand_total))
+		paid = frappe.utils.flt(sum(row["sum"] for row in payments), 2)
+		if abs(total - paid) > 0.01:
+			frappe.throw(
+				f"Оплати ecommerce-рахунку {si.name} ({paid}) не збігаються з підсумком ({total})",
+				FiscalServerError,
+			)
 	return payments
+
+
+def _submitted_payment_rows(sales_invoice: str) -> list:
+	references = frappe.get_all(
+		"Payment Entry Reference",
+		filters={
+			"parenttype": "Payment Entry",
+			"reference_doctype": "Sales Invoice",
+			"reference_name": sales_invoice,
+		},
+		fields=["parent", "allocated_amount"],
+		order_by="parent asc, idx asc",
+	)
+	rows = []
+	for reference in references:
+		payment = frappe.db.get_value(
+			"Payment Entry",
+			reference.parent,
+			["docstatus", "mode_of_payment"],
+			as_dict=True,
+		)
+		if not payment or int(payment.docstatus or 0) != 1:
+			continue
+		payment_type = frappe.db.get_value("Mode of Payment", payment.mode_of_payment, "type")
+		rows.append(
+			frappe._dict(
+				mode_of_payment=payment.mode_of_payment,
+				type=payment_type,
+				amount=reference.allocated_amount,
+			)
+		)
+	return rows
 
 
 def _invoice_taxes(si) -> list[dict]:
@@ -221,7 +278,8 @@ def fiscalize_invoice(sales_invoice: str, client=None) -> str | None:
 	if not register:
 		frappe.throw(
 			f"Для рахунку {sales_invoice} не знайдено активної каси ПРРО "
-			f"(POS Profile: {si.get('pos_profile') or '—'})",
+			f"(POS Profile: {si.get('pos_profile') or '—'}, "
+			f"ecommerce channel: {si.get('ua_ecommerce_channel') or '—'})",
 			FiscalServerError,
 		)
 	kep_key = _kep_key_for_invoice(si, register)

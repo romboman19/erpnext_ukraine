@@ -58,6 +58,10 @@ jobs:
           names = set(zipfile.ZipFile(wheel).namelist())
           required_suffixes = {
               "doctype/gsf_warehouse_binding/gsf_warehouse_binding.json",
+              "doctype/ua_gift_certificate/ua_gift_certificate.json",
+              "doctype/ua_loyalty_account/ua_loyalty_account.json",
+              "doctype/np_sender_profile/np_sender_profile.json",
+              "doctype/up_sender_profile/up_sender_profile.json",
               "chart_of_accounts/ua_full_291.json",
               "chart_of_accounts/ua_simplified_186.json",
               "doctype/ua_off_balance_entry/ua_off_balance_entry.json",

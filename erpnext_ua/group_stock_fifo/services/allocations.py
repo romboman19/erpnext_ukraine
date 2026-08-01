@@ -523,13 +523,7 @@ def expire_allocation(allocation_name: str) -> Any:
 
 
 def expire_due_allocations(limit: int = 500) -> int:
-    """Sweep expired reservations.
-
-    Deliberately *not* wired into `scheduler_events` yet: the test stack runs
-    without a scheduler container, so a job registered here would be untested
-    code that only ever runs in production. Wiring it belongs with Phase 8,
-    on a stack where it can be observed.
-    """
+    """Release expired reservations in bounded scheduler batches."""
     due = frappe.get_all(
         "GSF Allocation",
         filters={"status": ("in", LIVE_ALLOCATION_STATUSES), "expires_at": ("<=", now_datetime())},

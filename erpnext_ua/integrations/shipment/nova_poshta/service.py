@@ -9,6 +9,7 @@ import frappe
 import requests
 from frappe import _
 
+from erpnext_ua.integrations.shipment.profile_selection import select_sender_profile
 from erpnext_ua.integrations.utils.operations import (
     load_response,
     mark_operation,
@@ -98,7 +99,7 @@ def _sender_profiles_from_doctype() -> list[dict]:
     rows = frappe.get_all(
         "NP Sender Profile",
         fields=[
-            "name", "profile_name", "is_active", "is_default", "sender_ref",
+            "name", "profile_name", "company", "is_active", "is_default", "sender_ref",
             "default_settlement_ref", "default_warehouse_ref", "contact_ref", "phone",
         ],
         filters={"is_active": 1},
@@ -124,6 +125,7 @@ def _sender_profiles_from_doctype() -> list[dict]:
 
         out.append({
             "name": r.get("profile_name") or r.get("name"),
+            "company": r.get("company"),
             "default": bool(r.get("is_default")),
             "api_key": doc.get_password("api_key"),
             "sender_ref": r.get("sender_ref"),
@@ -151,6 +153,7 @@ def _sender_profiles() -> list[dict]:
         profiles.append(
             {
                 "name": r.get("name") or "default",
+                "company": r.get("company") or _cfg("default_company"),
                 "default": bool(r.get("default")),
                 "api_key": r.get("api_key") or _cfg("novaposhta_api_key"),
                 "sender_ref": r.get("sender_ref") or _cfg("novaposhta_sender_ref"),
@@ -164,6 +167,7 @@ def _sender_profiles() -> list[dict]:
         profiles = [
             {
                 "name": "default",
+                "company": _cfg("default_company"),
                 "default": True,
                 "api_key": _cfg("novaposhta_api_key"),
                 "sender_ref": _cfg("novaposhta_sender_ref"),
@@ -176,17 +180,16 @@ def _sender_profiles() -> list[dict]:
     return profiles
 
 
-def _resolve_profile(sender_profile: str | None = None) -> dict:
-    profiles = _sender_profiles()
-    if sender_profile:
-        for p in profiles:
-            if (p.get("name") or "") == sender_profile:
-                return p
-        frappe.throw(_("Nova Poshta sender profile not found or inactive: {0}").format(sender_profile))
-    for p in profiles:
-        if p.get("default"):
-            return p
-    return profiles[0]
+def _resolve_profile(sender_profile: str | None = None, *, company: str | None = None) -> dict:
+    try:
+        return select_sender_profile(
+            _sender_profiles(),
+            carrier="Nova Poshta",
+            requested=sender_profile,
+            company=company,
+        )
+    except ValueError as exc:
+        frappe.throw(_(str(exc)))
 
 
 def get_client(api_key: str | None = None) -> NovaPoshtaClient:
@@ -196,9 +199,17 @@ def get_client(api_key: str | None = None) -> NovaPoshtaClient:
 
 
 @frappe.whitelist()
-def np_sender_profiles_list() -> dict:
+def np_sender_profiles_list(company: str | None = None) -> dict:
     require_roles(*SALES_ROLES)
-    items = [{"name": p.get("name"), "default": 1 if p.get("default") else 0} for p in _sender_profiles()]
+    items = [
+        {
+            "name": profile.get("name"),
+            "company": profile.get("company"),
+            "default": 1 if profile.get("default") else 0,
+        }
+        for profile in _sender_profiles()
+        if not company or profile.get("company") == company
+    ]
     return {"ok": True, "items": items}
 
 
@@ -303,7 +314,7 @@ def sync_sales_invoice_ttn_statuses(limit: int = 50) -> dict:
     docs = frappe.get_all(
         "Sales Invoice",
         filters={"np_ttn_number": ["is", "set"]},
-        fields=["name", "np_ttn_number", "np_status", "np_sender_profile", "np_last_sync_at"],
+        fields=["name", "company", "np_ttn_number", "np_status", "np_sender_profile", "np_last_sync_at"],
         order_by="np_last_sync_at asc, modified asc",
         limit=max(1, min(int(limit or 50), 500)),
     )
@@ -317,7 +328,10 @@ def sync_sales_invoice_ttn_statuses(limit: int = 50) -> dict:
         if not ttn:
             continue
         try:
-            profile = _resolve_profile(d.get("np_sender_profile") or None)
+            profile = _resolve_profile(
+                d.get("np_sender_profile") or None,
+                company=d.get("company"),
+            )
             client = get_client(profile.get("api_key"))
             row = client.track(ttn)
             status = row.get("Status") or row.get("StatusCode") or ""
@@ -368,7 +382,7 @@ def create_ttn_from_sales_invoice(
     si = permitted_doc("Sales Invoice", sales_invoice, "read")
     if int(si.docstatus or 0) != 1:
         frappe.throw(_("Sales Invoice must be submitted"))
-    profile = _resolve_profile(sender_profile)
+    profile = _resolve_profile(sender_profile, company=si.company)
 
     sender_ref = profile.get("sender_ref")
     sender_city_ref = profile.get("sender_city_ref")
@@ -854,6 +868,7 @@ def download_ttn_label(ttn_ref: str, sender_profile: str | None = None, operatio
     if not re.fullmatch(r"[A-Za-z0-9-]{1,64}", ttn_ref):
         frappe.throw(_("TTN Ref is invalid"))
 
+    profile_company = None
     if operation:
         operation_doc = frappe.get_doc("UA Integration Operation", operation)
         if operation_doc.integration != "nova_poshta" or operation_doc.status not in {"succeeded", "reconciled"}:
@@ -867,7 +882,12 @@ def download_ttn_label(ttn_ref: str, sender_profile: str | None = None, operatio
         if str(operation_request.get("profile") or "") != str(sender_profile or ""):
             frappe.throw(_("The sender profile does not belong to this operation"), frappe.PermissionError)
         if operation_doc.reference_doctype and operation_doc.reference_name:
-            permitted_doc(operation_doc.reference_doctype, operation_doc.reference_name, "read")
+            reference_doc = permitted_doc(
+                operation_doc.reference_doctype,
+                operation_doc.reference_name,
+                "read",
+            )
+            profile_company = reference_doc.get("company")
         else:
             roles = set(frappe.get_roles())
             if operation_doc.owner != frappe.session.user and not roles.intersection({"Sales Manager", "System Manager"}):
@@ -878,11 +898,12 @@ def download_ttn_label(ttn_ref: str, sender_profile: str | None = None, operatio
         if not invoice:
             frappe.throw(_("A matching Sales Invoice was not found"), frappe.PermissionError)
         invoice_doc = permitted_doc("Sales Invoice", invoice, "read")
+        profile_company = invoice_doc.company
         stored_profile = str(invoice_doc.get("np_sender_profile") or "")
         if stored_profile and stored_profile != str(sender_profile or ""):
             frappe.throw(_("The sender profile does not match the Sales Invoice"), frappe.PermissionError)
 
-    profile = _resolve_profile(sender_profile)
+    profile = _resolve_profile(sender_profile, company=profile_company)
     api_key = profile.get("api_key")
     url = f"https://my.novaposhta.ua/orders/printMarking100x100/orders[]/{quote(str(ttn_ref), safe='')}/type/pdf/apiKey/{quote(str(api_key), safe='')}"
     max_size = max(1_000_000, min(int(frappe.conf.get("novaposhta_label_max_bytes", 10_000_000) or 10_000_000), 50_000_000))
