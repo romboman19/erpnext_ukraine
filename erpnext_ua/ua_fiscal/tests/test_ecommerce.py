@@ -7,6 +7,7 @@ from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_ent
 from frappe.tests import IntegrationTestCase
 
 from erpnext_ua.tests.integrations.frappe_fixtures import (
+    ensure_company_fiscal_year,
     ensure_customer_master_links,
     ensure_leaf_master,
 )
@@ -20,6 +21,10 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         frappe.set_user("Administrator")
         self.suffix = frappe.generate_hash(length=8).upper()
         self.company = self._company()
+        ensure_company_fiscal_year(
+            self.company.name,
+            f"_UA Ecommerce Fiscal Year {self.suffix}",
+        )
         self.customer = self._customer()
         self.item = self._item()
         self.bank_account = self._bank_account()
