@@ -214,8 +214,8 @@ def _submit_invoice(
         invoice.run_method("calculate_taxes_and_totals")
     if invoice.get("ua_pos_order"):
         order = frappe.get_doc("POS Order", invoice.ua_pos_order)
-        from erpnext_ua.ua_loyalty.adapters.sales_invoice import prepare_invoice as prepare_loyalty
         from erpnext_ua.ua_gift_certificates.adapters.sales_invoice import prepare_invoice as prepare_gift
+        from erpnext_ua.ua_loyalty.adapters.sales_invoice import prepare_invoice as prepare_loyalty
 
         prepare_loyalty(invoice, order)
         prepare_gift(invoice, order)
