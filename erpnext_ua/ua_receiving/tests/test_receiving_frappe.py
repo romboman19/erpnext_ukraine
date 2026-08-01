@@ -20,7 +20,10 @@ class TestReceivingFrappe(unittest.TestCase):
 		frappe.set_user("Administrator")
 		frappe.db.savepoint("ua_receiving_smoke")
 		self.company = self._get_company()
+		self._ensure_fiscal_year()
 		self.supplier = self._ensure_supplier()
+		self._ensure_uom()
+		self._ensure_selling_price_list()
 		self.item_code = self._ensure_item()
 		self.warehouse = self._ensure_warehouse()
 
@@ -69,6 +72,19 @@ class TestReceivingFrappe(unittest.TestCase):
 			}
 		).insert(ignore_permissions=True).name
 
+	def _ensure_fiscal_year(self):
+		name = "_UA Receiving Fiscal Year 2026"
+		if not frappe.db.exists("Fiscal Year", name):
+			frappe.get_doc(
+				{
+					"doctype": "Fiscal Year",
+					"year": name,
+					"year_start_date": "2026-01-01",
+					"year_end_date": "2026-12-31",
+					"companies": [{"company": self.company}],
+				}
+			).insert(ignore_permissions=True)
+
 	def _ensure_item(self):
 		item_code = "UA-RECEIVING-INTEGRATION-ITEM"
 		if frappe.db.exists("Item", item_code):
@@ -90,6 +106,29 @@ class TestReceivingFrappe(unittest.TestCase):
 			}
 		).insert(ignore_permissions=True).name
 
+	def _ensure_uom(self):
+		if not frappe.db.exists("UOM", "Nos"):
+			frappe.get_doc(
+				{
+					"doctype": "UOM",
+					"uom_name": "Nos",
+					"must_be_whole_number": 1,
+				}
+			).insert(ignore_permissions=True)
+
+	def _ensure_selling_price_list(self):
+		name = "Standard Selling"
+		if not frappe.db.exists("Price List", name):
+			frappe.get_doc(
+				{
+					"doctype": "Price List",
+					"price_list_name": name,
+					"currency": "UAH",
+					"selling": 1,
+					"enabled": 1,
+				}
+			).insert(ignore_permissions=True)
+
 	def _ensure_leaf_group(self, doctype, name, name_field, parent_field):
 		if frappe.db.exists(doctype, name):
 			return name
@@ -99,7 +138,14 @@ class TestReceivingFrappe(unittest.TestCase):
 			"name",
 			order_by="lft asc",
 		)
-		self.assertTrue(parent, f"{doctype} root is required")
+		if not parent:
+			parent = frappe.get_doc(
+				{
+					"doctype": doctype,
+					name_field: f"_UA Receiving {doctype} Root",
+					"is_group": 1,
+				}
+			).insert(ignore_permissions=True).name
 		return frappe.get_doc(
 			{
 				"doctype": doctype,

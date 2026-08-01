@@ -34,7 +34,13 @@ def _ensure_leaf(*, doctype: str, name: str, name_field: str, parent_field: str)
         order_by="lft asc",
     )
     if not parent:
-        raise AssertionError(f"{doctype} root is required on the ERPNext test site")
+        parent = frappe.get_doc(
+            {
+                "doctype": doctype,
+                name_field: f"_UA Integration {doctype} Root",
+                "is_group": 1,
+            }
+        ).insert(ignore_permissions=True).name
 
     return frappe.get_doc(
         {
