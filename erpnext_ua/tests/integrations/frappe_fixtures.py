@@ -8,13 +8,13 @@ TERRITORY = "_UA Integration Territory"
 
 def ensure_customer_master_links() -> tuple[str, str]:
     """Create the leaf masters required by Customer on an empty ERPNext site."""
-    customer_group = _ensure_leaf(
+    customer_group = ensure_leaf_master(
         doctype="Customer Group",
         name=CUSTOMER_GROUP,
         name_field="customer_group_name",
         parent_field="parent_customer_group",
     )
-    territory = _ensure_leaf(
+    territory = ensure_leaf_master(
         doctype="Territory",
         name=TERRITORY,
         name_field="territory_name",
@@ -23,7 +23,8 @@ def ensure_customer_master_links() -> tuple[str, str]:
     return customer_group, territory
 
 
-def _ensure_leaf(*, doctype: str, name: str, name_field: str, parent_field: str) -> str:
+def ensure_leaf_master(*, doctype: str, name: str, name_field: str, parent_field: str) -> str:
+    """Create one leaf below the first available group in a tree master."""
     if frappe.db.exists(doctype, name):
         return name
 

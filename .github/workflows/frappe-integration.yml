@@ -120,6 +120,12 @@ jobs:
           bench --site integration.local run-tests --module erpnext_ua.ua_loyalty.tests.test_services
           bench --site integration.local run-tests --module erpnext_ua.ua_gift_certificates.tests.test_services
 
+      - name: Run ecommerce fiscal integration tests
+        working-directory: frappe-bench
+        run: >-
+          bench --site integration.local run-tests
+          --module erpnext_ua.ua_fiscal.tests.test_ecommerce
+
       - name: Run all application integration tests
         working-directory: frappe-bench
         run: >-

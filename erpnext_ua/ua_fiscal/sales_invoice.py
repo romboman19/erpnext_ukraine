@@ -204,10 +204,16 @@ def _submitted_payment_rows(sales_invoice: str) -> list:
 		)
 		if not payment or int(payment.docstatus or 0) != 1:
 			continue
-		payment_type = frappe.db.get_value("Mode of Payment", payment.mode_of_payment, "type")
+		mode_of_payment = str(payment.mode_of_payment or "").strip()
+		if not mode_of_payment:
+			frappe.throw(
+				f"У проведеної оплати {reference.parent} не вказано спосіб оплати",
+				FiscalServerError,
+			)
+		payment_type = frappe.db.get_value("Mode of Payment", mode_of_payment, "type")
 		rows.append(
 			frappe._dict(
-				mode_of_payment=payment.mode_of_payment,
+				mode_of_payment=mode_of_payment,
 				type=payment_type,
 				amount=reference.allocated_amount,
 			)
