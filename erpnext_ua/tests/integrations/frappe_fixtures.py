@@ -39,6 +39,21 @@ def ensure_company_fiscal_year(company: str, name: str) -> str:
     ).insert(ignore_permissions=True).name
 
 
+def ensure_selling_price_list(name: str, currency: str) -> str:
+    """Create a selling price list required by clean-site invoices."""
+    if frappe.db.exists("Price List", name):
+        return name
+    return frappe.get_doc(
+        {
+            "doctype": "Price List",
+            "price_list_name": name,
+            "currency": currency,
+            "selling": 1,
+            "enabled": 1,
+        }
+    ).insert(ignore_permissions=True).name
+
+
 def ensure_leaf_master(*, doctype: str, name: str, name_field: str, parent_field: str) -> str:
     """Create one leaf below the first available group in a tree master."""
     if frappe.db.exists(doctype, name):

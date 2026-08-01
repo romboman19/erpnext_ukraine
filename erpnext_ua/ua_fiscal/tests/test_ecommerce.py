@@ -10,6 +10,7 @@ from erpnext_ua.tests.integrations.frappe_fixtures import (
     ensure_company_fiscal_year,
     ensure_customer_master_links,
     ensure_leaf_master,
+    ensure_selling_price_list,
 )
 from erpnext_ua.ua_fiscal import ecommerce
 from erpnext_ua.ua_fiscal.sales_invoice import _invoice_payments
@@ -24,6 +25,10 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         ensure_company_fiscal_year(
             self.company.name,
             f"_UA Ecommerce Fiscal Year {self.suffix}",
+        )
+        self.price_list = ensure_selling_price_list(
+            f"_UA Ecommerce Selling {self.suffix}",
+            "UAH",
         )
         self.customer = self._customer()
         self.item = self._item()
@@ -239,6 +244,9 @@ class TestEcommerceFiscalization(IntegrationTestCase):
                 "company": self.company.name,
                 "customer": self.customer.name,
                 "currency": "UAH",
+                "selling_price_list": self.price_list,
+                "price_list_currency": "UAH",
+                "plc_conversion_rate": 1,
                 "is_pos": 0,
                 "update_stock": 0,
                 "ua_ecommerce_channel": "integration-test",
