@@ -12,7 +12,8 @@ import frappe
 from ..setup.layer_dimension import ALLOCATION_FIELD, MANAGED_SALE_FIELD
 from .domain import OWN_POOL_ROLE, GSFError
 from .layers import gsf_enabled
-from .returns import ReturnLine, accept_return, returned_qty
+from .pos_return_domain import ReturnLine, consume_return_rows
+from .returns import accept_return, returned_qty
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,32 +172,7 @@ def _plan_return_lines(original_order: Any, original: Any, return_order: Any) ->
     invoice_rows = _invoice_rows_by_pos_item(original)
     all_rows = {row.name for rows in invoice_rows.values() for row in rows}
     prior = returned_qty(original.name, all_rows)
-    return _consume_return_rows(invoice_rows, return_order.items, prior)
-
-
-def _consume_return_rows(
-    invoice_rows: dict[str, list[Any]], requested_rows: list[Any], prior: dict[str, Decimal]
-) -> list[ReturnLine]:
-    """Consume the original technical rows in their stable invoice order."""
-    result: list[ReturnLine] = []
-    for requested in requested_rows:
-        remaining = Decimal(str(requested.qty))
-        rows = invoice_rows.get(requested.return_against_item, [])
-        for row in rows:
-            available = abs(Decimal(str(row.qty or 0))) - prior.get(row.name, Decimal("0"))
-            take = min(remaining, max(available, Decimal("0")))
-            if take > 0:
-                result.append(ReturnLine(row.name, take))
-                remaining -= take
-            if remaining == 0:
-                break
-        if remaining > 0:
-            returnable = Decimal(str(requested.qty)) - remaining
-            raise GSFError(
-                f"POS row {requested.return_against_item} has only {returnable} returnable",
-                "MANUAL_REVIEW_REQUIRED",
-            )
-    return result
+    return consume_return_rows(invoice_rows, return_order.items, prior)
 
 
 def _validate_stock_uoms(order: Any) -> None:

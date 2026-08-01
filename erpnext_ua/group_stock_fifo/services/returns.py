@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
@@ -28,14 +27,7 @@ from .domain import (
     layer_identity,
 )
 from .layers import apply_to_balance, own_pool, record_movement, tracking_of
-
-
-@dataclass(frozen=True, slots=True)
-class ReturnLine:
-    """A quantity returned against one technical Sales Invoice Item."""
-
-    sales_invoice_item: str
-    qty: Decimal
+from .pos_return_domain import ReturnLine
 
 
 def accept_return(
