@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import csv
 import json
-import re
 import unittest
 from pathlib import Path
 
@@ -119,6 +118,12 @@ class ProductionStaticContractsTest(unittest.TestCase):
         for path in [json_path for module in MODULES for json_path in module.glob("doctype/*/*.json")]:
             found.add(json.loads(path.read_text(encoding="utf-8"))["name"])
         self.assertTrue(required.issubset(found), required - found)
+
+    def test_installation_diagnostics_match_the_consolidated_app(self):
+        diagnostics = (INTEGRATIONS / "diagnostics.py").read_text(encoding="utf-8")
+        self.assertIn('for app in ("erpnext", "erpnext_ua")', diagnostics)
+        self.assertNotIn('for app in ("erpnext", "ukrainian_integrations")', diagnostics)
+        self.assertNotIn('"telegram_bot_token",', diagnostics)
 
     def test_turbosms_log_keeps_upgrade_safe_hash_names(self):
         path = (
