@@ -187,6 +187,7 @@ def _submit_invoice(
                 # One user-visible line, so one group across every row it was
                 # split into (§18.2, §18.4).
                 DISPLAY_GROUP_FIELD: allocation.name,
+                "ua_pos_order_item": allocation.external_row_id,
             }
             for slice_row in allocation.slices
         )
@@ -205,8 +206,19 @@ def _submit_invoice(
         "items": rows,
     }
     values.update(_allowed_invoice_values(invoice_values))
+    payments = values.pop("payments", None)
     invoice = frappe.get_doc(values)
     invoice.set_missing_values()
+    if payments is not None:
+        invoice.set("payments", payments)
+        invoice.run_method("calculate_taxes_and_totals")
+    if invoice.get("ua_pos_order"):
+        order = frappe.get_doc("POS Order", invoice.ua_pos_order)
+        from erpnext_ua.ua_loyalty.adapters.sales_invoice import prepare_invoice as prepare_loyalty
+        from erpnext_ua.ua_gift_certificates.adapters.sales_invoice import prepare_invoice as prepare_gift
+
+        prepare_loyalty(invoice, order)
+        prepare_gift(invoice, order)
     invoice.insert(ignore_permissions=True)
     invoice.submit()
     return invoice

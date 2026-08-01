@@ -639,7 +639,7 @@ def ensure_pos_setup():
 				{"fieldname": "ua_allow_debt", "label": "Дозволено для боргу", "fieldtype": "Check", "default": "0", "insert_after": "ua_allow_prepayment"},
 				{"fieldname": "ua_requires_terminal", "label": "Потрібен інтегрований платіжний термінал", "fieldtype": "Check", "default": "0", "insert_after": "ua_allow_debt"},
 				{"fieldname": "ua_currency", "label": "Валюта каси", "fieldtype": "Link", "options": "Currency", "default": "UAH", "insert_after": "ua_requires_terminal"},
-				{"fieldname": "ua_pos_kind", "label": "Застарілий технічний тип UA POS", "fieldtype": "Select", "options": "\nCash\nCard\nIBAN\nBonus\nInstallment", "hidden": 1, "insert_after": "ua_currency"},
+				{"fieldname": "ua_pos_kind", "label": "Застарілий технічний тип UA POS", "fieldtype": "Select", "options": "\nCash\nCard\nIBAN\nBonus\nInstallment\nGift Certificate", "hidden": 1, "insert_after": "ua_currency"},
 			],
 			"Item": [
 				{"fieldname": "ua_serial_mode", "label": "UA Serial Mode", "fieldtype": "Select", "options": "\nStrict\nAdvisory\nNone"},

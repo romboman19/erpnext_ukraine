@@ -1,0 +1,1 @@
+"""Gift certificate batch DocType."""

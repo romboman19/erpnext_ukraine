@@ -51,6 +51,7 @@ include = [
     "erpnext_ua/consignment_and_commission/**/*.py",
     "erpnext_ua/group_stock_fifo/**/*.py",
     "erpnext_ua/ua_loyalty/**/*.py",
+    "erpnext_ua/ua_gift_certificates/**/*.py",
     "erpnext_ua/integrations/**/*.py",
     "erpnext_ua/ecommerce/**/*.py",
     "erpnext_ua/ukrainian_integrations/**/*.py",

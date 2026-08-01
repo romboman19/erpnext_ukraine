@@ -68,6 +68,7 @@ after_install = [
 	"erpnext_ua.group_stock_fifo.setup.roles.ensure_roles",
 	"erpnext_ua.group_stock_fifo.setup.layer_dimension.ensure_layer_dimension",
 	"erpnext_ua.ua_loyalty.setup.ensure_loyalty_setup",
+	"erpnext_ua.ua_gift_certificates.setup.ensure_gift_certificate_setup",
 	"erpnext_ua.integrations.install.after_install",
 	"erpnext_ua.ua_setup.service.report_readiness",
 ]
@@ -94,6 +95,7 @@ after_migrate = [
 	# ERPNext finishes registering the dimension's custom fields.
 	"erpnext_ua.group_stock_fifo.setup.layer_dimension.ensure_layer_dimension",
 	"erpnext_ua.ua_loyalty.setup.ensure_loyalty_setup",
+	"erpnext_ua.ua_gift_certificates.setup.ensure_gift_certificate_setup",
 	"erpnext_ua.integrations.migrations.after_migrate",
 ]
 
@@ -156,6 +158,7 @@ has_permission = {
 CC = "erpnext_ua.consignment_and_commission.integrations"
 GSF = "erpnext_ua.group_stock_fifo"
 LOYALTY = "erpnext_ua.ua_loyalty.adapters.sales_invoice"
+GIFT_CERTIFICATES = "erpnext_ua.ua_gift_certificates.adapters.sales_invoice"
 
 # Порядок у списках — це контракт, а не випадковість. Комісійні перевірки й
 # споживання резервів мають завершитися до фіскалізації ПРРО: скасувати вже
@@ -167,18 +170,21 @@ doc_events = {
             f"{CC}.tracking.validate_sales_invoice_tracking_ownership",
             f"{GSF}.services.sales_invoice.validate_managed_sales_invoice",
 			f"{LOYALTY}.validate_before_submit",
+			f"{GIFT_CERTIFICATES}.validate_before_submit",
         ],
         "on_submit": [
             f"{CC}.sales_invoice.consume_sales_invoice_allocations",
 			f"{LOYALTY}.on_submit",
+			f"{GIFT_CERTIFICATES}.on_submit",
             "erpnext_ua.ua_fiscal.sales_invoice.on_submit",
         ],
         "before_cancel": [
             f"{CC}.sales_invoice.before_cancel_managed_sales_invoice",
             f"{GSF}.services.sales_invoice.before_cancel_managed_sales_invoice",
 			f"{LOYALTY}.validate_before_cancel",
-        ],
-		"on_cancel": [f"{CC}.sales_invoice.on_cancel_managed_sales_invoice", f"{LOYALTY}.on_cancel"],
+			f"{GIFT_CERTIFICATES}.validate_before_cancel",
+		],
+		"on_cancel": [f"{CC}.sales_invoice.on_cancel_managed_sales_invoice", f"{LOYALTY}.on_cancel", f"{GIFT_CERTIFICATES}.on_cancel"],
         "on_trash": f"{CC}.sales_invoice.release_draft_sales_invoice_allocations",
     },
 	"Employee": {
@@ -278,6 +284,7 @@ scheduler_events = {
 		"erpnext_ua.ua_loyalty.scheduler.activate_pending",
 		"erpnext_ua.ua_loyalty.scheduler.expire_obligations",
 		"erpnext_ua.ua_loyalty.scheduler.release_stale_reservations",
+		"erpnext_ua.ua_gift_certificates.services.expiry.expire_due_certificates",
 	],
 	"cron": {
 		"*/5 * * * *": [
@@ -285,6 +292,7 @@ scheduler_events = {
 		],
 		"* * * * *": [
 			"erpnext_ua.ua_pos.print_service.process_print_queue",
+			"erpnext_ua.ua_gift_certificates.services.reservation.release_stale_reservations",
 			"erpnext_ua.integrations.monitoring.system_health.update_scheduler_heartbeat",
 			"erpnext_ua.ecommerce.scheduler.dispatch",
 		],
@@ -303,6 +311,7 @@ scheduler_events = {
 		],
 	},
     "daily": [
+		"erpnext_ua.ua_gift_certificates.services.reconciliation.run_daily_reconciliation",
         "erpnext_ua.ua_fop.tax_calendar.update_statuses_and_notify",
         "erpnext_ua.ua_fop.income_monitor.check_income_limits",
         "erpnext_ua.integrations.customer_identification.birthday.send_scheduled_greetings",

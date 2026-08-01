@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-
 PAYMENT_CHANNELS = (
 	"Готівка",
 	"Платіжний термінал",
@@ -32,7 +31,7 @@ CHANNEL_KIND = {
 	"Платіжний сервіс": "IBAN",
 	"Передоплата": "IBAN",
 	"Кредит / розстрочка": "Installment",
-	"Сертифікат / замінник": "Bonus",
+	"Сертифікат / замінник": "Gift Certificate",
 	"Інше": "IBAN",
 }
 
@@ -145,4 +144,3 @@ BASE_PAYMENT_METHODS = [
 		"mop_type": "Bank",
 	},
 ]
-

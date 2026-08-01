@@ -184,6 +184,13 @@ def _draft_credit_note(
     if "payments" in invoice_values:
         credit_note.set("payments", invoice_values["payments"])
     credit_note.run_method("calculate_taxes_and_totals")
+    if credit_note.get("ua_pos_order"):
+        order = frappe.get_doc("POS Order", credit_note.ua_pos_order)
+        from erpnext_ua.ua_gift_certificates.adapters.sales_invoice import prepare_invoice as prepare_gift
+        from erpnext_ua.ua_loyalty.adapters.sales_invoice import prepare_invoice as prepare_loyalty
+
+        prepare_loyalty(credit_note, order)
+        prepare_gift(credit_note, order)
     return credit_note.insert(ignore_permissions=True)
 
 

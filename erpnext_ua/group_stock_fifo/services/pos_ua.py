@@ -135,14 +135,9 @@ def return_invoice_values(order: Any) -> dict[str, Any]:
 
 
 def _invoice_values(order: Any, *, is_return: bool) -> dict[str, Any]:
-    payments = [
-        {
-            "mode_of_payment": row.mode_of_payment,
-            "amount": -abs(row.amount) if is_return else abs(row.amount),
-        }
-        for row in order.payments_plan
-        if row.status == "Confirmed"
-    ]
+    from erpnext_ua.ua_gift_certificates.adapters.accounting import invoice_payments
+
+    payments = invoice_payments(order, is_return=is_return)
     return {
         "is_pos": 1,
         "ua_pos_order": order.name,

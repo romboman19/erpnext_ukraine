@@ -1,9 +1,9 @@
 {
  "doctype":"DocType","name":"POS Order Payment","module":"UA POS","istable":1,
- "field_order":["mode_of_payment","kind","prro_payment_form","prro_payment_means","prro_payment_code","payment_context","amount","tendered_amount","change_amount","currency","exchange_rate","status","payment_attempt"],
+ "field_order":["mode_of_payment","kind","prro_payment_form","prro_payment_means","prro_payment_code","payment_context","amount","tendered_amount","change_amount","currency","exchange_rate","status","payment_attempt","gift_certificate","gift_certificate_reservation","gift_certificate_redemption_allocation","gift_certificate_redeemer_fop","gift_certificate_public_serial","gift_certificate_paid_amount","gift_certificate_promotional_amount","gift_certificate_allocation_group","is_internal_payment_component","source_payment_row"],
  "fields":[
   {"fieldname":"mode_of_payment","fieldtype":"Link","label":"Спосіб оплати ERPNext","options":"Mode of Payment","reqd":1},
-  {"fieldname":"kind","fieldtype":"Select","label":"Технічний тип","options":"Cash\nCard\nIBAN\nBonus\nInstallment","reqd":1},
+  {"fieldname":"kind","fieldtype":"Select","label":"Технічний тип","options":"Cash\nCard\nIBAN\nBonus\nInstallment\nGift Certificate","reqd":1},
   {"fieldname":"prro_payment_form","fieldtype":"Select","label":"Форма оплати ДПС","options":"ГОТІВКА\nБЕЗГОТІВКОВА\nІНШЕ","reqd":1},
   {"fieldname":"prro_payment_means","fieldtype":"Data","label":"Засіб оплати у чеку","reqd":1},
   {"fieldname":"prro_payment_code","fieldtype":"Int","label":"Код PAYFORMCD","reqd":1},
@@ -14,6 +14,16 @@
   {"fieldname":"currency","fieldtype":"Link","label":"Валюта","options":"Currency","default":"UAH","reqd":1},
   {"fieldname":"exchange_rate","fieldtype":"Float","label":"Курс","default":"1"},
   {"fieldname":"status","fieldtype":"Select","label":"Статус","options":"Planned\nConfirmed\nFailed\nRefunded","default":"Planned"},
-  {"fieldname":"payment_attempt","fieldtype":"Link","label":"Спроба оплати","options":"POS Payment Attempt"}
+  {"fieldname":"payment_attempt","fieldtype":"Link","label":"Спроба оплати","options":"POS Payment Attempt"},
+  {"fieldname":"gift_certificate","fieldtype":"Link","label":"Gift Certificate","options":"UA Gift Certificate","read_only":1},
+  {"fieldname":"gift_certificate_reservation","fieldtype":"Link","label":"Gift Certificate Reservation","options":"UA Gift Certificate Reservation","read_only":1},
+  {"fieldname":"gift_certificate_redemption_allocation","fieldtype":"Link","label":"Original Gift Certificate Allocation","options":"UA Gift Certificate Redemption Allocation","read_only":1},
+  {"fieldname":"gift_certificate_redeemer_fop","fieldtype":"Link","label":"Gift Certificate Redeemer FOP","options":"FOP Profile","read_only":1},
+  {"fieldname":"gift_certificate_public_serial","fieldtype":"Data","label":"Gift Certificate Serial","read_only":1},
+  {"fieldname":"gift_certificate_paid_amount","fieldtype":"Currency","label":"Gift Certificate Paid Component","read_only":1},
+  {"fieldname":"gift_certificate_promotional_amount","fieldtype":"Currency","label":"Gift Certificate Promotional Component","read_only":1},
+  {"fieldname":"gift_certificate_allocation_group","fieldtype":"Data","label":"Gift Certificate Allocation Group","read_only":1},
+  {"fieldname":"is_internal_payment_component","fieldtype":"Check","label":"Internal Payment Component","default":"0","read_only":1},
+  {"fieldname":"source_payment_row","fieldtype":"Data","label":"Source Payment Row","read_only":1}
  ]
 }

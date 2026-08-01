@@ -87,6 +87,9 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   };
   const api = (method, args = {}) =>
     frappe.call({ method: `erpnext_ua.ua_pos.api.${method}`, args }).then((response) => response.message);
+  const giftApi = (method, args = {}) =>
+    frappe.call({ method: `erpnext_ua.ua_gift_certificates.api.pos.${method}`, args }).then((response) => response.message);
+  const customerDue = (order) => Math.max(0, flt(order?.grand_total) - flt(order?.gift_certificate_redeemed_total));
   const serverErrorMessage = (error) => {
     const raw = error?.responseJSON?._server_messages;
     if (raw) {
@@ -160,6 +163,8 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
             <button class="ua-pos-action js-customer">♙ Клієнт <span class="ua-pos-shortcut">F4</span></button>
             <button class="ua-pos-action primary js-identify">◎ Ідентифікувати <span class="ua-pos-shortcut">F5</span></button>
             <button class="ua-pos-action primary js-loyalty">★ Бонуси</button>
+            <button class="ua-pos-action primary js-gift-redeem">🎁 Погасити сертифікат</button>
+            <button class="ua-pos-action js-gift-sale">＋ Продати сертифікат</button>
             <button class="ua-pos-action js-create-invoice">▧ Створити рахунок</button>
             <button class="ua-pos-action js-discount">% Знижка <span class="ua-pos-shortcut">F6</span></button>
             <button class="ua-pos-action js-hold">◫ Відкласти <span class="ua-pos-shortcut">F7</span></button>
@@ -195,6 +200,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
               <div class="ua-pos-total-row"><span>Повна сума</span><strong><span class="js-net">0,00</span> грн</strong></div>
               <div class="ua-pos-total-row discount"><span>Знижка</span><strong>− <span class="js-discount">0,00</span> грн</strong></div>
               <div class="ua-pos-total-row discount"><span>Списано бонусів</span><strong>− <span class="js-loyalty-discount">0,00</span> грн</strong></div>
+              <div class="ua-pos-total-row discount js-gift-certificate-row" style="display:none"><span>Сертифікати</span><strong>− <span class="js-gift-certificate-total">0,00</span> грн</strong></div>
               <div class="ua-pos-total-row"><span>Буде нараховано</span><strong><span class="js-loyalty-earned">0,00</span> бонусів</strong></div>
               <div class="ua-pos-total-row"><span>Доступно / борг</span><strong><span class="js-loyalty-balance">—</span></strong></div>
               <div class="ua-pos-total-row"><span>Оплачено</span><strong><span class="js-paid">0,00</span> грн</strong></div>
@@ -328,13 +334,14 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   function renderOrder(order) {
     state.order = order || null;
     const items = order?.items || [];
+    const issueRows = order?.gift_certificate_issue_rows || [];
     if (!order) {
       state.lastItem = null;
       state.birthdayPromptKey = null;
     }
     else state.lastItem = items.find((item) => item.name === state.lastItem?.name) || items.at(-1) || null;
     const editable = canEditOrder();
-    $root.find(".js-empty").toggle(items.length === 0);
+    $root.find(".js-empty").toggle(items.length === 0 && issueRows.length === 0);
     $root.find(".js-order-name").text(order ? `${order.order_type === "Return" ? "Повернення" : "Чек"} ${order.name}` : "Чек ще не створено");
     $root.find(".js-order-status").text(order ? statusLabels[order.status] || order.status : "Новий чек");
     $root.find(".js-order-badge").text(order ? (statusLabels[order.status] || order.status).toUpperCase() : "ГОТОВО ДО РОБОТИ");
@@ -343,6 +350,8 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     $root.find(".js-net").text(money(order?.net_total));
     $root.find(".js-discount").text(money(order?.discount_total));
     $root.find(".js-loyalty-discount").text(money(order?.loyalty_redeemed_amount));
+    $root.find(".js-gift-certificate-row").toggle(flt(order?.gift_certificate_redeemed_total) > 0);
+    $root.find(".js-gift-certificate-total").text(money(order?.gift_certificate_redeemed_total));
     $root.find(".js-loyalty-earned").text(money(flt(order?.loyalty_earned_active) + flt(order?.loyalty_earned_pending)));
     $root.find(".js-loyalty-balance").text(order?.loyalty_account
       ? (flt(order.loyalty_debt_after) > 0 ? `борг ${money(order.loyalty_debt_after)}` : `${money(order.loyalty_redeemable_before)} бонусів`)
@@ -353,12 +362,14 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     $root.find(".js-cash-received-row").toggle(confirmedCash.length > 0);
     $root.find(".js-cash-received").text(money(cashReceived));
     $root.find(".js-change").text(money(order?.change_amount));
-    $root.find(".js-total").text(money(order?.grand_total));
-    $root.find(".js-lines").text(items.length);
-    $root.find(".js-qty").text(money(items.reduce((sum, item) => sum + flt(item.qty), 0)));
-    $root.find(".js-cart-body").html(items.map((item) => `
-      <tr data-row="${esc(item.name)}"><td data-col="item"><div class="ua-pos-item-name">${esc(item.item_name || item.item_code)}</div><div class="ua-pos-item-code">${esc(item.item_code)}</div></td><td data-col="barcode">${esc(item.barcode || "—")}</td><td data-col="qty" class="num"><div class="ua-pos-qty"><button data-delta="-1" ${editable && order?.order_type !== "Return" ? "" : "disabled"}>−</button><span>${esc(item.qty)}</span><button data-delta="1" ${editable && order?.order_type !== "Return" ? "" : "disabled"}>＋</button></div></td><td data-col="uom">${esc(item.uom || "—")}</td><td data-col="rate" class="num">${money(item.rate)}</td><td data-col="discount" class="num">${money(item.discount_amount)}</td><td data-col="amount" class="num"><b>${money(item.amount)}</b></td><td data-col="tracking"><button class="btn btn-xs btn-default js-track-item" ${editable && order?.order_type !== "Return" ? "" : "disabled"}>${esc(item.batch_no || item.serial_no || "Вказати")}</button></td><td data-col="status"><span style="color:#079455">● Готово</span></td></tr>`).join(""));
-    const payable = Boolean(order && items.length && ["Building", "Awaiting Payment"].includes(order.status) && state.session?.shift);
+    $root.find(".js-total").text(money(customerDue(order)));
+    $root.find(".js-lines").text(items.length + issueRows.length);
+    $root.find(".js-qty").text(money(items.reduce((sum, item) => sum + flt(item.qty), issueRows.length)));
+    const merchandiseRows = items.map((item) => `
+      <tr data-row="${esc(item.name)}"><td data-col="item"><div class="ua-pos-item-name">${esc(item.item_name || item.item_code)}</div><div class="ua-pos-item-code">${esc(item.item_code)}</div></td><td data-col="barcode">${esc(item.barcode || "—")}</td><td data-col="qty" class="num"><div class="ua-pos-qty"><button data-delta="-1" ${editable && order?.order_type !== "Return" ? "" : "disabled"}>−</button><span>${esc(item.qty)}</span><button data-delta="1" ${editable && order?.order_type !== "Return" ? "" : "disabled"}>＋</button></div></td><td data-col="uom">${esc(item.uom || "—")}</td><td data-col="rate" class="num">${money(item.rate)}</td><td data-col="discount" class="num">${money(item.discount_amount)}</td><td data-col="amount" class="num"><b>${money(item.amount)}</b></td><td data-col="tracking"><button class="btn btn-xs btn-default js-track-item" ${editable && order?.order_type !== "Return" ? "" : "disabled"}>${esc(item.batch_no || item.serial_no || "Вказати")}</button></td><td data-col="status"><span style="color:#079455">● Готово</span></td></tr>`).join("");
+    const certificateRows = issueRows.map((row) => `<tr><td data-col="item"><div class="ua-pos-item-name">Подарунковий сертифікат</div><div class="ua-pos-item-code">${esc(row.program)} · ${esc(row.public_serial || "зарезервовано")}</div></td><td data-col="barcode">${esc(row.masked_token || "—")}</td><td data-col="qty" class="num">1</td><td data-col="uom">шт</td><td data-col="rate" class="num">${money(row.face_value)}</td><td data-col="discount" class="num">${money(flt(row.face_value) - flt(row.sale_price))}</td><td data-col="amount" class="num"><b>${money(row.sale_price)}</b></td><td data-col="tracking">Захищений токен</td><td data-col="status"><span style="color:#079455">● ${esc(row.status || "Готово")}</span></td></tr>`).join("");
+    $root.find(".js-cart-body").html(merchandiseRows + certificateRows);
+    const payable = Boolean(order && (items.length || issueRows.length) && ["Building", "Awaiting Payment"].includes(order.status) && state.session?.shift);
 	const paymentMethods = state.session?.payment_methods || [];
 	const hasCashMethod = paymentMethods.some((method) => method.payment_form === "ГОТІВКА");
 	const hasCashlessMethod = paymentMethods.some((method) => method.payment_form !== "ГОТІВКА" && (!method.requires_terminal || state.session?.desk?.terminal));
@@ -371,6 +382,8 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     const customerActionAvailable = Boolean(state.session?.shift && (!order || (editable && order?.order_type !== "Return")));
     $root.find(".js-customer,.js-identify").prop("disabled", !customerActionAvailable);
     $root.find(".js-loyalty").prop("disabled", !customerActionAvailable);
+    $root.find(".js-gift-redeem").prop("disabled", !editable || order?.order_type !== "Sale" || !items.length || issueRows.length > 0);
+    $root.find(".js-gift-sale").prop("disabled", !editable || order?.order_type !== "Sale" || items.length > 0);
     $root.find(".js-discount,.js-create-invoice,.js-cancel").prop("disabled", !editable || order?.order_type === "Return");
     $root.find(".js-hold").html(order?.status === "Held" ? "▶ Повернути чек <span class=\"ua-pos-shortcut\">F7</span>" : "◫ Відкласти <span class=\"ua-pos-shortcut\">F7</span>");
     if (order?.fiscal_mode) {
@@ -537,12 +550,17 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
 	return choices;
   }
 
-  function paymentDialog(group) {
-    if (!state.order?.items?.length) return;
+  async function paymentDialog(group) {
+    if (!state.order || (!state.order.items?.length && !state.order.gift_certificate_issue_rows?.length)) return;
 	const choices = paymentChoices(group);
 	if (!choices.size) return showNotice(group === "cash" ? "Не налаштовано готівковий спосіб оплати." : "Не налаштовано доступний безготівковий спосіб оплати.", "error");
 	const labels = Array.from(choices.keys());
-    const total = flt(state.order.grand_total);
+    const total = customerDue(state.order);
+    if (total === 0) {
+      const completed = await api("checkout_start", { pos_session_token: state.token, order: state.order.name, payments: "[]", idem_key: idem() });
+      await finishOrderFlow(completed);
+      return;
+    }
     const dialog = new frappe.ui.Dialog({
       title: group === "cash" ? "Оплата готівкою" : "Безготівкова оплата",
       fields: [
@@ -806,6 +824,76 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
     dialog.fields_dict.identifier.$input.focus();
   }
 
+  async function giftCertificateRedemptionDialog() {
+    if (!state.order?.items?.length || !canEditOrder()) return;
+    const dialog = new frappe.ui.Dialog({
+      title: "Погашення подарункового сертифіката",
+      fields: [
+        { fieldname: "token", fieldtype: "Data", label: "Токен / штрихкод сертифіката", reqd: 1 },
+        { fieldname: "amount", fieldtype: "Currency", label: "Сума (порожньо — максимально доступна)" },
+        { fieldname: "note", fieldtype: "HTML", options: '<div class="ua-pos-modal-note">Сервер перевірить строк дії, мережу, ФОП, eligible товари та доступний баланс. Резерв буде створено до звернення до термінала.</div>' },
+      ],
+      primary_action_label: "Перевірити й зарезервувати",
+      primary_action: async (values) => {
+        dialog.get_primary_btn().prop("disabled", true);
+        try {
+          const quote = await giftApi("quote_redemption", {
+            pos_session_token: state.token,
+            order: state.order.name,
+            token: values.token,
+            requested_amount: values.amount || null,
+          });
+          const confirmed = await new Promise((resolve) => frappe.confirm(
+            `Списати <b>${money(quote.amount_to_redeem)} грн</b>?<br>Після операції: ${money(quote.balance_after)} грн.`,
+            () => resolve(true),
+            () => resolve(false),
+          ));
+          if (!confirmed) return;
+          const reserved = await giftApi("reserve_redemption", {
+            pos_session_token: state.token,
+            order: state.order.name,
+            quote_id: quote.quote_id,
+            idempotency_key: idem(),
+          });
+          renderOrder(reserved.order);
+          dialog.hide();
+        } finally { dialog.get_primary_btn().prop("disabled", false); }
+      },
+    });
+    dialog.show();
+    dialog.fields_dict.token.$input.focus();
+  }
+
+  async function giftCertificateSaleDialog() {
+    if (!state.order || !canEditOrder() || state.order.items?.length) return;
+    const dialog = new frappe.ui.Dialog({
+      title: "Продаж подарункового сертифіката",
+      fields: [
+        { fieldname: "program", fieldtype: "Link", options: "UA Gift Certificate Program", label: "Програма", reqd: 1, get_query: () => ({ filters: { status: "Active" } }) },
+        { fieldname: "face_value", fieldtype: "Currency", label: "Номінал", reqd: 1 },
+        { fieldname: "sale_price", fieldtype: "Currency", label: "Ціна продажу (порожньо — номінал)" },
+        { fieldname: "holder_mode", fieldtype: "Select", options: "Bearer\nNamed", label: "Власник", default: "Bearer" },
+        { fieldname: "holder_customer", fieldtype: "Link", options: "Customer", label: "Клієнт-власник", depends_on: "eval:doc.holder_mode==='Named'", mandatory_depends_on: "eval:doc.holder_mode==='Named'" },
+      ],
+      primary_action_label: "Додати до окремого чека",
+      primary_action: async (values) => {
+        const result = await giftApi("add_certificate_sale_row", {
+          pos_session_token: state.token,
+          order: state.order.name,
+          program: values.program,
+          face_value: values.face_value,
+          sale_price: values.sale_price || null,
+          holder_mode: values.holder_mode,
+          holder_customer: values.holder_customer || null,
+          idempotency_key: idem(),
+        });
+        renderOrder(result.order);
+        dialog.hide();
+      },
+    });
+    dialog.show();
+  }
+
   function itemTrackingDialog(rowName) {
     const row = state.order?.items?.find((item) => item.name === rowName);
     if (!row || !canEditOrder()) return;
@@ -822,11 +910,11 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   }
 
   function mixedPaymentDialog() {
-    if (!state.order?.items?.length || state.order.fiscal_mode !== "Fiscal") return;
+    if (!state.order || (!state.order.items?.length && !state.order.gift_certificate_issue_rows?.length) || state.order.fiscal_mode !== "Fiscal") return;
 	const cashChoices = paymentChoices("cash"), cashlessChoices = paymentChoices("cashless");
 	if (!cashChoices.size || !cashlessChoices.size) return frappe.msgprint("Для змішаної оплати налаштуйте щонайменше один готівковий і один безготівковий засіб.");
 	const cashLabels = Array.from(cashChoices.keys()), cashlessLabels = Array.from(cashlessChoices.keys());
-    const total = flt(state.order.grand_total);
+	const total = customerDue(state.order);
     const dialog = new frappe.ui.Dialog({
       title: "Змішана оплата",
       fields: [
@@ -945,6 +1033,10 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
 	  const payments = (order.payments_plan || []).filter((row) => row.status === "Confirmed").map((row) => `<tr><td>${esc(row.prro_payment_means || row.mode_of_payment)}</td><td>${money(row.amount)} грн</td></tr>`).join("");
 	  body = `<div class="center"><b>${esc(data.company.company_name || "")}</b><br>${esc(data.cash_desk)}<br><span class="muted">Касир: ${esc(data.employee_name)}</span></div><p class="center"><b>НЕФІСКАЛЬНИЙ ТОВАРНИЙ ЧЕК</b></p><p><b>ЧЕК ${esc(order.name)}</b><br><small class="muted">${esc(formatDateTime(data.completed_at))}</small></p><table>${items}</table><p class="total">Разом: ${money(order.grand_total)} грн</p><table>${payments}</table>${order.change_amount ? `<p>Решта: ${money(order.change_amount)} грн</p>` : ""}<p class="center muted">Код чека для повернення:<br><img class="lookup-barcode" src="${esc(data.lookup_barcode_svg)}" alt="Штрихкод повернення"><b>${esc(data.lookup_barcode)}</b><br>Надруковано: ${esc(formatDateTime(data.printed_at))}</p>`;
 	}
+	if (data.certificate_print?.certificates?.length) {
+	  const certificates = data.certificate_print.certificates.map((certificate) => `<section style="page-break-before:always;text-align:center"><h2>ПОДАРУНКОВИЙ СЕРТИФІКАТ</h2>${certificate.purpose === "Duplicate" ? `<p><b>ДУБЛІКАТ № ${esc(certificate.print_number)}</b></p>` : ""}<p>Серійний номер: <b>${esc(certificate.public_serial)}</b></p><p class="total">${money(certificate.face_value)} грн</p><img class="lookup-barcode" src="${esc(certificate.barcode_svg)}" alt="Код подарункового сертифіката"><p>Дійсний до: <b>${esc(certificate.valid_until || "безстроково")}</b></p><p class="muted">Зберігайте код як платіжний засіб. Повний код повторно на екрані не показується.</p></section>`).join("");
+	  body += certificates;
+	}
 	printHtml(`${order.order_type === "Return" ? "Повернення" : "Чек"} ${order.name}`, body, win, Boolean(fiscal));
   }
 
@@ -958,16 +1050,17 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   }
 
   function returnPaymentDialog(returnOrder, limits) {
+    const payoutDue = customerDue(returnOrder);
     const available = (limits || []).filter((row) => flt(row.available) > 0);
     const rows = available.map((row) => `<tr><td style="text-align:left">${esc(row.payment_means || row.mode_of_payment)}${row.payment_form ? `<br><small>${esc(row.payment_form)}</small>` : ""}</td><td>${money(row.available)} грн</td><td><input type="number" min="0" max="${esc(row.available)}" step="0.01" value="0" data-kind="${esc(row.kind)}" data-mode="${esc(row.mode_of_payment)}" data-form="${esc(row.payment_form || "")}"></td></tr>`).join("");
     const dialog = new frappe.ui.Dialog({
       title: `Виплата повернення · ${returnOrder.name}`,
-      fields: [{ fieldname: "plan", fieldtype: "HTML", options: `<div class="ua-pos-modal-note">До повернення покупцю: <b>${money(returnOrder.grand_total)} грн</b></div><table class="ua-pos-denoms"><thead><tr><th>Спосіб</th><th>Доступно</th><th>Повернути</th></tr></thead><tbody>${rows}</tbody></table>` }],
+      fields: [{ fieldname: "plan", fieldtype: "HTML", options: `<div class="ua-pos-modal-note">Загальна сума повернення: <b>${money(returnOrder.grand_total)} грн</b><br>На сертифікат: <b>${money(returnOrder.gift_certificate_redeemed_total)} грн</b><br>Виплатити покупцю: <b>${money(payoutDue)} грн</b></div><table class="ua-pos-denoms"><thead><tr><th>Спосіб</th><th>Доступно</th><th>Повернути</th></tr></thead><tbody>${rows}</tbody></table>` }],
       primary_action_label: "Провести повернення",
       primary_action: async () => {
         const payments = [];
         dialog.$wrapper.find("[data-kind]").each(function () { const amount = flt(this.value); if (amount > 0) payments.push({ mode_of_payment: this.dataset.mode, payment_form: this.dataset.form, amount, currency: "UAH" }); });
-        if (Math.abs(payments.reduce((sum, row) => sum + row.amount, 0) - flt(returnOrder.grand_total)) > 0.01) return frappe.msgprint("Розподіл виплати має дорівнювати сумі повернення.");
+        if (Math.abs(payments.reduce((sum, row) => sum + row.amount, 0) - payoutDue) > 0.01) return frappe.msgprint("Грошова виплата має дорівнювати частині повернення, не оплаченій сертифікатом.");
         const completed = await api("checkout_start", { pos_session_token: state.token, order: returnOrder.name, payments: JSON.stringify(payments), idem_key: idem() });
         dialog.hide();
         if (FINAL_ORDER_STATUSES.has(completed.status)) frappe.show_alert({ message: "Повернення проведено", indicator: "green" });
@@ -975,7 +1068,7 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
       },
     });
     dialog.show();
-    let remaining = flt(returnOrder.grand_total);
+    let remaining = payoutDue;
     dialog.$wrapper.find("[data-kind]").each(function () { const max = flt(this.max); const amount = Math.min(max, remaining); this.value = amount; remaining -= amount; });
   }
 
@@ -1280,6 +1373,8 @@ frappe.pages["ua-pos"].on_page_load = function (wrapper) {
   $root.on("click", ".js-create-invoice", createInvoice);
   $root.on("click", ".js-discount", discountDialog);
   $root.on("click", ".js-loyalty", loyaltyDialog);
+  $root.on("click", ".js-gift-redeem", giftCertificateRedemptionDialog);
+  $root.on("click", ".js-gift-sale", giftCertificateSaleDialog);
   $root.on("click", ".js-hold", async () => { if (state.order) renderOrder(await api("hold_order", { pos_session_token: state.token, order: state.order.name })); });
   $root.on("click", ".js-orders", showHeldOrders);
   $root.on("click", ".js-cancel", async () => {
