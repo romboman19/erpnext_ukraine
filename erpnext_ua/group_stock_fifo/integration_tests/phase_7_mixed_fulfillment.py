@@ -25,6 +25,7 @@ from erpnext_ua.group_stock_fifo.services.fulfillment_channels import (
     fulfill_sales_invoice_document,
     fulfill_sales_order,
 )
+from erpnext_ua.group_stock_fifo.spikes.fixtures import FOPS
 from erpnext_ua.ua_pos.api import _post_sales_invoice
 
 ALLOWED_SITES = {"gsfaccept.local", "fifoaccept.local", "integration.local"}
@@ -37,11 +38,12 @@ def run() -> dict:
             f"This acceptance probe is restricted to {sorted(ALLOWED_SITES)}"
         )
     run_id = uuid.uuid4().hex[:8].upper()
-    companies = frappe.get_all("GSF Group Member", filters={"enabled": 1}, pluck="company", order_by="idx")
-    if len(companies) < 2:
-        raise RuntimeError("Mixed fulfillment needs two active GSF Companies")
-    company_a, company_b = companies[:2]
-    location = frappe.db.get_value("GSF Physical Location", {}, "name")
+    company_a, company_b = (fop.company for fop in FOPS[:2])
+    location = frappe.db.get_value(
+        "GSF Physical Location", {"location_code": "P3"}, "name"
+    )
+    if not location:
+        raise RuntimeError("Phase 3 physical location is required")
     customer = _ensure_customer(run_id)
     desks = {
         company: _ensure_pos_route(company, customer, location, run_id)
@@ -71,7 +73,7 @@ def run() -> dict:
         run_id=run_id,
     )
     _assert_route_order(manual["checkout"], ("GSF", "CC", "CC"))
-    _assert_mixed_sale(manual["invoices"], company_a, company_b)
+    _assert_mixed_sale(manual["invoices"], company_a, company_b, seller_company=company_a)
 
     sales_order_item = _ensure_item(f"P7-SO-{run_id}")
     _receive_four_routes(
@@ -84,12 +86,14 @@ def run() -> dict:
     )
     sales_order = _sales_order_sale(
         item_code=sales_order_item,
-        company=company_a,
+        company=company_b,
         customer=customer,
         location=location,
     )
     _assert_route_order(sales_order["checkout"], ("GSF", "CC", "CC"))
-    _assert_mixed_sale(sales_order["invoices"], company_a, company_b)
+    _assert_mixed_sale(
+        sales_order["invoices"], company_a, company_b, seller_company=company_b
+    )
     _assert_sales_order_links(sales_order["source"], sales_order["invoices"])
 
     pos_item = _ensure_item(f"P7-POS-{run_id}")
@@ -108,7 +112,7 @@ def run() -> dict:
         mode=mode,
         run_id=run_id,
     )
-    _assert_mixed_sale(sale_invoices, company_a, company_b)
+    _assert_mixed_sale(sale_invoices, company_a, company_b, seller_company=company_a)
     partial_order, partial_returns = _pos_return(
         original=sale_order,
         qty=Decimal("3"),
@@ -600,9 +604,15 @@ def _assert_route_order(checkout_name: str, providers: tuple[str, ...]) -> None:
     assert tuple(row["provider_id"] for row in routes) == providers, routes
 
 
-def _assert_mixed_sale(invoices: list, company_a: str, company_b: str) -> None:
+def _assert_mixed_sale(
+    invoices: list,
+    company_a: str,
+    company_b: str,
+    *,
+    seller_company: str,
+) -> None:
     assert len(invoices) == 3, [row.name for row in invoices]
-    assert [row.company for row in invoices] == [company_a, company_a, company_b]
+    assert [row.company for row in invoices] == [seller_company, company_a, company_b]
     gsf = invoices[0]
     costs = [
         abs(Decimal(str(frappe.db.sql(

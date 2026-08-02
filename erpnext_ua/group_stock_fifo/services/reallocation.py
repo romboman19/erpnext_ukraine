@@ -122,11 +122,12 @@ def prepare(allocation_name: str, *, checkout: str, staging_lane: str | None = N
         allocation.save(ignore_permissions=True)
 
     legs = []
-    # §14.5: the seller's own stock moves first, then each foreign source, in a
-    # stable order. Gate 0f showed submission order is the tie-breaker at an
-    # identical timestamp, so ordering the submits is enough — ADR-004 says not
-    # to invent posting-time offsets.
-    for company, group in sorted(_by_source_company(moves).items()):
+    # Stage receipts must follow the exact global FIFO plan. ERPNext uses
+    # submission order as the valuation tie-breaker at one timestamp, so
+    # sorting legal entities (or always moving the seller first) swaps costs
+    # whenever the older layer belongs to a later-sorted company. Contiguous
+    # runs also preserve an A -> B -> A plan without inventing time offsets.
+    for company, group in _source_runs(moves):
         if company == allocation.seller_company:
             legs.append(
                 _transfer_own(
@@ -153,11 +154,14 @@ def prepare(allocation_name: str, *, checkout: str, staging_lane: str | None = N
     return reallocation
 
 
-def _by_source_company(moves: list[SliceMove]) -> dict[str, list[SliceMove]]:
-    """§14.4: one document per source company, with a row per layer inside it."""
-    grouped: dict[str, list[SliceMove]] = defaultdict(list)
+def _source_runs(moves: list[SliceMove]) -> list[tuple[str, list[SliceMove]]]:
+    """Keep planned FIFO order while using one legal document per contiguous run."""
+    grouped: list[tuple[str, list[SliceMove]]] = []
     for move in moves:
-        grouped[move.source_company].append(move)
+        if grouped and grouped[-1][0] == move.source_company:
+            grouped[-1][1].append(move)
+        else:
+            grouped.append((move.source_company, [move]))
     return grouped
 
 
