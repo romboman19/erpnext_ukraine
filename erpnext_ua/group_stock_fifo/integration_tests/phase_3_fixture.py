@@ -32,7 +32,15 @@ def assert_site():
 
 
 def companies():
-    return frappe.get_all("Company", pluck="name", order_by="name")[:3]
+    from erpnext_ua.group_stock_fifo.spikes.fixtures import FOPS
+
+    firms = [fop.company for fop in FOPS]
+    missing = [company for company in firms if not frappe.db.exists("Company", company)]
+    if missing:
+        raise RuntimeError(
+            "Phase 0 companies are required before Phase 3: " + ", ".join(missing)
+        )
+    return firms
 
 
 def pool_name(company):
