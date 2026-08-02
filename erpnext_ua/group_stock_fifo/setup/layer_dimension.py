@@ -41,6 +41,10 @@ ALLOCATION_FIELD = "gsf_allocation"
 SLICE_FIELD = "gsf_allocation_slice"
 DISPLAY_GROUP_FIELD = "gsf_display_group"
 RETURN_ORIGIN_LAYER_FIELD = "gsf_return_origin_layer"
+FULFILLMENT_LOCATION_FIELD = "ua_fulfillment_physical_location"
+FULFILLMENT_FIELD = "ua_sale_fulfillment"
+FULFILLMENT_SOURCE_FIELD = "ua_fulfillment_source"
+FULFILLMENT_ROUTE_FIELD = "ua_fulfillment_route"
 
 LAYER_BALANCE_INDEX = "gsf_layer_balance"
 LAYER_FIFO_INDEX = "gsf_layer_fifo"
@@ -54,13 +58,25 @@ REQUIRED_COLUMNS = {
     "Purchase Invoice Item": (LAYER_FIELD,),
     "Stock Entry": (MANAGED_FIELD,),
     "Stock Reconciliation": (MANAGED_FIELD,),
-    "Sales Invoice": (MANAGED_SALE_FIELD, MANAGED_RETURN_FIELD, CHECKOUT_FIELD),
+    "Sales Invoice": (
+        MANAGED_SALE_FIELD,
+        MANAGED_RETURN_FIELD,
+        CHECKOUT_FIELD,
+        FULFILLMENT_LOCATION_FIELD,
+        FULFILLMENT_FIELD,
+        FULFILLMENT_SOURCE_FIELD,
+        FULFILLMENT_ROUTE_FIELD,
+    ),
     "Sales Invoice Item": (
         LAYER_FIELD,
         ALLOCATION_FIELD,
         SLICE_FIELD,
         DISPLAY_GROUP_FIELD,
         RETURN_ORIGIN_LAYER_FIELD,
+    ),
+    "Sales Order": (
+        FULFILLMENT_LOCATION_FIELD,
+        FULFILLMENT_FIELD,
     ),
 }
 
@@ -126,6 +142,37 @@ def _ensure_managed_flag(frappe: Any) -> None:
                     "no_copy": 1,
                     "search_index": 1,
                 },
+                {
+                    "fieldname": FULFILLMENT_LOCATION_FIELD,
+                    "label": "Global FIFO Physical Location",
+                    "fieldtype": "Link",
+                    "options": "GSF Physical Location",
+                    "no_copy": 1,
+                },
+                {
+                    "fieldname": FULFILLMENT_FIELD,
+                    "label": "Sale Fulfillment",
+                    "fieldtype": "Link",
+                    "options": "GSF Checkout",
+                    "read_only": 1,
+                    "no_copy": 1,
+                    "search_index": 1,
+                },
+                {
+                    "fieldname": FULFILLMENT_SOURCE_FIELD,
+                    "label": "Fulfillment Source Draft",
+                    "fieldtype": "Check",
+                    "read_only": 1,
+                    "no_copy": 1,
+                },
+                {
+                    "fieldname": FULFILLMENT_ROUTE_FIELD,
+                    "label": "Sale Fulfillment Route",
+                    "fieldtype": "Data",
+                    "read_only": 1,
+                    "no_copy": 1,
+                    "search_index": 1,
+                },
             ],
             "Sales Invoice Item": [
                 {
@@ -158,6 +205,24 @@ def _ensure_managed_flag(frappe: Any) -> None:
                     "label": "GSF Return Origin Layer",
                     "fieldtype": "Link",
                     "options": "GSF Stock Layer",
+                    "read_only": 1,
+                    "no_copy": 1,
+                    "search_index": 1,
+                },
+            ],
+            "Sales Order": [
+                {
+                    "fieldname": FULFILLMENT_LOCATION_FIELD,
+                    "label": "Global FIFO Physical Location",
+                    "fieldtype": "Link",
+                    "options": "GSF Physical Location",
+                    "no_copy": 1,
+                },
+                {
+                    "fieldname": FULFILLMENT_FIELD,
+                    "label": "Sale Fulfillment",
+                    "fieldtype": "Link",
+                    "options": "GSF Checkout",
                     "read_only": 1,
                     "no_copy": 1,
                     "search_index": 1,

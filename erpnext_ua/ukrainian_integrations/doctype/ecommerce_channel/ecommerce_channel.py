@@ -27,6 +27,7 @@ class EcommerceChannel(Document):
         self.orders_overlap_minutes = _bounded_int(self.orders_overlap_minutes, 0, 1440, 15)
         self.initial_sync_days = _bounded_int(self.initial_sync_days, 1, 365, 7)
         self._validate_routes()
+        self._validate_fulfillment()
         self._validate_warehouses()
         self._validate_status_mappings()
         self._validate_api()
@@ -94,6 +95,28 @@ class EcommerceChannel(Document):
             )
         parsed = urlparse(self.api_base_url)
         self.api_base_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}"
+
+    def _validate_fulfillment(self):
+        if not self.fulfillment_physical_location:
+            return
+        location = frappe.db.get_value(
+            "GSF Physical Location",
+            self.fulfillment_physical_location,
+            ["company_group", "disabled"],
+            as_dict=True,
+        )
+        if not location or location.disabled:
+            frappe.throw(_("Global FIFO Physical Location must be active"))
+        if not frappe.db.exists(
+            "GSF Group Member",
+            {
+                "parent": location.company_group,
+                "company": self.company,
+                "enabled": 1,
+                "can_sell_stock": 1,
+            },
+        ):
+            frappe.throw(_("Channel Company must be an active seller in the Global FIFO group"))
 
 
 def _bounded_int(value, minimum: int, maximum: int, default: int) -> int:

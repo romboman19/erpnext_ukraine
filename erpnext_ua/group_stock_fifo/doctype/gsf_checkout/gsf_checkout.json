@@ -23,6 +23,7 @@
   "column_break_request",
   "external_order_doctype",
   "external_order_name",
+  "sales_channel",
   "section_lines",
   "lines",
   "section_states",
@@ -33,9 +34,12 @@
   "fiscal_state",
   "section_results",
   "sales_invoice",
+  "sales_invoices",
   "reallocations",
   "column_break_results",
   "prro_receipt_id",
+  "prro_receipts",
+  "route_manifest",
   "retry_count",
   "completed_at",
   "section_review",
@@ -125,6 +129,14 @@
    "options": "external_order_doctype",
    "search_index": 1
   },
+  {
+   "default": "API",
+   "fieldname": "sales_channel",
+   "fieldtype": "Select",
+   "label": "Sales Channel",
+   "options": "API\nPOS-UA\nMANUAL_INVOICE\nSALES_ORDER\nECOMMERCE",
+   "reqd": 1
+  },
   {"fieldname": "section_lines", "fieldtype": "Section Break", "label": "Lines"},
   {"fieldname": "lines", "fieldtype": "Table", "label": "Lines", "options": "GSF Checkout Line"},
   {"fieldname": "section_states", "fieldtype": "Section Break", "label": "Sub-states"},
@@ -170,6 +182,13 @@
    "search_index": 1
   },
   {
+   "description": "Ordered JSON list of every legal Sales Invoice created by this fulfillment.",
+   "fieldname": "sales_invoices",
+   "fieldtype": "Long Text",
+   "label": "Sales Invoices",
+   "read_only": 1
+  },
+  {
    "fieldname": "reallocations",
    "fieldtype": "Small Text",
    "label": "Reallocations",
@@ -178,6 +197,14 @@
   },
   {"fieldname": "column_break_results", "fieldtype": "Column Break"},
   {"fieldname": "prro_receipt_id", "fieldtype": "Data", "label": "PRRO Receipt ID", "read_only": 1},
+  {"fieldname": "prro_receipts", "fieldtype": "Long Text", "label": "PRRO Receipts", "read_only": 1},
+  {
+   "description": "Immutable provider, Company, legal-entity and fiscal routes selected by global FIFO.",
+   "fieldname": "route_manifest",
+   "fieldtype": "Long Text",
+   "label": "Route Manifest",
+   "read_only": 1
+  },
   {"fieldname": "retry_count", "fieldtype": "Int", "label": "Retry Count", "read_only": 1},
   {"fieldname": "completed_at", "fieldtype": "Datetime", "label": "Completed At", "read_only": 1},
   {"fieldname": "section_review", "fieldtype": "Section Break", "label": "Review"},

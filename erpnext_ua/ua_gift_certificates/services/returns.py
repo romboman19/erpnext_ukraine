@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import defaultdict
+
 import frappe
 
 from erpnext_ua.ua_gift_certificates.context import service_write
@@ -19,16 +21,24 @@ def restore_return_invoice(return_invoice, return_order):
     original_order = frappe.get_doc("POS Order", return_order.return_against)
     results = []
     original_pos_by_return_row = {row.name: row.return_against_item for row in return_order.items}
-    return_invoice_by_pos = {row.ua_pos_order_item: row for row in return_invoice.items}
+    return_invoice_by_pos = defaultdict(list)
+    for row in return_invoice.items:
+        if row.get("ua_pos_order_item"):
+            return_invoice_by_pos[row.ua_pos_order_item].append(row)
     for return_pos_row in return_order.items:
         original_pos_row = original_pos_by_return_row[return_pos_row.name]
         allocations = frappe.get_all(
             "UA Gift Certificate Redemption Allocation",
-            filters={"pos_order": original_order.name, "pos_order_item": original_pos_row},
+            filters={
+                "pos_order": original_order.name,
+                "pos_order_item": original_pos_row,
+                "sales_invoice": original_invoice.name,
+            },
             fields=["*"],
             order_by="allocation_sequence, creation",
         )
-        original_sold_qty = frappe.db.get_value("POS Order Item", original_pos_row, "qty")
+        invoice_rows = return_invoice_by_pos.get(return_pos_row.name, [])
+        route_return_qty = sum((abs(row.qty) for row in invoice_rows), 0)
         for allocation in allocations:
             already = money(
                 frappe.db.sql(
@@ -46,8 +56,8 @@ def restore_return_invoice(return_invoice, return_order):
             )[0][0]
             restore = restore_share(
                 allocation.certificate_amount,
-                return_pos_row.qty,
-                original_sold_qty,
+                route_return_qty,
+                allocation.qty,
                 already,
                 already_qty,
             )
@@ -106,7 +116,7 @@ def restore_return_invoice(return_invoice, return_order):
                 else None
             )
             settlement_reversal = _reverse_settlement(allocation, return_invoice.name, paid, promotional)
-            invoice_row = return_invoice_by_pos.get(return_pos_row.name)
+            invoice_row = invoice_rows[0] if invoice_rows else None
             with service_write():
                 result = frappe.get_doc(
                     {
@@ -116,7 +126,7 @@ def restore_return_invoice(return_invoice, return_order):
                         "return_sales_invoice": return_invoice.name,
                         "return_sales_invoice_item": invoice_row.name if invoice_row else return_pos_row.name,
                         "original_redemption_allocation": allocation.name,
-                        "qty_returned": return_pos_row.qty,
+                        "qty_returned": route_return_qty,
                         "certificate_amount_to_restore": restore,
                         "paid_amount_to_restore": paid,
                         "promotional_amount_to_restore": promotional,

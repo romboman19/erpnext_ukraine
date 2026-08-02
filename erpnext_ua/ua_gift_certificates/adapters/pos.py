@@ -136,18 +136,18 @@ def return_payment_rows(order) -> list[dict]:
 
 
 def _planned_return_components(return_order, original_order) -> list[dict]:
+    route_qty = _fulfillment_return_quantities(return_order, original_order)
     result = []
     for return_row in return_order.items:
         original_row = return_row.return_against_item
-        original_qty = frappe.db.get_value("POS Order Item", original_row, "qty") or 0
-        if not original_qty:
-            continue
         allocations = frappe.get_all(
             "UA Gift Certificate Redemption Allocation",
             filters={"pos_order": original_order.name, "pos_order_item": original_row},
             fields=[
                 "name",
                 "certificate",
+                "sales_invoice",
+                "qty",
                 "certificate_amount",
                 "paid_component_amount",
                 "promotional_component_amount",
@@ -156,6 +156,14 @@ def _planned_return_components(return_order, original_order) -> list[dict]:
             ],
         )
         for allocation in allocations:
+            return_qty = (
+                route_qty.get((allocation.sales_invoice, original_row), 0.0)
+                if route_qty
+                else frappe.utils.flt(return_row.qty)
+            )
+            original_qty = frappe.utils.flt(allocation.qty)
+            if not original_qty or not return_qty:
+                continue
             prior = frappe.db.sql(
                 """select coalesce(sum(certificate_amount_to_restore), 0) as amount,
                           coalesce(sum(paid_amount_to_restore), 0) as paid,
@@ -167,7 +175,7 @@ def _planned_return_components(return_order, original_order) -> list[dict]:
             )[0]
             restored = restore_share(
                 allocation.certificate_amount,
-                return_row.qty,
+                return_qty,
                 original_qty,
                 prior.amount,
                 prior.qty,
@@ -186,6 +194,8 @@ def _planned_return_components(return_order, original_order) -> list[dict]:
                 {
                     "allocation": allocation.name,
                     "certificate": allocation.certificate,
+                    "sales_invoice": allocation.sales_invoice,
+                    "return_row": return_row.name,
                     "amount": str(restored),
                     "paid": str(paid),
                     "promotional": str(money(restored - paid)),
@@ -193,6 +203,24 @@ def _planned_return_components(return_order, original_order) -> list[dict]:
                     "redeemer_fop_profile": allocation.redeemer_fop_profile,
                 }
             )
+    return result
+
+
+def _fulfillment_return_quantities(return_order, original_order) -> dict[tuple[str, str], float]:
+    if not original_order.get("gsf_checkout"):
+        return {}
+    from erpnext_ua.group_stock_fifo.services.pos_ua import _plan_fulfillment_return
+
+    planned = _plan_fulfillment_return(original_order, return_order)
+    result = {}
+    for invoice_name, lines in planned.items():
+        source_rows = {
+            row.name: row.get("ua_pos_order_item")
+            for row in frappe.get_doc("Sales Invoice", invoice_name).items
+        }
+        for line in lines:
+            key = (invoice_name, source_rows[line.sales_invoice_item])
+            result[key] = result.get(key, 0.0) + float(line.qty)
     return result
 
 

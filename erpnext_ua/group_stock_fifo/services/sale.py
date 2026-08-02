@@ -167,6 +167,12 @@ def _submit_invoice(
     """§18.2: one row per slice, all out of the stage lane, all tagged."""
     company = allocations[0].seller_company
     rows = []
+    source_order = frappe.db.get_value(
+        "GSF Checkout",
+        checkout,
+        ["external_order_doctype", "external_order_name"],
+        as_dict=True,
+    )
     for allocation, line in zip(allocations, lines):
         discount_percentage = _discount_percentage(allocation, line)
         net_rate = line.rate * (Decimal("100") - discount_percentage) / Decimal("100")
@@ -191,6 +197,16 @@ def _submit_invoice(
                 # split into (§18.2, §18.4).
                 DISPLAY_GROUP_FIELD: allocation.name,
                 "ua_pos_order_item": allocation.external_row_id,
+                "sales_order": (
+                    source_order.external_order_name
+                    if source_order and source_order.external_order_doctype == "Sales Order"
+                    else None
+                ),
+                "so_detail": (
+                    allocation.external_row_id
+                    if source_order and source_order.external_order_doctype == "Sales Order"
+                    else None
+                ),
             }
             for slice_row in allocation.slices
         )
@@ -244,9 +260,12 @@ def _allowed_invoice_values(values: dict[str, Any]) -> dict[str, Any]:
         "ua_pos_order",
         "ua_pos_desk",
         "ua_pos_shift",
+        "ua_fop_profile",
         "payments",
         "change_amount",
         "remarks",
+        "ua_sale_fulfillment",
+        "ua_fulfillment_route",
     }
     return {key: value for key, value in values.items() if key in allowed}
 

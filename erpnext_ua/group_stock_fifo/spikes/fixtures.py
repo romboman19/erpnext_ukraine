@@ -19,7 +19,9 @@ from typing import Any
 
 CONFIRMATION = "BUILD_GSF_PHASE_0"
 TEARDOWN_CONFIRMATION = "DROP_GSF_PHASE_0"
-ALLOWED_SITES = frozenset({"postest.local", "postest-restore.local"})
+ALLOWED_SITES = frozenset(
+    {"postest.local", "postest-restore.local", "fifoaccept.local", "integration.local"}
+)
 
 LOCATION = "HUNTER.rv м.Рівне"
 POOL_WAREHOUSE = "HUNTER.rv Пул"
@@ -108,6 +110,7 @@ class _Builder:
         self.reused: list[str] = []
 
     def run(self) -> dict[str, Any]:
+        self._ensure_clean_site_masters()
         new_companies = []
         for fop in FOPS:
             if self._ensure_company(fop):
@@ -115,6 +118,7 @@ class _Builder:
             self._ensure_fop_profile(fop)
             self._ensure_warehouse(fop, POOL_WAREHOUSE, fop.pool_warehouse)
             self._ensure_warehouse(fop, STAGE_WAREHOUSE, fop.stage_warehouse)
+        self._ensure_fiscal_year()
         self._ensure_item()
         self._remember_created_companies(new_companies)
         return {
@@ -124,6 +128,69 @@ class _Builder:
             "reused": self.reused,
             "companies_created_by_fixture": _created_companies(self.frappe),
         }
+
+    def _ensure_clean_site_masters(self) -> None:
+        from erpnext_ua.tests.integrations.frappe_fixtures import ensure_leaf_master
+
+        if not self.frappe.db.exists("Warehouse Type", "Transit"):
+            self.frappe.get_doc(
+                {"doctype": "Warehouse Type", "name": "Transit"}
+            ).insert(ignore_permissions=True)
+        if not self.frappe.db.exists("UOM", "Nos"):
+            self.frappe.get_doc(
+                {"doctype": "UOM", "uom_name": "Nos", "enabled": 1}
+            ).insert(ignore_permissions=True)
+        if not self.frappe.db.exists("Gender", "Male"):
+            self.frappe.get_doc(
+                {"doctype": "Gender", "gender": "Male"}
+            ).insert(ignore_permissions=True)
+        for purpose in ("Material Receipt", "Material Issue", "Material Transfer"):
+            if self.frappe.db.exists("Stock Entry Type", {"purpose": purpose}):
+                continue
+            self.frappe.get_doc(
+                {
+                    "doctype": "Stock Entry Type",
+                    "__newname": purpose,
+                    "purpose": purpose,
+                    "is_standard": 1,
+                }
+            ).insert(ignore_permissions=True)
+        selling_price_list = "_UA Integration Selling"
+        if not self.frappe.db.exists("Price List", selling_price_list):
+            self.frappe.get_doc(
+                {
+                    "doctype": "Price List",
+                    "price_list_name": selling_price_list,
+                    "currency": "UAH",
+                    "selling": 1,
+                    "enabled": 1,
+                }
+            ).insert(ignore_permissions=True)
+        self.frappe.db.set_single_value(
+            "Selling Settings", "selling_price_list", selling_price_list
+        )
+        for doctype, name, name_field, parent_field in (
+            ("Item Group", "_UA Integration Products", "item_group_name", "parent_item_group"),
+            (
+                "Customer Group",
+                "_UA Integration Customers",
+                "customer_group_name",
+                "parent_customer_group",
+            ),
+            ("Territory", "_UA Integration Territory", "territory_name", "parent_territory"),
+            (
+                "Supplier Group",
+                "_UA Integration Suppliers",
+                "supplier_group_name",
+                "parent_supplier_group",
+            ),
+        ):
+            ensure_leaf_master(
+                doctype=doctype,
+                name=name,
+                name_field=name_field,
+                parent_field=parent_field,
+            )
 
     def _ensure_company(self, fop: FopFixture) -> bool:
         if self.frappe.db.exists("Company", fop.company):
@@ -150,6 +217,26 @@ class _Builder:
         ).insert(ignore_permissions=True)
         self.created.append(f"Company {fop.company}")
         return True
+
+    def _ensure_fiscal_year(self) -> None:
+        year = str(self.frappe.utils.getdate().year)
+        if not self.frappe.db.exists("Fiscal Year", year):
+            self.frappe.get_doc(
+                {
+                    "doctype": "Fiscal Year",
+                    "year": year,
+                    "year_start_date": f"{year}-01-01",
+                    "year_end_date": f"{year}-12-31",
+                    "companies": [{"company": fop.company} for fop in FOPS],
+                }
+            ).insert(ignore_permissions=True)
+            return
+        fiscal_year = self.frappe.get_doc("Fiscal Year", year)
+        linked = {row.company for row in fiscal_year.companies}
+        for fop in FOPS:
+            if fop.company not in linked:
+                fiscal_year.append("companies", {"company": fop.company})
+        fiscal_year.save(ignore_permissions=True)
 
     def _ensure_fop_profile(self, fop: FopFixture) -> None:
         # FOP Profile is named after its company, so the link is the key.

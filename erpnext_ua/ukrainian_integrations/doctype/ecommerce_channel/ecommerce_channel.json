@@ -6,7 +6,7 @@
  "title_field": "channel_name",
  "search_fields": "channel_name,provider,store_url",
  "field_order": [
-  "channel_name", "provider", "enabled", "configuration_section", "company", "customer_group", "territory", "currency", "selling_price_list", "export_only_mapped_items",
+  "channel_name", "provider", "enabled", "configuration_section", "company", "fulfillment_physical_location", "customer_group", "territory", "currency", "selling_price_list", "export_only_mapped_items",
   "routes_section", "catalog_transport", "stock_transport", "orders_transport", "customers_transport", "order_status_transport",
   "api_section", "api_base_url", "api_login", "api_password", "api_batch_size", "orders_page_size", "orders_max_pages", "orders_overlap_minutes", "initial_sync_days",
   "xml_section", "store_url", "catalog_xml_profile", "order_xml_profile",
@@ -19,6 +19,7 @@
   {"fieldname": "enabled", "fieldtype": "Check", "label": "Enabled", "default": "0", "in_list_view": 1},
   {"fieldname": "configuration_section", "fieldtype": "Section Break", "label": "ERPNext Configuration"},
   {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "reqd": 1},
+  {"fieldname": "fulfillment_physical_location", "fieldtype": "Link", "label": "Global FIFO Physical Location", "options": "GSF Physical Location", "description": "When set, ecommerce Sales Invoices use the shared global FIFO and split automatically by seller Company/legal route."},
   {"fieldname": "customer_group", "fieldtype": "Link", "label": "Customer Group", "options": "Customer Group", "reqd": 1},
   {"fieldname": "territory", "fieldtype": "Link", "label": "Territory", "options": "Territory", "reqd": 1},
   {"fieldname": "currency", "fieldtype": "Link", "label": "Currency", "options": "Currency", "default": "UAH", "reqd": 1},

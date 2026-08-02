@@ -18,6 +18,8 @@
   "own_warehouse",
   "commission_warehouse",
   "consignment_warehouse",
+  "sales_route_section",
+  "pos_cash_desk",
   "gsf_provider_section",
   "gsf_physical_location",
   "read_stock_enabled",
@@ -100,6 +102,18 @@
    "label": "CONSIGNMENT Warehouse",
    "options": "Warehouse",
    "reqd": 1
+  },
+  {
+   "fieldname": "sales_route_section",
+   "fieldtype": "Section Break",
+   "label": "Sales Route"
+  },
+  {
+   "description": "Required when this legal route must issue a POS-UA fiscal receipt or cash movement.",
+   "fieldname": "pos_cash_desk",
+   "fieldtype": "Link",
+   "label": "POS Cash Desk",
+   "options": "POS Cash Desk"
   },
   {
    "fieldname": "gsf_provider_section",

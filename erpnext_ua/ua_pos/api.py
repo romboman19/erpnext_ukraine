@@ -1590,11 +1590,60 @@ def _post_sales_invoice(order, desk):
 	return si
 
 
-def _cash_movements(order, session):
+def _cash_movements(order, session, routes=None):
+	if routes is None:
+		return _legacy_cash_movements(order, session)
+	sources = _confirmed_payment_sources(order)
+	for route in routes:
+		for index, payment in enumerate(route.invoice.payments, 1):
+			amount = abs(frappe.utils.flt(payment.amount))
+			if not amount:
+				continue
+			source = sources.get(payment.mode_of_payment)
+			if not source:
+				frappe.throw(
+					_("Для способу оплати {0} немає підтвердженого платежу POS").format(
+						payment.mode_of_payment
+					)
+				)
+			if source.kind == "Gift Certificate":
+				continue
+			movement_idem = f"invoice-payment:{route.invoice.name}:{index}"
+			if frappe.db.exists("POS Cash Movement", {"idem_key": movement_idem}):
+				continue
+			is_cash = source.kind == "Cash"
+			is_return = order.order_type == "Return"
+			frappe.get_doc(
+				{
+					"doctype": "POS Cash Movement",
+					"cash_desk": route.cash_desk,
+					"operational_shift": route.operational_shift,
+					"employee": session["employee"],
+					"direction": "Out" if is_return else "In",
+					"movement_type": (
+						"Refund Cash"
+						if is_return and is_cash
+						else ("Sale Cash" if is_cash else "Deposit")
+					),
+					"amount": amount,
+					"currency": source.currency,
+					"mode_of_payment": payment.mode_of_payment,
+					"is_cash_drawer": 1 if is_cash else 0,
+					"fop_profile": (
+						route.route.legal_entity_name
+						if route.route.legal_entity_type == "FOP Profile"
+						else None
+					),
+					"basis_doctype": "Sales Invoice",
+					"basis_name": route.invoice.name,
+					"idem_key": movement_idem,
+				}
+			).insert(ignore_permissions=True).submit()
+
+
+def _legacy_cash_movements(order, session):
 	for payment in order.payments_plan:
-		if payment.status != "Confirmed":
-			continue
-		if payment.kind == "Gift Certificate":
+		if payment.status != "Confirmed" or payment.kind == "Gift Certificate":
 			continue
 		movement_idem = f"order-payment:{order.name}:{payment.name}"
 		if frappe.db.exists("POS Cash Movement", {"idem_key": movement_idem}):
@@ -1608,7 +1657,9 @@ def _cash_movements(order, session):
 				"operational_shift": order.operational_shift,
 				"employee": session["employee"],
 				"direction": "Out" if is_return else "In",
-				"movement_type": "Refund Cash" if (is_return and is_cash) else ("Sale Cash" if is_cash else "Deposit"),
+				"movement_type": (
+					"Refund Cash" if is_return and is_cash else ("Sale Cash" if is_cash else "Deposit")
+				),
 				"amount": payment.amount,
 				"currency": payment.currency,
 				"mode_of_payment": payment.mode_of_payment,
@@ -1620,9 +1671,19 @@ def _cash_movements(order, session):
 		).insert(ignore_permissions=True).submit()
 
 
+def _confirmed_payment_sources(order):
+	return {
+		payment.mode_of_payment: payment
+		for payment in order.payments_plan
+		if payment.status == "Confirmed"
+	}
+
+
 def _fiscalize(order, desk, si):
-	if order.fiscal_mode != "Fiscal" or not desk.prro_cash_register:
+	if order.fiscal_mode != "Fiscal":
 		return None
+	if not desk.prro_cash_register:
+		frappe.throw(_("Для каси {0} не налаштовано ПРРО").format(desk.name))
 	from erpnext_ua.ua_fiscal import orchestration
 	from erpnext_ua.ua_fiscal.sales_invoice import _invoice_lines, _invoice_taxes
 
@@ -1633,12 +1694,21 @@ def _fiscalize(order, desk, si):
 	# Фіскальні суми беремо з проведеного Sales Invoice: там уже враховані
 	# документні знижки й розподіл податків. Штрихкод лишається з POS Order.
 	items = _invoice_lines(si)
-	for item, order_row in zip(items, order.items, strict=False):
-		item["barcode"] = order_row.barcode or item.get("barcode")
+	order_rows = {row.name: row for row in order.items}
+	return_rows = {row.return_against_item: row for row in order.items if row.return_against_item}
+	for item, invoice_row in zip(items, si.items, strict=False):
+		order_row = order_rows.get(invoice_row.get("ua_pos_order_item")) or return_rows.get(
+			invoice_row.get("ua_pos_order_item")
+		)
+		if order_row:
+			item["barcode"] = order_row.barcode or item.get("barcode")
 	payments = []
-	for payment in order.payments_plan:
-		if payment.status != "Confirmed":
-			continue
+	sources = _confirmed_payment_sources(order)
+	for invoice_payment in si.payments:
+		payment = sources.get(invoice_payment.mode_of_payment)
+		if not payment:
+			frappe.throw(_("Не знайдено POS-платіж {0}").format(invoice_payment.mode_of_payment))
+		amount = abs(frappe.utils.flt(invoice_payment.amount))
 		configured_code = payment.get("prro_payment_code")
 		if configured_code in (None, ""):
 			configured_code = frappe.db.get_value("Mode of Payment", payment.mode_of_payment, "ua_payformcd")
@@ -1651,11 +1721,11 @@ def _fiscalize(order, desk, si):
 				payment.get("prro_payment_means") or payment.mode_of_payment,
 			),
 			"form": payment.get("prro_payment_form") or ("ГОТІВКА" if code == 0 else "БЕЗГОТІВКОВА"),
-			"sum": payment.amount,
+			"sum": amount,
 		}
 		if payment.kind == "Cash":
-			row["provided"] = payment.tendered_amount or payment.amount
-			row["remains"] = payment.change_amount or 0
+			row["provided"] = amount
+			row["remains"] = 0
 		if payment.kind == "Card" and payment.payment_attempt:
 			attempt = frappe.get_doc("POS Payment Attempt", payment.payment_attempt)
 			if attempt.terminal_transaction:
@@ -1674,11 +1744,11 @@ def _fiscalize(order, desk, si):
 						"device_id": terminal.device_id,
 						"epz_details": txn.card_mask,
 						"auth_code": txn.auth_code,
-						"sum": payment.amount,
+						"sum": amount,
 					}
 				]
 		payments.append(row)
-	total = abs(frappe.utils.flt(order.grand_total))
+	total = abs(frappe.utils.flt(si.rounded_total or si.grand_total))
 	no_rounding_total = abs(frappe.utils.flt(si.grand_total))
 	has_rounding = abs(total - no_rounding_total) > 0.001
 	receipt = orchestration.fiscalize_sale(
@@ -1693,7 +1763,12 @@ def _fiscalize(order, desk, si):
 		sales_invoice=si.name,
 		receipt_type="Повернення" if order.order_type == "Return" else "Продаж",
 		related_receipt=(
-			frappe.db.get_value("POS Order", order.return_against, "prro_receipt")
+			frappe.db.get_value(
+				"PRRO Receipt",
+				{"sales_invoice": si.return_against, "status": ("in", ("Fiscalized", "Offline"))},
+				"name",
+				order_by="local_number desc",
+			)
 			if order.order_type == "Return"
 			else None
 		),
@@ -1704,6 +1779,57 @@ def _fiscalize(order, desk, si):
 
 	attach_receipt_snapshot(receipt, order, payments)
 	return receipt
+
+
+def _posted_fulfillment_routes(order, desk):
+	from erpnext_ua.group_stock_fifo.services.fulfillment_pos_routes import posted_pos_routes
+
+	return posted_pos_routes(order, desk)
+
+
+def _fiscalize_routes(order, routes):
+	receipts = []
+	for route in routes:
+		if order.fiscal_mode != "Fiscal" or route.route.fiscal_route != "FISCAL":
+			continue
+		route_desk = frappe.get_doc("POS Cash Desk", route.cash_desk)
+		receipt = _fiscalize(order, route_desk, route.invoice)
+		if receipt:
+			receipts.append(receipt)
+	return receipts
+
+
+def _route_receipt_state(order, routes):
+	receipts = []
+	complete = True
+	for route in routes:
+		if order.fiscal_mode != "Fiscal" or route.route.fiscal_route != "FISCAL":
+			continue
+		row = frappe.db.get_value(
+			"PRRO Receipt",
+			{"pos_order": order.name, "sales_invoice": route.invoice.name},
+			["name", "status"],
+			as_dict=True,
+			order_by="local_number desc",
+		)
+		if row:
+			receipts.append(row.name)
+		if not row or row.status not in {"Fiscalized", "Offline"}:
+			complete = False
+	return receipts, complete
+
+
+def _apply_route_receipt_state(order, routes, *, error: Exception | None = None):
+	receipts, complete = _route_receipt_state(order, routes)
+	order.prro_receipt = receipts[0] if receipts else None
+	order.prro_receipts_json = frappe.as_json(receipts)
+	order.status = "Completed" if complete else "Fiscal Pending"
+	order.recovery_note = (
+		None
+		if complete
+		else str(error or "Один або кілька фіскальних чеків очікують завершення")[:500]
+	)
+	return complete
 
 
 def _reconcile_existing_receipt(receipt_name: str | None, *, include_error: bool = False) -> dict | None:
@@ -1950,30 +2076,26 @@ def _complete_paid_order(doc, desk, session) -> dict:
 			doc.sales_invoice = si.name
 			doc.status = "Posted"
 			doc.save(ignore_permissions=True)
-		_cash_movements(doc, session)
+		routes = _posted_fulfillment_routes(doc, desk)
+		_cash_movements(doc, session, routes)
 		try:
-			receipt = _fiscalize(doc, desk, si)
+			_fiscalize_routes(doc, routes)
 		except Exception as exc:
 			# The document can already be accepted by DPS even when verification
 			# of the signed ticket fails locally. Resolve by local number before
 			# returning Fiscal Pending; never submit a second sale blindly.
-			receipt = doc.prro_receipt or frappe.db.get_value(
-				"PRRO Receipt", {"pos_order": doc.name}, "name", order_by="local_number desc"
-			)
-			recovered = None
-			try:
-				recovered = _reconcile_existing_receipt(receipt)
-			except Exception:
-				frappe.log_error(frappe.get_traceback(), f"POS immediate fiscal recovery {doc.name}")
-			doc.prro_receipt = receipt
-			doc.status = "Completed" if recovered and recovered.get("status") == "Fiscalized" else "Fiscal Pending"
-			doc.recovery_note = None if doc.status == "Completed" else str(exc)[:500]
+			for receipt in frappe.get_all(
+				"PRRO Receipt",
+				filters={"pos_order": doc.name},
+				pluck="name",
+			):
+				try:
+					_reconcile_existing_receipt(receipt)
+				except Exception:
+					frappe.log_error(frappe.get_traceback(), f"POS immediate fiscal recovery {doc.name}")
+			_apply_route_receipt_state(doc, routes, error=exc)
 		else:
-			doc.prro_receipt = receipt
-			receipt_status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
-			doc.status = "Completed" if not receipt or receipt_status in {"Fiscalized", "Offline"} else "Fiscal Pending"
-			if doc.status == "Fiscal Pending":
-				doc.recovery_note = f"Фіскальний документ {receipt} має статус {receipt_status}"
+			_apply_route_receipt_state(doc, routes)
 		doc.save(ignore_permissions=True)
 		_sync_gsf_fiscal_state(doc)
 		if doc.status == "Completed":
@@ -2049,9 +2171,15 @@ def _sync_gsf_fiscal_state(doc) -> None:
 		return
 	from erpnext_ua.group_stock_fifo.services.pos_ua import record_fiscal_result
 
-	status = frappe.db.get_value("PRRO Receipt", doc.prro_receipt, "status") if doc.prro_receipt else None
-	state = "DONE" if status in {"Fiscalized", "Offline"} else "UNCERTAIN"
-	record_fiscal_result(doc, state=state, receipt=doc.prro_receipt)
+	desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
+	routes = _posted_fulfillment_routes(doc, desk)
+	receipts, complete = _route_receipt_state(doc, routes)
+	record_fiscal_result(
+		doc,
+		state="DONE" if complete else "UNCERTAIN",
+		receipt=receipts[0] if receipts else None,
+		receipts=receipts,
+	)
 
 
 def _queue_print_if_configured(doc):
@@ -2093,19 +2221,19 @@ def retry_fiscalization(pos_session_token: str, order: str) -> dict:
 		frappe.throw(_("Цей чек не очікує відновлення фіскалізації"))
 	if not doc.sales_invoice:
 		frappe.throw(_("Sales Invoice ще не створено"))
-	failed_receipt = doc.prro_receipt or frappe.db.get_value(
-		"PRRO Receipt", {"pos_order": doc.name}, "name", order_by="local_number desc"
-	)
-	# Reconcile first for both ambiguous delivery and a definite error.
-	# A retry after Error is allowed only when registrar state proves that the
-	# last local number was not consumed; orchestration enforces that invariant.
-	_reconcile_existing_receipt(failed_receipt, include_error=True)
 	desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
-	receipt = _fiscalize(doc, desk, frappe.get_doc("Sales Invoice", doc.sales_invoice))
-	status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
-	doc.prro_receipt = receipt
-	doc.status = "Completed" if not receipt or status in {"Fiscalized", "Offline"} else "Fiscal Pending"
-	doc.recovery_note = None if doc.status == "Completed" else f"Фіскальний документ {receipt}: {status}"
+	routes = _posted_fulfillment_routes(doc, desk)
+	for receipt in frappe.get_all(
+		"PRRO Receipt",
+		filters={"pos_order": doc.name},
+		pluck="name",
+	):
+		# Reconcile first for both ambiguous delivery and a definite error.
+		# A retry after Error is allowed only when registrar state proves that the
+		# last local number was not consumed; orchestration enforces that invariant.
+		_reconcile_existing_receipt(receipt, include_error=True)
+	_fiscalize_routes(doc, routes)
+	_apply_route_receipt_state(doc, routes)
 	doc.save(ignore_permissions=True)
 	_sync_gsf_fiscal_state(doc)
 	if doc.status == "Completed":
@@ -2121,16 +2249,15 @@ def recover_pos_fiscal_pending():
 			if not doc.sales_invoice:
 				continue
 			desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
-			failed_receipt = doc.prro_receipt or frappe.db.get_value(
-				"PRRO Receipt", {"pos_order": doc.name}, "name", order_by="local_number desc"
-			)
-			_reconcile_existing_receipt(failed_receipt)
-			receipt = _fiscalize(doc, desk, frappe.get_doc("Sales Invoice", doc.sales_invoice))
-			status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
-			if not receipt or status in {"Fiscalized", "Offline"}:
-				doc.db_set("prro_receipt", receipt, update_modified=False)
-				doc.status = "Completed"
-				doc.recovery_note = None
+			routes = _posted_fulfillment_routes(doc, desk)
+			for receipt in frappe.get_all(
+				"PRRO Receipt",
+				filters={"pos_order": doc.name},
+				pluck="name",
+			):
+				_reconcile_existing_receipt(receipt)
+			_fiscalize_routes(doc, routes)
+			if _apply_route_receipt_state(doc, routes):
 				doc.save(ignore_permissions=True)
 				_sync_gsf_fiscal_state(doc)
 				_queue_print_if_configured(doc)

@@ -1,8 +1,19 @@
+import json
+from collections import OrderedDict
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
 
+from erpnext_ua.group_stock_fifo.services.checkout import _service_write
+from erpnext_ua.group_stock_fifo.services.fulfillment_domain import (
+    FulfillmentRouteKey,
+    ProviderAllocationRef,
+)
+from erpnext_ua.group_stock_fifo.services.fulfillment_payments import split_pos_payments
+from erpnext_ua.group_stock_fifo.services.fulfillment_reservation import serialize_refs
 from erpnext_ua.ua_gift_certificates.adapters.accounting import invoice_payments
 from erpnext_ua.ua_gift_certificates.adapters.pos import (
     checkout_payment_rows,
@@ -11,6 +22,11 @@ from erpnext_ua.ua_gift_certificates.adapters.pos import (
 )
 from erpnext_ua.ua_gift_certificates.adapters.sales_invoice import prepare_invoice
 from erpnext_ua.ua_gift_certificates.services.batch import generate_batch
+from erpnext_ua.ua_gift_certificates.services.fulfillment import (
+    reservation_plan,
+    return_route_payment_components,
+    sale_route_payment_components,
+)
 from erpnext_ua.ua_gift_certificates.services.issuance import activate_certificate, issue_certificate
 from erpnext_ua.ua_gift_certificates.services.printing import claim_sale_print_payload
 from erpnext_ua.ua_gift_certificates.services.reconciliation import reconcile_certificate
@@ -192,6 +208,246 @@ class TestGiftCertificateServices(IntegrationTestCase):
             [{"mode_of_payment": self.cash_mode.name, "amount": Decimal("25")}],
         )
 
+    def test_fulfillment_reservation_splits_paid_and_promotional_funding_by_route(self):
+        reservation = SimpleNamespace(
+            policy_snapshot_json='{"allocations":[{"row":"POS-ROW-1","amount":"30.00"}]}',
+            requested_amount="30.00",
+            paid_component_reserved="24.00",
+        )
+        with patch(
+            "erpnext_ua.ua_gift_certificates.services.fulfillment.route_quantities",
+            return_value=OrderedDict(
+                (("ROUTE-A", Decimal("1")), ("ROUTE-B", Decimal("2")))
+            ),
+        ):
+            plan = reservation_plan(SimpleNamespace(), reservation)
+
+        self.assertEqual(
+            [
+                (row.route_id, row.qty, row.amount, row.paid, row.promotional)
+                for row in plan
+            ],
+            [
+                (
+                    "ROUTE-A",
+                    Decimal("1"),
+                    Decimal("10.00"),
+                    Decimal("8.00"),
+                    Decimal("2.00"),
+                ),
+                (
+                    "ROUTE-B",
+                    Decimal("2"),
+                    Decimal("20.00"),
+                    Decimal("16.00"),
+                    Decimal("4.00"),
+                ),
+            ],
+        )
+
+    def test_fulfillment_payments_keep_gift_components_on_their_legal_routes(self):
+        order = SimpleNamespace(
+            payments_plan=[
+                SimpleNamespace(
+                    status="Confirmed",
+                    kind="Cash",
+                    mode_of_payment=self.cash_mode.name,
+                    amount="60.00",
+                )
+            ]
+        )
+        result = split_pos_payments(
+            order,
+            OrderedDict(
+                (("ROUTE-A", Decimal("40.00")), ("ROUTE-B", Decimal("50.00")))
+            ),
+            fixed_route_payments={
+                "ROUTE-A": [{"mode_of_payment": "Gift A", "amount": Decimal("10.00")}],
+                "ROUTE-B": [{"mode_of_payment": "Gift B", "amount": Decimal("20.00")}],
+            },
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "ROUTE-A": [
+                    {"mode_of_payment": "Gift A", "amount": 10.0},
+                    {"mode_of_payment": self.cash_mode.name, "amount": 30.0},
+                ],
+                "ROUTE-B": [
+                    {"mode_of_payment": "Gift B", "amount": 20.0},
+                    {"mode_of_payment": self.cash_mode.name, "amount": 30.0},
+                ],
+            },
+        )
+
+    def test_fulfillment_posts_and_restores_the_exact_invoice_certificate_slice(self):
+        company_group = frappe.db.get_value("GSF Company Group", {}, "name")
+        location = frappe.db.get_value(
+            "GSF Physical Location", {"company_group": company_group}, "name"
+        )
+        if not company_group or not location:
+            self.skipTest("GSF acceptance fixture is unavailable")
+
+        certificate = self._active_full_value_certificate()
+        token = certificate.get_password("token_ciphertext")
+        order = self._sale_order(qty=2, rate=100)
+        quote = quote_redemption(order, token, "100")
+        reservation = reserve_redemption(
+            order.name,
+            quote["quote_id"],
+            idempotency_key=f"test:fulfillment:reserve:{self.suffix}",
+        )
+        order.reload()
+        for payment in checkout_payment_rows(order):
+            order.append("payments_plan", {**payment, "status": "Confirmed"})
+        order.append("payments_plan", self._cash_payment("100"))
+        order.save(ignore_permissions=True)
+
+        routes = (
+            FulfillmentRouteKey(
+                provider_id="GSF",
+                seller_company=self.company,
+                provider_location=location,
+                legal_entity_type="Company",
+                legal_entity_name=self.company,
+                fiscal_route="NON_FISCAL",
+            ),
+            FulfillmentRouteKey(
+                provider_id="CC",
+                seller_company=self.company,
+                provider_location=f"{location}:certificate-route",
+                legal_entity_type="Company",
+                legal_entity_name=self.company,
+                fiscal_route="NON_FISCAL",
+            ),
+        )
+        order_row = order.items[0]
+        refs = [
+            ProviderAllocationRef(
+                route=route,
+                allocation_doctype="GSF Allocation" if route.provider_id == "GSF" else "CC Allocation",
+                allocation_name=f"TEST-{route.provider_id}-{self.suffix}",
+                item_code=order_row.item_code,
+                qty=Decimal("1"),
+                external_row_id=order_row.name,
+                rate=Decimal("100"),
+            )
+            for route in routes
+        ]
+        with _service_write():
+            checkout = frappe.get_doc(
+                {
+                    "doctype": "GSF Checkout",
+                    "status": "ERP_SALE_SUBMITTED",
+                    "company_group": company_group,
+                    "physical_location": location,
+                    "seller_company": self.company,
+                    "customer": self.customer.name,
+                    "idempotency_key": f"test:gift:fulfillment:{self.suffix}",
+                    "sales_channel": "POS-UA",
+                    "external_order_doctype": "POS Order",
+                    "external_order_name": order.name,
+                    "currency": "UAH",
+                    "conversion_rate": 1,
+                    "lines": [
+                        {
+                            "item_code": order_row.item_code,
+                            "qty": 2,
+                            "rate": 100,
+                            "uom": order_row.uom,
+                            "external_row_id": order_row.name,
+                            "route_allocations": serialize_refs(refs),
+                        }
+                    ],
+                }
+            ).insert(ignore_permissions=True)
+
+        payments = split_pos_payments(
+            order,
+            OrderedDict((route.stable_id, Decimal("100")) for route in routes),
+            fixed_route_payments=sale_route_payment_components(order, checkout),
+        )
+        invoices = [
+            self._submit_fulfillment_invoice(
+                order,
+                checkout,
+                route,
+                payments[route.stable_id],
+            )
+            for route in routes
+        ]
+
+        certificate.reload()
+        reservation.reload()
+        self.assertEqual(Decimal(str(certificate.current_balance)), Decimal("0.00"))
+        self.assertEqual(reservation.status, "Consumed")
+        allocations = frappe.get_all(
+            "UA Gift Certificate Redemption Allocation",
+            filters={"reservation": reservation.name},
+            fields=["name", "sales_invoice", "qty", "certificate_amount"],
+            order_by="creation",
+        )
+        self.assertEqual(len(allocations), 2)
+        self.assertEqual(
+            [(row.sales_invoice, Decimal(str(row.qty)), Decimal(str(row.certificate_amount))) for row in allocations],
+            [(invoice.name, Decimal("1"), Decimal("50.00")) for invoice in invoices],
+        )
+
+        order.db_set(
+            {
+                "gsf_checkout": checkout.name,
+                "sales_invoice": invoices[0].name,
+                "sales_invoices_json": json.dumps([invoice.name for invoice in invoices]),
+            },
+            update_modified=False,
+        )
+        order.reload()
+        return_order = self._return_order(order, 0)
+        snapshot = json.loads(return_order.gift_certificate_snapshot_json)
+        self.assertEqual(len(snapshot["components"]), 1)
+        component = snapshot["components"][0]
+        selected_invoice = next(
+            invoice for invoice in invoices if invoice.name == component["sales_invoice"]
+        )
+        selected_route = next(
+            route for route in routes if route.stable_id == selected_invoice.ua_fulfillment_route
+        )
+        return_payments = split_pos_payments(
+            return_order,
+            OrderedDict(((selected_route.stable_id, Decimal("100")),)),
+            is_return=True,
+            fixed_route_payments=return_route_payment_components(
+                return_order,
+                {selected_invoice.name: selected_route.stable_id},
+            ),
+        )
+        return_invoice = self._submit_fulfillment_return_invoice(
+            selected_invoice,
+            return_order,
+            checkout,
+            selected_route,
+            return_payments[selected_route.stable_id],
+        )
+
+        certificate.reload()
+        self.assertEqual(Decimal(str(certificate.current_balance)), Decimal("50.00"))
+        restored = frappe.get_all(
+            "UA Gift Certificate Return Allocation",
+            filters={"return_sales_invoice": return_invoice.name},
+            fields=["original_redemption_allocation", "qty_returned", "certificate_amount_to_restore"],
+        )
+        self.assertEqual(len(restored), 1)
+        original_allocation = next(
+            row for row in allocations if row.sales_invoice == selected_invoice.name
+        )
+        self.assertEqual(restored[0].original_redemption_allocation, original_allocation.name)
+        self.assertEqual(Decimal(str(restored[0].qty_returned)), Decimal("1"))
+        self.assertEqual(
+            Decimal(str(restored[0].certificate_amount_to_restore)),
+            Decimal("50.00"),
+        )
+
     def _base_context(self):
         desks = frappe.get_all("POS Cash Desk", fields=["name", "company", "warehouse", "default_customer"], limit=1)
         shifts = frappe.get_all("POS Operational Shift", pluck="name", limit=1)
@@ -239,9 +495,16 @@ class TestGiftCertificateServices(IntegrationTestCase):
             self.skipTest("Cost Center fixture is unavailable")
 
     def _account(self, root_type):
+        currency = frappe.db.get_value("Company", self.company, "default_currency")
         account = frappe.db.get_value(
             "Account",
-            {"company": self.company, "root_type": root_type, "is_group": 0, "disabled": 0},
+            {
+                "company": self.company,
+                "root_type": root_type,
+                "is_group": 0,
+                "disabled": 0,
+                "account_currency": currency,
+            },
             "name",
         )
         if not account:
@@ -497,6 +760,119 @@ class TestGiftCertificateServices(IntegrationTestCase):
         invoice.insert(ignore_permissions=True)
         self.assertTrue(invoice.payments, "Gift Certificate payments disappeared during insert")
         invoice.submit()
+        return invoice
+
+    def _submit_fulfillment_invoice(self, order, checkout, route, payments):
+        row = order.items[0]
+        invoice = frappe.get_doc(
+            {
+                "doctype": "Sales Invoice",
+                "company": route.seller_company,
+                "customer": self.customer.name,
+                "is_pos": 1,
+                "update_stock": 0,
+                "ua_pos_order": order.name,
+                "ua_pos_desk": self.desk.name,
+                "ua_pos_shift": self.shift,
+                "ua_sale_fulfillment": checkout.name,
+                "ua_fulfillment_route": route.stable_id,
+                "items": [
+                    {
+                        "item_code": row.item_code,
+                        "qty": 1,
+                        "uom": row.uom,
+                        "rate": row.rate,
+                        "ua_pos_order_item": row.name,
+                    }
+                ],
+            }
+        )
+        invoice.set_missing_values()
+        invoice.set("payments", payments)
+        invoice.run_method("calculate_taxes_and_totals")
+        prepare_invoice(invoice, order)
+        invoice.insert(ignore_permissions=True)
+        invoice.submit()
+        allocation_field = "gsf_allocation" if route.provider_id == "GSF" else "cc_allocation"
+        frappe.db.set_value(
+            "Sales Invoice Item",
+            invoice.items[0].name,
+            allocation_field,
+            f"TEST-{route.provider_id}-{self.suffix}",
+            update_modified=False,
+        )
+        managed_field = "gsf_managed_sale" if route.provider_id == "GSF" else "cc_managed_sale"
+        frappe.db.set_value(
+            "Sales Invoice",
+            invoice.name,
+            managed_field,
+            1,
+            update_modified=False,
+        )
+        invoice.reload()
+        return invoice
+
+    def _submit_fulfillment_return_invoice(
+        self,
+        original_invoice,
+        return_order,
+        checkout,
+        route,
+        payments,
+    ):
+        original_row = original_invoice.items[0]
+        pos_row = return_order.items[0]
+        invoice = frappe.get_doc(
+            {
+                "doctype": "Sales Invoice",
+                "company": route.seller_company,
+                "customer": self.customer.name,
+                "is_return": 1,
+                "return_against": original_invoice.name,
+                "is_pos": 1,
+                "update_stock": 0,
+                "ua_pos_order": return_order.name,
+                "ua_pos_desk": self.desk.name,
+                "ua_pos_shift": self.shift,
+                "ua_sale_fulfillment": checkout.name,
+                "ua_fulfillment_route": route.stable_id,
+                "items": [
+                    {
+                        "item_code": original_row.item_code,
+                        "qty": -1,
+                        "uom": original_row.uom,
+                        "rate": original_row.rate,
+                        "sales_invoice_item": original_row.name,
+                        "ua_pos_order_item": pos_row.name,
+                    }
+                ],
+            }
+        )
+        invoice.set_missing_values()
+        invoice.set("payments", payments)
+        invoice.run_method("calculate_taxes_and_totals")
+        prepare_invoice(invoice, return_order)
+        invoice.insert(ignore_permissions=True)
+        managed_field = "gsf_managed_sale" if route.provider_id == "GSF" else "cc_managed_sale"
+        # The stock-managed return path is covered by the GSF/CC acceptance suites.
+        # This fixture has route manifests but intentionally no synthetic stock layers.
+        frappe.db.set_value(
+            "Sales Invoice",
+            original_invoice.name,
+            managed_field,
+            0,
+            update_modified=False,
+        )
+        try:
+            invoice.submit()
+        finally:
+            frappe.db.set_value(
+                "Sales Invoice",
+                original_invoice.name,
+                managed_field,
+                1,
+                update_modified=False,
+            )
         return invoice
 
     def _return_order(self, original_order, index):

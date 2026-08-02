@@ -8,6 +8,8 @@ import frappe
 
 from ..setup.layer_dimension import (
     ALLOCATION_FIELD,
+    FULFILLMENT_LOCATION_FIELD,
+    FULFILLMENT_SOURCE_FIELD,
     LAYER_FIELD,
     MANAGED_RETURN_FIELD,
     MANAGED_SALE_FIELD,
@@ -19,6 +21,16 @@ from .layers import gsf_enabled
 
 def validate_managed_sales_invoice(doc: Any, method: str | None = None) -> None:
     del method
+    if doc.get(FULFILLMENT_SOURCE_FIELD):
+        frappe.throw(
+            "This draft is a logical sale request; submit the routed Sales Invoices instead"
+        )
+    if doc.get(FULFILLMENT_LOCATION_FIELD) and not (
+        doc.get(MANAGED_SALE_FIELD) or doc.get(MANAGED_RETURN_FIELD)
+    ):
+        frappe.throw(
+            "Sales at a Global FIFO Physical Location must use Sale Fulfillment"
+        )
     if not gsf_enabled():
         return
     roles = _warehouse_roles(doc)

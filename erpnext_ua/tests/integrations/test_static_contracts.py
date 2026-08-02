@@ -434,7 +434,7 @@ class ProductionStaticContractsTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("payment_key =", order_intake)
-        self.assertIn("'channel_order_id': order.channel_order_id", order_intake)
+        self.assertIn('"channel_order_id": order.channel_order_id', order_intake)
         self.assertIn("_converge_sales_order_invoice_payment", order_intake)
         self.assertIn("_find_matching_payment_entry", order_intake)
         self.assertIn("retry_failed=True", order_intake)

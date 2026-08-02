@@ -14,7 +14,7 @@ obligation rather than a nicety, hence the confirmation tokens on both calls::
 
 import frappe
 
-ALLOWED_SITES = {"postest.local"}
+ALLOWED_SITES = {"postest.local", "fifoaccept.local", "integration.local"}
 GROUP = "GSF Phase 3"
 LOCATION_CODE = "P3"
 ITEM = "GSF-P3-ITEM"

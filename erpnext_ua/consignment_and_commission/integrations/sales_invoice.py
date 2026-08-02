@@ -158,13 +158,18 @@ def _resolve_selling_price_list(frappe: Any, customer: str, currency: str) -> st
     return rows[0]
 
 
-def create_sales_invoice_from_allocations(request: ManagedSaleRequest) -> Any:
+def create_sales_invoice_from_allocations(
+    request: ManagedSaleRequest,
+    *,
+    invoice_values: dict[str, Any] | None = None,
+    allow_transaction_writes: bool = False,
+) -> Any:
     """Create one idempotent draft SI from already committed FIFO reservations."""
     import frappe
     from erpnext.accounts.party import get_party_account
     from frappe.utils import nowdate
 
-    if frappe.db.transaction_writes:
+    if frappe.db.transaction_writes and not allow_transaction_writes:
         raise ManagedSaleError(
             "Managed Sales Invoice creation must start before unrelated transaction writes"
         )
@@ -235,28 +240,28 @@ def create_sales_invoice_from_allocations(request: ManagedSaleRequest) -> Any:
     )
     account_mapping = get_account_mapping(frappe, company_name) if has_third_party else None
 
-    invoice = frappe.get_doc(
-        {
-            "doctype": "Sales Invoice",
-            "company": company_name,
-            "customer": request.customer,
-            "posting_date": request.posting_date or nowdate(),
-            "due_date": request.posting_date or nowdate(),
-            "update_stock": 1,
-            "currency": invoice_currency,
-            "conversion_rate": conversion_rate,
-            "selling_price_list": selling_price_list,
-            "price_list_currency": invoice_currency,
-            "plc_conversion_rate": 1,
-            "debit_to": receivable,
-            MANAGED_SALE_FIELD: 1,
-            SALE_IDEMPOTENCY_FIELD: request.idempotency_key,
-            SALE_FINGERPRINT_FIELD: fingerprint,
-            POS_CHECKOUT_FIELD: request.pos_checkout,
-            POS_ROUTE_FIELD: request.pos_route,
-            POS_ORDER_FIELD: request.pos_order,
-        }
-    )
+    values = {
+        "doctype": "Sales Invoice",
+        "company": company_name,
+        "customer": request.customer,
+        "posting_date": request.posting_date or nowdate(),
+        "due_date": request.posting_date or nowdate(),
+        "update_stock": 1,
+        "currency": invoice_currency,
+        "conversion_rate": conversion_rate,
+        "selling_price_list": selling_price_list,
+        "price_list_currency": invoice_currency,
+        "plc_conversion_rate": 1,
+        "debit_to": receivable,
+        MANAGED_SALE_FIELD: 1,
+        SALE_IDEMPOTENCY_FIELD: request.idempotency_key,
+        SALE_FINGERPRINT_FIELD: fingerprint,
+        POS_CHECKOUT_FIELD: request.pos_checkout,
+        POS_ROUTE_FIELD: request.pos_route,
+        POS_ORDER_FIELD: request.pos_order,
+    }
+    values.update(_allowed_invoice_values(invoice_values or {}))
+    invoice = frappe.get_doc(values)
     for line, allocation in zip(request.lines, allocations, strict=True):
         item = frappe.get_cached_value(
             "Item",
@@ -324,6 +329,23 @@ def create_sales_invoice_from_allocations(request: ManagedSaleRequest) -> Any:
             return existing
         raise ManagedSaleError("Concurrent managed sale database conflict did not settle") from None
     return invoice
+
+
+def _allowed_invoice_values(values: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "is_pos",
+        "ua_pos_order",
+        "ua_pos_desk",
+        "ua_pos_shift",
+        "ua_fop_profile",
+        "payments",
+        "change_amount",
+        "remarks",
+        "gsf_checkout",
+        "ua_sale_fulfillment",
+        "ua_fulfillment_route",
+    }
+    return {key: value for key, value in values.items() if key in allowed}
 
 
 def _technical_warehouses(frappe: Any) -> set[str]:

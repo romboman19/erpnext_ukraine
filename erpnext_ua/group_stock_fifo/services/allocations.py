@@ -121,6 +121,79 @@ def reserve(request: ReservationRequest) -> Any:
     raise GSFError("Reservation retry limit was exhausted", "ALLOCATION_CONFLICT")
 
 
+def lock_scope(request: ReservationRequest) -> str:
+    """Acquire the shared physical FIFO lock for a composite reservation."""
+    validate_reservation_request(request)
+    _assert_scope(request)
+    return _lock_scope(request)
+
+
+def reserve_planned(
+    request: ReservationRequest,
+    slices: list,
+    *,
+    scope_locked: bool = False,
+) -> Any:
+    """Reserve exact GSF slices selected by the shared domain planner.
+
+    Composite fulfillment plans all providers while holding the same scope
+    lock.  This method keeps GSF as the only writer of its layer balances.
+    """
+    validate_reservation_request(request)
+    _assert_scope(request)
+    planned = list(slices)
+    _validate_planned_slices(request, planned)
+    fingerprint = reservation_fingerprint(request)
+    existing = _existing_allocation(request, fingerprint)
+    if existing:
+        return existing
+    if not scope_locked:
+        _lock_scope(request)
+    settings = frappe.get_single("GSF Settings")
+    reserved_at = now_datetime()
+    allocation = _new_allocation(
+        request,
+        fingerprint=fingerprint,
+        slices=planned,
+        reserved_at=reserved_at,
+        expires_at=add_to_date(
+            reserved_at,
+            minutes=int(settings.allocation_ttl_minutes or 0),
+            as_datetime=True,
+        ),
+    )
+    _hold_positions(request, planned)
+    allocation.status = ALLOCATION_RESERVED
+    with _service_write():
+        allocation.save(ignore_permissions=True)
+    return allocation
+
+
+def _validate_planned_slices(request: ReservationRequest, slices: list) -> None:
+    if not slices:
+        raise GSFError("Shared FIFO returned no GSF slices", "ALLOCATION_CONFLICT")
+    total = sum((Decimal(str(row.qty)) for row in slices), Decimal("0"))
+    if total != Decimal(str(request.qty)):
+        raise GSFError(
+            f"Shared FIFO planned {total} instead of requested GSF quantity {request.qty}",
+            "ALLOCATION_CONFLICT",
+        )
+    invalid = [
+        row.lot_name
+        for row in slices
+        if row.warehouse not in request.allowed_warehouses
+        or row.source_method != "GSF_LAYER"
+        or Decimal(str(row.qty)) <= 0
+        or (request.serial_no and row.serial_no != request.serial_no)
+        or (request.batch_no and row.batch_no != request.batch_no)
+    ]
+    if invalid:
+        raise GSFError(
+            "Shared FIFO produced invalid GSF slices: " + ", ".join(sorted(set(invalid))),
+            "ALLOCATION_CONFLICT",
+        )
+
+
 def _assert_scope(request: ReservationRequest) -> None:
     """§12.6: the seller must be allowed to sell, but never narrows the stock."""
     if not frappe.db.get_single_value("GSF Settings", "enabled"):

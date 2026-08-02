@@ -199,7 +199,17 @@ def _draft_credit_note(
 
 
 def _allowed_invoice_values(values: dict[str, Any]) -> dict[str, Any]:
-    allowed = {"is_pos", "ua_pos_order", "ua_pos_desk", "ua_pos_shift", "change_amount", "remarks"}
+    allowed = {
+        "is_pos",
+        "ua_pos_order",
+        "ua_pos_desk",
+        "ua_pos_shift",
+        "ua_fop_profile",
+        "change_amount",
+        "remarks",
+        "ua_sale_fulfillment",
+        "ua_fulfillment_route",
+    }
     return {key: value for key, value in values.items() if key in allowed}
 
 

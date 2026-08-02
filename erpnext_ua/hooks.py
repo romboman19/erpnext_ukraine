@@ -108,9 +108,11 @@ before_uninstall = "erpnext_ua.integrations.uninstall.before_uninstall"
 doctype_js = {
 	"Sales Invoice": [
 		"ua_fiscal/doctype_js/sales_invoice_fiscal.js",
+		"public/js/sales_invoice_global_fifo.js",
 		"public/js/sales_invoice_shipment_actions.js",
 		"public/js/sales_invoice_vitalpbx_actions.js",
 	],
+	"Sales Order": "public/js/sales_order_global_fifo.js",
 	"PB POS Terminal": "ua_pos/public/js/pb_pos_terminal.js",
 	"PRRO Receipt": "ua_fiscal/doctype_js/prro_receipt.js",
 	"Purchase Receipt": ["public/js/price_tag_source.js", "public/js/purchase_vat.js"],
@@ -168,6 +170,9 @@ GIFT_CERTIFICATES = "erpnext_ua.ua_gift_certificates.adapters.sales_invoice"
 # споживання резервів мають завершитися до фіскалізації ПРРО: скасувати вже
 # надісланий чек значно дорожче, ніж не створити його.
 doc_events = {
+    "Delivery Note": {
+        "before_submit": f"{GSF}.services.delivery_note.validate_managed_warehouses",
+    },
     "Sales Invoice": {
         "before_submit": [
             f"{CC}.sales_invoice.validate_managed_sales_invoice",

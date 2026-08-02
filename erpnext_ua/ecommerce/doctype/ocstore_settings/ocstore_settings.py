@@ -54,6 +54,7 @@ class OcStoreSettings(Document):
         self._validate_sync_entities()
         self._validate_warehouses()
         self._validate_payment_routes()
+        self._validate_fulfillment()
         self._validate_order_statuses()
         self._validate_required_transports()
         self._validate_price_list()
@@ -102,11 +103,39 @@ class OcStoreSettings(Document):
 
     def _validate_payment_routes(self):
         rows = list(self.get("payment_routes") or [])
-        values = [(row.get("channel_payment_type") or "").strip() for row in rows]
+        values = [
+            (
+                (row.get("channel_payment_type") or "").strip(),
+                frappe.db.get_value("Account", row.get("paid_to_account"), "company"),
+            )
+            for row in rows
+        ]
         if len(values) != len(set(values)):
-            frappe.throw(_("Payment routes must be unique within an ocStore instance"))
+            frappe.throw(_("Payment routes must be unique per payment type and Company"))
         for row in rows:
             row.run_method("validate")
+
+    def _validate_fulfillment(self):
+        if not self.fulfillment_physical_location:
+            return
+        location = frappe.db.get_value(
+            "GSF Physical Location",
+            self.fulfillment_physical_location,
+            ["company_group", "disabled"],
+            as_dict=True,
+        )
+        if not location or location.disabled:
+            frappe.throw(_("Global FIFO Physical Location must be active"))
+        if not frappe.db.exists(
+            "GSF Group Member",
+            {
+                "parent": location.company_group,
+                "company": self.company,
+                "enabled": 1,
+                "can_sell_stock": 1,
+            },
+        ):
+            frappe.throw(_("ocStore Company must be an active seller in the Global FIFO group"))
 
     def _validate_order_statuses(self):
         rows = list(self.get("order_status_map") or [])

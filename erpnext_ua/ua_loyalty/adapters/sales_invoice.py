@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from decimal import Decimal
 
 import frappe
 
@@ -40,16 +41,18 @@ def _prepare_sale(invoice, order) -> None:
     _header(invoice, order)
     pos_rows = {row.name: row for row in order.items}
     invoice_groups = _invoice_rows_by_pos_row(invoice)
+    route_context = _route_context(invoice)
     for pos_name, rows in invoice_groups.items():
         pos_row = pos_rows.get(pos_name)
         if not pos_row:
             frappe.throw(f"Sales Invoice row has unknown POS source {pos_name}")
-        _split_pos_values(pos_row, rows)
+        _split_pos_values(pos_row, rows, _route_values(pos_row, route_context))
     invoice.ua_loyalty_redeemed_amount = money(
         sum((decimal(row.ua_loyalty_redeemed_amount) for row in invoice.items), ZERO)
     )
-    invoice.ua_loyalty_earned_active = order.loyalty_earned_active
-    invoice.ua_loyalty_earned_pending = order.loyalty_earned_pending
+    earned = money(sum((decimal(row.ua_loyalty_earned_amount) for row in invoice.items), ZERO))
+    invoice.ua_loyalty_earned_pending = earned if money(order.loyalty_earned_pending) > ZERO else ZERO
+    invoice.ua_loyalty_earned_active = earned - invoice.ua_loyalty_earned_pending
     invoice.ua_loyalty_metric_delta = money(sum((decimal(row.ua_loyalty_metric_delta) for row in invoice.items), ZERO))
     invoice.ua_loyalty_posting_key = f"sale:{invoice.name or order.name}:{order.loyalty_snapshot_hash}"
 
@@ -74,7 +77,42 @@ def _invoice_rows_by_pos_row(invoice) -> dict[str, list]:
     return groups
 
 
-def _split_pos_values(pos_row, invoice_rows: list) -> None:
+def _route_context(invoice):
+    fulfillment = invoice.get("ua_sale_fulfillment")
+    route_id = invoice.get("ua_fulfillment_route")
+    if not fulfillment or not route_id:
+        return None
+    return frappe.get_doc("GSF Checkout", fulfillment), route_id
+
+
+def _route_values(pos_row, route_context) -> dict[str, Decimal]:
+    sources = {
+        "other": pos_row.non_loyalty_discount_amount,
+        "redeemed": pos_row.loyalty_redeemed_amount,
+        "amount_before": pos_row.amount_before_loyalty,
+        "earn_base": pos_row.loyalty_earn_base,
+        "earned": pos_row.loyalty_earned_amount,
+        "metric": pos_row.loyalty_metric_delta,
+    }
+    if not route_context:
+        return {key: money(value) for key, value in sources.items()}
+    from erpnext_ua.group_stock_fifo.services.fulfillment_benefits import route_amount
+
+    checkout, route_id = route_context
+    return {
+        key: money(
+            route_amount(
+                checkout,
+                external_row_id=pos_row.name,
+                route_id=route_id,
+                total=decimal(value),
+            )
+        )
+        for key, value in sources.items()
+    }
+
+
+def _split_pos_values(pos_row, invoice_rows: list, totals: dict[str, Decimal]) -> None:
     total_qty = sum((abs(decimal(row.qty)) for row in invoice_rows), ZERO)
     allocated = {
         "other": ZERO,
@@ -88,15 +126,7 @@ def _split_pos_values(pos_row, invoice_rows: list) -> None:
         last = index == len(invoice_rows) - 1
         share = abs(decimal(row.qty)) / total_qty if total_qty else ZERO
         values = {}
-        for key, source in (
-            ("other", pos_row.non_loyalty_discount_amount),
-            ("redeemed", pos_row.loyalty_redeemed_amount),
-            ("amount_before", pos_row.amount_before_loyalty),
-            ("earn_base", pos_row.loyalty_earn_base),
-            ("earned", pos_row.loyalty_earned_amount),
-            ("metric", pos_row.loyalty_metric_delta),
-        ):
-            total = money(source)
+        for key, total in totals.items():
             values[key] = money(total - allocated[key]) if last else money(total * share)
             allocated[key] += values[key]
         row.ua_loyalty_non_loyalty_discount = values["other"]

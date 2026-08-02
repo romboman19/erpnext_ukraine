@@ -31,11 +31,10 @@ from frappe.utils import now_datetime
 
 from ..doctype.gsf_checkout.gsf_checkout import WRITE_FLAG
 from . import checkout_states as states
-from .allocations import release_allocation, reserve
+from .allocations import release_allocation
 from .compensation import compensate
 from .domain import GSFError
 from .reallocation import prepare
-from .reservation import ReservationRequest
 from .sale import SaleLine, sell
 from .staging import acquire_lane, release_lane
 
@@ -72,6 +71,10 @@ class CheckoutRequest:
     lines: tuple[CheckoutLine, ...]
     external_order_doctype: str | None = None
     external_order_name: str | None = None
+    sales_channel: str = "API"
+    currency: str | None = None
+    conversion_rate: Decimal = Decimal("1")
+    posting_datetime: Any | None = None
     requires_fiscalization: bool = False
 
 
@@ -113,8 +116,11 @@ def open_checkout(request: CheckoutRequest) -> Any:
                 "customer": request.customer,
                 "external_order_doctype": request.external_order_doctype,
                 "external_order_name": request.external_order_name,
+                "sales_channel": request.sales_channel,
+                "currency": request.currency,
+                "conversion_rate": float(request.conversion_rate),
                 "fiscal_state": "PENDING" if request.requires_fiscalization else "NOT_REQUIRED",
-                "posting_datetime": now_datetime(),
+                "posting_datetime": request.posting_datetime or now_datetime(),
                 "lines": [
                     {
                         "item_code": line.item_code,
@@ -139,6 +145,10 @@ def _fingerprint(request: CheckoutRequest) -> str:
         "physical_location": request.physical_location,
         "seller_company": request.seller_company,
         "customer": request.customer,
+        "sales_channel": request.sales_channel,
+        "currency": request.currency,
+        "conversion_rate": str(Decimal(str(request.conversion_rate)).normalize()),
+        "posting_datetime": str(request.posting_datetime or ""),
         "lines": [
             {
                 "item_code": line.item_code,
@@ -215,42 +225,47 @@ def _reserve(checkout: Any) -> Any:
     checkout.staging_lane = lane
     _save(checkout)
 
+    from .fulfillment_reservation import reserve_checkout_line, serialize_refs
+
     for line in checkout.lines:
-        if line.allocation:
+        if line.route_allocations or line.allocation:
             continue
         frappe.db.commit()
-        allocation = reserve(
-            ReservationRequest(
-                idempotency_key=f"{checkout.idempotency_key}:{line.idx}",
-                company_group=checkout.company_group,
-                physical_location=checkout.physical_location,
-                seller_company=checkout.seller_company,
-                item_code=line.item_code,
-                qty=Decimal(str(line.qty)),
-                allowed_warehouses=_pools(checkout),
-                serial_no=line.serial_no,
-                batch_no=line.batch_no,
-                external_row_id=line.external_row_id,
-                checkout=checkout.name,
-            )
-        )
-        line.allocation = allocation.name
+        refs = reserve_checkout_line(checkout, line)
+        line.route_allocations = serialize_refs(refs)
+        if len(refs) == 1 and refs[0].allocation_doctype == "GSF Allocation":
+            line.allocation = refs[0].allocation_name
         _save(checkout)
-    _move(checkout, states.RESERVED, stock_state="RESERVED")
+    _move(
+        checkout,
+        states.RESERVED,
+        stock_state="RESERVED",
+        route_manifest=_route_manifest(checkout),
+    )
     return checkout
 
 
 def _prepare(checkout: Any) -> Any:
     """§23: `RESERVED → PREPARING_STOCK → STOCK_PREPARED`."""
     _move(checkout, states.PREPARING_STOCK)
+    from .fulfillment_reservation import checkout_refs
+
     reallocations = _recorded_reallocations(checkout)
-    for line in checkout.lines:
-        if line.allocation in reallocations:
+    gsf_allocations = [
+        ref.allocation_name
+        for ref in checkout_refs(checkout)
+        if ref.allocation_doctype == "GSF Allocation"
+    ]
+    if not gsf_allocations:
+        _move(checkout, states.STOCK_PREPARED, stock_state="PREPARED")
+        return checkout
+    for allocation_name in gsf_allocations:
+        if allocation_name in reallocations:
             continue
         reallocation = prepare(
-            line.allocation, checkout=checkout.name, staging_lane=checkout.staging_lane
+            allocation_name, checkout=checkout.name, staging_lane=checkout.staging_lane
         )
-        reallocations[line.allocation] = reallocation.name
+        reallocations[allocation_name] = reallocation.name
     _move(
         checkout,
         states.STOCK_PREPARED,
@@ -262,25 +277,34 @@ def _prepare(checkout: Any) -> Any:
 
 def _sell(checkout: Any) -> Any:
     """§23: `STOCK_PREPARED → ERP_SALE_SUBMITTED`, the last reversible step."""
-    invoice = sell(
-        [
-            SaleLine(
-                allocation=line.allocation,
-                rate=Decimal(str(line.rate)),
-                uom=line.uom,
-                barcode=line.barcode,
-                discount_amount=Decimal(str(line.discount_amount or 0)),
+    if any(line.route_allocations for line in checkout.lines):
+        from .fulfillment_sale import post_fulfillment
+
+        invoices = post_fulfillment(checkout)
+    else:
+        invoices = [
+            sell(
+                [
+                    SaleLine(
+                        allocation=line.allocation,
+                        rate=Decimal(str(line.rate)),
+                        uom=line.uom,
+                        barcode=line.barcode,
+                        discount_amount=Decimal(str(line.discount_amount or 0)),
+                    )
+                    for line in checkout.lines
+                ],
+                customer=checkout.customer,
+                checkout=checkout.name,
+                invoice_values=_external_invoice_values(checkout),
             )
-            for line in checkout.lines
-        ],
-        customer=checkout.customer,
-        checkout=checkout.name,
-        invoice_values=_external_invoice_values(checkout),
-    )
+        ]
+    invoice_names = [invoice.name for invoice in invoices]
     _move(
         checkout,
         states.ERP_SALE_SUBMITTED,
-        sales_invoice=invoice.name,
+        sales_invoice=invoice_names[0],
+        sales_invoices=json.dumps(invoice_names, separators=(",", ":")),
         erp_sale_state="SUBMITTED",
         stock_state="CONSUMED",
     )
@@ -327,9 +351,7 @@ def _compensate(checkout: Any) -> Any:
     reallocations = _recorded_reallocations(checkout)
     for name in reversed(list(reallocations.values())):
         compensate(name, reason=f"checkout {checkout.name} compensating")
-    for line in checkout.lines:
-        if line.allocation:
-            _release_quietly(line.allocation)
+    _release_checkout_refs(checkout, reason=f"checkout {checkout.name} compensating")
     if checkout.staging_lane:
         _release_lane_quietly(checkout)
     _move(checkout, states.COMPENSATED, stock_state="COMPENSATED")
@@ -367,9 +389,7 @@ def abort(checkout_name: str, *, reason: str) -> Any:
         _move(checkout, states.COMPENSATING, manual_review_reason=reason)
         return _compensate(checkout)
 
-    for line in checkout.lines:
-        if line.allocation:
-            _release_quietly(line.allocation)
+    _release_checkout_refs(checkout, reason=reason)
     if checkout.staging_lane:
         _release_lane_quietly(checkout)
     _move(checkout, states.CANCELLED, manual_review_reason=reason)
@@ -384,7 +404,11 @@ def fail(checkout_name: str, *, code: str, reason: str) -> Any:
 
 
 def record_fiscal_result(
-    checkout_name: str, *, fiscal_state: str, prro_receipt: str | None = None
+    checkout_name: str,
+    *,
+    fiscal_state: str,
+    prro_receipt: str | None = None,
+    prro_receipts: list[str] | None = None,
 ) -> Any:
     """Mirror the POS-owned fiscal result and let the checkout finish."""
     if fiscal_state not in {"DONE", "FAILED", "UNCERTAIN"}:
@@ -392,6 +416,7 @@ def record_fiscal_result(
     checkout = frappe.get_doc("GSF Checkout", checkout_name)
     checkout.fiscal_state = fiscal_state
     checkout.prro_receipt_id = prro_receipt
+    checkout.prro_receipts = json.dumps(prro_receipts or [], separators=(",", ":"))
     _save(checkout)
     if fiscal_state == "DONE" and checkout.status == states.MANUAL_REVIEW:
         _move(checkout, states.COMPLETED, completed_at=now_datetime())
@@ -436,6 +461,51 @@ def _release_quietly(allocation: str) -> None:
         release_allocation(allocation, reason="checkout aborted")
     except GSFError:
         pass
+
+
+def _release_checkout_refs(checkout: Any, *, reason: str) -> None:
+    from .fulfillment_reservation import checkout_refs, release_ref
+
+    refs = checkout_refs(checkout)
+    if not refs:
+        for line in checkout.lines:
+            if line.allocation:
+                _release_quietly(line.allocation)
+        return
+    for ref in refs:
+        try:
+            release_ref(ref, reason=reason)
+        except (GSFError, ValueError):
+            continue
+
+
+def _route_manifest(checkout: Any) -> str:
+    from .fulfillment_reservation import checkout_refs
+
+    routes = {}
+    for ref in checkout_refs(checkout):
+        routes.setdefault(
+            ref.route.stable_id,
+            {
+                "route_id": ref.route.stable_id,
+                "provider_id": ref.route.provider_id,
+                "seller_company": ref.route.seller_company,
+                "provider_location": ref.route.provider_location,
+                "legal_entity_type": ref.route.legal_entity_type,
+                "legal_entity_name": ref.route.legal_entity_name,
+                "fiscal_route": ref.route.fiscal_route,
+                "allocations": [],
+            },
+        )["allocations"].append(
+            {
+                "doctype": ref.allocation_doctype,
+                "name": ref.allocation_name,
+                "item_code": ref.item_code,
+                "qty": str(ref.qty),
+                "external_row_id": ref.external_row_id,
+            }
+        )
+    return json.dumps(list(routes.values()), sort_keys=True, separators=(",", ":"))
 
 
 def _release_lane_quietly(checkout: Any) -> None:

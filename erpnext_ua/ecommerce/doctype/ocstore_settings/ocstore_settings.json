@@ -7,7 +7,7 @@
  "search_fields": "store_name,company,store_url",
  "field_order": [
   "store_name", "enabled", "company", "store_url",
-  "erp_section", "currency", "selling_price_list", "default_customer_group", "default_territory", "export_all_items",
+  "erp_section", "currency", "selling_price_list", "fulfillment_physical_location", "default_customer_group", "default_territory", "export_all_items",
   "transport_section", "ftp_profile", "photo_ftp_profile", "photo_url_prefix", "export_file_prefix", "orders_file_prefix", "max_order_files_per_run",
   "sync_section", "sync_entities",
   "warehouses_section", "warehouses",
@@ -23,6 +23,7 @@
   {"fieldname": "erp_section", "fieldtype": "Section Break", "label": "ERPNext Configuration"},
   {"fieldname": "currency", "fieldtype": "Link", "label": "Currency", "options": "Currency", "default": "UAH", "reqd": 1},
   {"fieldname": "selling_price_list", "fieldtype": "Link", "label": "Selling Price List", "options": "Price List", "reqd": 1},
+  {"fieldname": "fulfillment_physical_location", "fieldtype": "Link", "label": "Global FIFO Physical Location", "options": "GSF Physical Location", "description": "Routes imported orders through global FIFO and creates one invoice/payment per seller Company."},
   {"fieldname": "default_customer_group", "fieldtype": "Link", "label": "Default Customer Group", "options": "Customer Group", "reqd": 1},
   {"fieldname": "default_territory", "fieldtype": "Link", "label": "Default Territory", "options": "Territory", "reqd": 1},
   {"fieldname": "export_all_items", "fieldtype": "Check", "label": "Export All Enabled Items", "default": "1", "description": "Automatically creates missing mappings using the ERPNext Item Code. Disable to export mapped items only."},

@@ -355,6 +355,74 @@ def reserve_stock(
     raise ReservationConflictError("Reservation retry limit was exhausted")
 
 
+def reserve_planned_stock(
+    request: ReservationRequest,
+    slices: Sequence[AllocationSlice],
+) -> Any:
+    """Reserve exact slices chosen by the shared physical FIFO planner.
+
+    The caller owns the outer scope lock and transaction.  CC still owns every
+    CC row lock, aggregate and lifecycle transition; no foreign domain writes
+    CC tables directly.
+    """
+    import frappe
+    from frappe.utils import add_to_date, now_datetime
+
+    validate_reservation_request(request)
+    _validate_scope(frappe, request)
+    planned = list(slices)
+    _validate_planned_slices(request, planned)
+    fingerprint = reservation_fingerprint(request)
+    existing = _existing_allocation(frappe, request, fingerprint)
+    if existing:
+        return existing
+
+    settings = frappe.get_single("CC Settings")
+    reserved_at = now_datetime()
+    allocation = _new_allocation(
+        frappe,
+        request=request,
+        fingerprint=fingerprint,
+        slices=planned,
+        reserved_at=reserved_at,
+        expires_at=add_to_date(
+            reserved_at,
+            minutes=int(settings.reservation_ttl_minutes or 0),
+            as_datetime=True,
+        ),
+    )
+    _reserve_slices(frappe, request=request, slices=planned)
+    allocation.status = "RESERVED"
+    with _allocation_write(frappe):
+        allocation.save(ignore_permissions=True)
+    return allocation
+
+
+def _validate_planned_slices(
+    request: ReservationRequest,
+    slices: list[AllocationSlice],
+) -> None:
+    if not slices:
+        raise ReservationError("Shared FIFO returned no CC allocation slices")
+    total = sum((Decimal(str(row.qty)) for row in slices), Decimal("0"))
+    if total != Decimal(str(request.qty)):
+        raise ReservationError(
+            f"Shared FIFO planned {total} instead of requested CC quantity {request.qty}"
+        )
+    invalid = [
+        row.lot_name
+        for row in slices
+        if row.warehouse not in request.allowed_warehouses
+        or Decimal(str(row.qty)) <= 0
+        or (request.serial_no and row.serial_no != request.serial_no)
+        or (request.batch_no and row.batch_no != request.batch_no)
+    ]
+    if invalid:
+        raise ReservationError(
+            "Shared FIFO produced invalid CC slices: " + ", ".join(sorted(set(invalid)))
+        )
+
+
 def _finish_allocation(
     allocation_name: str,
     *,

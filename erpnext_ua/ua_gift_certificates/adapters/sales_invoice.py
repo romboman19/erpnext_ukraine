@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+from collections import defaultdict
+
 import frappe
 
-from erpnext_ua.ua_gift_certificates.domain.money import money
+from erpnext_ua.ua_gift_certificates.domain.money import ZERO, decimal, money
 from erpnext_ua.ua_gift_certificates.services.settings import enabled_for_pos_redemption
 
 
 def prepare_invoice(invoice, order):
     if not enabled_for_pos_redemption() or not order.get("gift_certificate_redeemed_total"):
         return invoice
+    if invoice.is_return:
+        return _prepare_return_invoice(invoice, order)
+    if invoice.get("ua_sale_fulfillment") and invoice.get("ua_fulfillment_route"):
+        return _prepare_fulfillment_invoice(invoice, order)
     invoice.ua_gift_certificate_context = 1
     invoice.ua_gift_certificate_redemption_total = order.gift_certificate_redeemed_total
     invoice.ua_gift_certificate_paid_component = order.gift_certificate_paid_component
@@ -28,6 +34,74 @@ def prepare_invoice(invoice, order):
 
     apply_no_double_earning(invoice)
     return invoice
+
+
+def _prepare_fulfillment_invoice(invoice, order):
+    from erpnext_ua.ua_gift_certificates.services.fulfillment import invoice_summary
+
+    summary = invoice_summary(order, invoice)
+    invoice.ua_gift_certificate_context = int(summary["total"] > ZERO)
+    if not invoice.ua_gift_certificate_context:
+        return invoice
+    invoice.ua_gift_certificate_redemption_total = summary["total"]
+    invoice.ua_gift_certificate_paid_component = summary["paid"]
+    invoice.ua_gift_certificate_promotional_component = summary["promotional"]
+    invoice.ua_gift_certificate_snapshot = order.gift_certificate_snapshot_json
+    invoice.ua_gift_certificate_posting_status = "Pending"
+    _apply_accounting_dimensions(invoice)
+    groups = _invoice_rows_by_pos_item(invoice)
+    for pos_item, rows in groups.items():
+        _split_row_summary(rows, summary["rows"].get(pos_item))
+    from erpnext_ua.ua_gift_certificates.adapters.loyalty import apply_no_double_earning
+
+    apply_no_double_earning(invoice)
+    return invoice
+
+
+def _prepare_return_invoice(invoice, order):
+    from erpnext_ua.ua_gift_certificates.services.fulfillment import return_invoice_summary
+
+    summary = return_invoice_summary(order, invoice)
+    invoice.ua_gift_certificate_context = int(summary["total"] > ZERO)
+    if not invoice.ua_gift_certificate_context:
+        return invoice
+    invoice.ua_gift_certificate_redemption_total = -summary["total"]
+    invoice.ua_gift_certificate_paid_component = -summary["paid"]
+    invoice.ua_gift_certificate_promotional_component = -summary["promotional"]
+    invoice.ua_gift_certificate_snapshot = order.gift_certificate_snapshot_json
+    invoice.ua_gift_certificate_posting_status = "Pending"
+    _apply_accounting_dimensions(invoice)
+    groups = _invoice_rows_by_pos_item(invoice)
+    for pos_item, rows in groups.items():
+        _split_row_summary(rows, summary["rows"].get(pos_item), sign=-1)
+    return invoice
+
+
+def _invoice_rows_by_pos_item(invoice) -> dict[str, list]:
+    result = defaultdict(list)
+    for row in invoice.items:
+        if row.get("ua_pos_order_item"):
+            result[row.ua_pos_order_item].append(row)
+    return result
+
+
+def _split_row_summary(rows: list, summary: dict | None, *, sign: int = 1) -> None:
+    total_qty = sum((abs(decimal(row.qty)) for row in rows), ZERO)
+    allocated = {"amount": ZERO, "paid": ZERO, "promotional": ZERO}
+    values = summary or {"amount": ZERO, "paid": ZERO, "promotional": ZERO, "count": 0}
+    for index, row in enumerate(rows):
+        last = index == len(rows) - 1
+        share = abs(decimal(row.qty)) / total_qty if total_qty else ZERO
+        parts = {}
+        for key in allocated:
+            target = money(values[key])
+            parts[key] = money(target - allocated[key]) if last else money(target * share)
+            allocated[key] = money(allocated[key] + parts[key])
+        row.ua_gift_certificate_amount = sign * parts["amount"]
+        row.ua_gift_certificate_paid_component = sign * parts["paid"]
+        row.ua_gift_certificate_promotional_component = sign * parts["promotional"]
+        row.ua_gift_certificate_allocation_count = int(values.get("count") or 0)
+        row.ua_gift_certificate_eligible = int(parts["amount"] > ZERO)
 
 
 def _apply_accounting_dimensions(invoice) -> None:
@@ -53,18 +127,14 @@ def _apply_accounting_dimensions(invoice) -> None:
 
 
 def validate_before_submit(doc, method=None):
+    if doc.get("ua_pos_order") and not doc.get("ua_gift_certificate_context"):
+        prepare_invoice(doc, frappe.get_doc("POS Order", doc.ua_pos_order))
     if not doc.get("ua_gift_certificate_context"):
         return
     if not doc.get("ua_pos_order"):
         frappe.throw("Direct manual Gift Certificate redemption is disabled", title="CERT_POSTING_INCOMPLETE")
     order = frappe.get_doc("POS Order", doc.ua_pos_order)
     if doc.is_return:
-        return_total = abs(money(doc.ua_gift_certificate_redemption_total))
-        if return_total:
-            if return_total != abs(money(order.gift_certificate_redeemed_total)):
-                frappe.throw(
-                    "Gift Certificate return total does not match the return plan", title="CERT_POSTING_INCOMPLETE"
-                )
         return
     reserved = sum(
         row.requested_amount
@@ -74,7 +144,13 @@ def validate_before_submit(doc, method=None):
             fields=["requested_amount"],
         )
     )
-    if money(reserved) != money(doc.ua_gift_certificate_redemption_total):
+    if doc.get("ua_sale_fulfillment"):
+        from erpnext_ua.ua_gift_certificates.services.fulfillment import invoice_summary
+
+        expected = invoice_summary(order, doc)["total"]
+    else:
+        expected = money(reserved)
+    if expected != money(doc.ua_gift_certificate_redemption_total):
         frappe.throw("Gift Certificate reservation total does not match invoice", title="CERT_POSTING_INCOMPLETE")
 
 
