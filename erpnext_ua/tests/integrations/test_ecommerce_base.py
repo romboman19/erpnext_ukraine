@@ -773,6 +773,7 @@ class EcommerceBaseTest(unittest.TestCase):
                 orders.frappe.db,
                 "get_value",
                 return_value='["SINV-A","SINV-B"]',
+                create=True,
             ),
             patch.object(
                 orders,
