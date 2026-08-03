@@ -30,7 +30,11 @@ jobs:
         run: |
           python -m compileall -q erpnext_ua
           find erpnext_ua -name '*.json' -print0 | xargs -0 -n1 jq -e . >/dev/null
+          find deployment -name '*.json' -print0 | xargs -0 -n1 jq -e . >/dev/null
           find erpnext_ua -name '*.js' -print0 | xargs -0 -n1 node --check
+          python tools/validate_production_image.py \
+            --source-root . \
+            --contract deployment/production/image-contract.json
           git diff --check
 
       - name: Lint linted trees

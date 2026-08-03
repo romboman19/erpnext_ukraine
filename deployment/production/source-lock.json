@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "base_image": {
+    "reference": "frappe/erpnext:v16.26.2",
+    "digest": "sha256:d349cceb89693d54525ef9696c29af772c05ad4f42af723742cbee4e62420583",
+    "frappe_commit": "4113465d23888d70936bb332fd9110ab4330cbf1",
+    "erpnext_commit": "d1d3b241ae7bc21d18cf830a4bacd568e21a2a19"
+  },
+  "apps": {
+    "print_designer": {
+      "url": "https://github.com/frappe/print_designer.git",
+      "ref": "v1.6.5",
+      "commit": "e4faa7e48118b4bdfea8a522368e4ea62e6cc210"
+    },
+    "erpnext_ua": {
+      "url": "https://github.com/romboman19/erpnext_ukraine.git",
+      "ref": "build-context",
+      "version": "0.16.0"
+    }
+  }
+}

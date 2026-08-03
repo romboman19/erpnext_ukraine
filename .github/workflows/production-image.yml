@@ -1,0 +1,35 @@
+name: Production Image
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: production-image-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  clean-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate immutable source contract
+        run: >-
+          python tools/validate_production_image.py
+          --source-root .
+          --contract deployment/production/image-contract.json
+
+      - name: Build the locked production image
+        run: tools/build_production_image.sh erpnext-ua:ci-${GITHUB_SHA}
+
+      - name: Verify OCI revisions
+        run: |
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "erpnext-ua:ci-${GITHUB_SHA}")" = "${GITHUB_SHA}"
+          test -n "$(docker image inspect --format '{{index .Config.Labels "ua.erpnext.print-designer-revision"}}' "erpnext-ua:ci-${GITHUB_SHA}")"
