@@ -34,7 +34,9 @@ RUN set -eu; \
     git -C /opt/frappe/app-sources/print_designer checkout --detach "${PRINT_DESIGNER_COMMIT}"; \
     test "$(git -C /opt/frappe/app-sources/print_designer rev-parse HEAD)" = "${PRINT_DESIGNER_COMMIT}"; \
     bench get-app --skip-assets /opt/frappe/app-sources/print_designer; \
-    bench get-app --skip-assets /opt/frappe/app-sources/erpnext_ua; \
+    mv /opt/frappe/app-sources/erpnext_ua apps/erpnext_ua; \
+    uv pip install --quiet --python env/bin/python -e apps/erpnext_ua; \
+    grep -qx erpnext_ua sites/apps.txt || printf 'erpnext_ua\n' >> sites/apps.txt; \
     rm -rf sites/assets; \
     ln -s /home/frappe/frappe-bench/assets sites/assets; \
     bench build --app print_designer; \
