@@ -1,6 +1,7 @@
 # Phases 6–8: сага, повернення, інвентаризація, закриття періоду
 
-Дата: 2026-07-31. Обсяг за [§41](../spec-v1.0.md) Phase 5 (залишок), 6, 7, 8.
+Дата: 2026-07-31, оновлено 2026-08-04. Обсяг за [§41](../spec-v1.0.md)
+Phase 5 (залишок), 6, 7, 8.
 
 ## Зроблено
 
@@ -11,13 +12,13 @@
 | returns (Phase 7) | ✅ §19.1–§19.3, новий шар із `return_origin_layer`, карантин для трекінгових |
 | physical count (Phase 7) | ⚠️ §20.3 у частині обліку: домени окремо, різниця, approval. Проводка коригування **відмовляється** — див. нижче |
 | period close (Phase 8) | ✅ §25.2 backdated guard, §25.4 закриття з блокерами |
-| scheduled jobs (Phase 8) | ✅ `expire_due_allocations` кожні 10 хв, `log_critical_findings` щодня |
-| runbooks (Phase 8) | ✅ усі 17 за §45 |
+| scheduled jobs (Phase 8) | ✅ `expire_due_allocations` у `hourly_long`; реальний worker expiry пройдено на UAT |
+| runbooks (Phase 8) | ✅ усі 17 за §45 + staging acceptance runbook |
 | Financial Integrity (§31) | ✅ 5 перевірок, severity, гейт на закриття періоду |
 | Serial sale/return | ✅ clean-site acceptance створює серійні приходи, продажі й повернення |
 | Batch sale/return | ✅ дві партії/два ФОП, cross-company sale і partial return з exact cost |
 | GSF + CC coexistence | ✅ змішаний sale/return, domain lineage і read-only CC discovery у clean-site CI |
-| load / deadlock tests | ⬜ потребують стека зі scheduler і навантаження |
+| load / deadlock / failure injection | ✅ UAT: 800/800, p95 0.962 с, crash rollback, §37.7 one-winner race |
 | production acceptance | ⬜ **операція власника** — див. розділ 11 HANDOFF |
 
 ## Ключові рішення
@@ -86,15 +87,26 @@ rollback знову `ok`.
 який вказував на вже видалений інвойс. Для продакшна це не проблема (ключі
 приходять з POS Order), для фікстури — так.
 
+**3. Read snapshot до scope lock ламав contention.** На UAT MariaDB error 1020
+залишав уже закомічений reserve live, якщо concurrent release читав старий
+snapshot. Усі reserve/release/consume/expire тепер входять у write path через
+один scope lock, а read-only preflight завершується до write transaction.
+Повторні прогони дали 200/200 і 800/800 без витоків.
+
+## Перевірено на production-shaped UAT
+
+Scheduled expiry, worker/scheduler heartbeat, `SIGKILL` rollback, §37.7
+last-stock race та contention 8 × 100 пройдені на dedicated
+`fifoaccept.local`. Метрики, знайдені дефекти та межі висновку:
+[evidence 2026-08-04](evidence/2026-08-04-staging-acceptance.md).
+
 ## Не зроблено і чому
 
-- **Load / deadlock / failure-injection тести (§41 Phase 8)** — потрібен стек зі
-  scheduler і навантаженням. §37.7 (реальне подвійне бронювання) уже доведено
-  двома процесами в Phase 3; решта потребує середовища, якого немає.
 - **§18.4 renderer друку** — `gsf_display_group` на рядках готовий, самого
   renderer немає.
 - **Проводка коригувань інвентаризації** — свідомо, див. вище.
-- **CC compatibility suite (§37.24–37.29)** — основний змішаний продаж,
-  повернення, lineage, заборона overlap і фізична агрегація вже в clean-site CI;
-  навантажувальна частина лишається staging-гейтом.
+- **CC compatibility suite (§37.24–37.29)** — змішаний продаж, повернення,
+  lineage, заборона overlap і фізична агрегація є в clean-site CI. Phase 8 UAT
+  навантажив GSF allocator; окремий sustained mixed-provider profile не
+  заявляється як пройдений.
 - **Production acceptance (§43)** — операція власника на копії реальних даних.

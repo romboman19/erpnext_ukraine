@@ -383,6 +383,43 @@ def report(
     expected_iterations: int,
     max_p95_seconds: float = 5.0,
 ) -> dict[str, Any]:
+    """Aggregate staging results and require live scheduler/worker health."""
+    return _report(
+        run_id,
+        expected_workers,
+        expected_iterations,
+        max_p95_seconds,
+        require_runtime_health=True,
+    )
+
+
+def report_ci(
+    run_id: str,
+    expected_workers: int,
+    expected_iterations: int,
+    max_p95_seconds: float = 5.0,
+) -> dict[str, Any]:
+    """Regression-only report for clean-site CI, which has no scheduler process."""
+    assert_site()
+    if frappe.local.site != "integration.local":
+        raise RuntimeError("report_ci is restricted to integration.local")
+    return _report(
+        run_id,
+        expected_workers,
+        expected_iterations,
+        max_p95_seconds,
+        require_runtime_health=False,
+    )
+
+
+def _report(
+    run_id: str,
+    expected_workers: int,
+    expected_iterations: int,
+    max_p95_seconds: float,
+    *,
+    require_runtime_health: bool,
+) -> dict[str, Any]:
     """Aggregate worker files and fail closed on any leaked reservation."""
     assert_site()
     run_id = _run_id(run_id)
@@ -413,14 +450,19 @@ def report(
         "no_live_allocations_leaked": live_allocations == 0,
         "no_queued_reposts": health_snapshot["queued_reposts"] == 0,
         "p95_within_gate": p95 is not None and p95 <= float(max_p95_seconds),
-        "scheduler_active": health_snapshot["scheduler_active"],
-        "scheduler_heartbeat_recent": (
-            health_snapshot["scheduler_heartbeat_age_seconds"] is not None
-            and health_snapshot["scheduler_heartbeat_age_seconds"]
-            <= health_snapshot["scheduler_heartbeat_window_seconds"]
-        ),
-        "worker_online": health_snapshot["workers"] >= 1,
     }
+    if require_runtime_health:
+        checks.update(
+            {
+                "scheduler_active": health_snapshot["scheduler_active"],
+                "scheduler_heartbeat_recent": (
+                    health_snapshot["scheduler_heartbeat_age_seconds"] is not None
+                    and health_snapshot["scheduler_heartbeat_age_seconds"]
+                    <= health_snapshot["scheduler_heartbeat_window_seconds"]
+                ),
+                "worker_online": health_snapshot["workers"] >= 1,
+            }
+        )
     output = {
         "status": "pass" if all(checks.values()) else "fail",
         "run_id": run_id,
@@ -448,7 +490,7 @@ def report(
     }
     print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
     if output["status"] != "pass":
-        raise RuntimeError("GSF Phase 8 load acceptance failed")
+        raise RuntimeError("GSF Phase 8 contention acceptance failed")
     return output
 
 

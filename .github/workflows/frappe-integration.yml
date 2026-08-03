@@ -118,11 +118,33 @@ jobs:
         working-directory: frappe-bench
         run: |
           bench --site integration.local execute \
-            erpnext_ua.group_stock_fifo.spikes.fixtures.build \
-            --kwargs '{"confirm_site":"integration.local","confirm_write":"BUILD_GSF_PHASE_0"}'
+            erpnext_ua.group_stock_fifo.integration_tests.phase_8_load_worker.prepare \
+            --kwargs "{\"confirm_write\":\"PREPARE_GSF_PHASE_8_LOAD\",\"run_id\":\"ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\",\"expected_workers\":4}"
+          start_at=$(python -c 'import time; print(time.time() + 8)')
+          pids=()
+          for worker in 1 2 3 4; do
+            GSF_LOAD_RUN_ID="ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            GSF_LOAD_WORKER="$worker" \
+            GSF_LOAD_ITERATIONS=20 \
+            GSF_LOAD_START="$start_at" \
+              bench --site integration.local execute \
+              erpnext_ua.group_stock_fifo.integration_tests.phase_8_load_worker.run \
+              >"/tmp/gsf-ci-${worker}.log" 2>&1 &
+            pids+=("$!")
+          done
+          failed=0
+          for pid in "${pids[@]}"; do
+            if ! wait "$pid"; then
+              failed=1
+            fi
+          done
+          if ((failed)); then
+            sed -n '1,240p' /tmp/gsf-ci-*.log
+            exit 1
+          fi
           bench --site integration.local execute \
-            erpnext_ua.group_stock_fifo.integration_tests.phase_3_fixture.build \
-            --kwargs '{"confirm_write":"BUILD_GSF_PHASE_3"}'
+            erpnext_ua.group_stock_fifo.integration_tests.phase_8_load_worker.report_ci \
+            --kwargs "{\"run_id\":\"ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\",\"expected_workers\":4,\"expected_iterations\":20}"
           bench --site integration.local execute \
             erpnext_ua.group_stock_fifo.integration_tests.phase_7_mixed_fulfillment.run
           bench --site integration.local execute \

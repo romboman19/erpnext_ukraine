@@ -43,6 +43,10 @@ docker exec <backend> bench --site <acceptance-site> enable-scheduler
 
 Очікується: лише `frappe`, `erpnext`, `erpnext_ua`; щонайменше один worker;
 нуль queued jobs. Scheduler вмикається тільки на dedicated acceptance site.
+Окремо виконати read-only DB health із worker і scheduler контейнерів: у деяких
+image/site-creation комбінаціях DB grant помилково прив'язується лише до IP
+backend. Version у `bench list-apps` і `erpnext_ua.__version__` має збігатися;
+розбіжність означає metadata/source drift і блокує production image.
 
 ## Прогін
 
@@ -124,7 +128,8 @@ production image:
    production build має проходити `pip check` без конфлікту.
 3. Базовий image не містив усіх залежностей `erpnext_ua`; runtime layer вище
    це виправляє для UAT. Production Dockerfile має робити те саме від
-   зафіксованого digest і проходити clean rebuild.
+   зафіксованого digest, копіювати сам app замість bind mount, узгоджувати
+   package metadata з кодом і проходити clean rebuild.
 
 Після закриття image gates останнім обов'язковим кроком залишається §43:
 acceptance на анонімізованій копії реальних залишків, резервів, рахунків і
