@@ -149,6 +149,7 @@ def audit_cc_bindings() -> list[str]:
             [
                 "manager_app",
                 "company",
+                "company_group",
                 "physical_location",
                 "warehouse_role",
                 "binding_mode",
