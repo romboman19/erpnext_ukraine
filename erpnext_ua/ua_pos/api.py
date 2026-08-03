@@ -1788,15 +1788,37 @@ def _posted_fulfillment_routes(order, desk):
 
 
 def _fiscalize_routes(order, routes):
+	from erpnext_ua.ua_fiscal.outbox import process_job
+
+	jobs = _ensure_fiscal_jobs(order, routes)
 	receipts = []
 	for route in routes:
 		if order.fiscal_mode != "Fiscal" or route.route.fiscal_route != "FISCAL":
 			continue
-		route_desk = frappe.get_doc("POS Cash Desk", route.cash_desk)
-		receipt = _fiscalize(order, route_desk, route.invoice)
+		result = process_job(jobs[route.invoice.name].name, raise_on_error=True)
+		receipt = result.get("receipt")
 		if receipt:
 			receipts.append(receipt)
 	return receipts
+
+
+def _ensure_fiscal_jobs(order, routes) -> dict:
+	from erpnext_ua.ua_fiscal.outbox import ensure_sales_invoice_job
+
+	jobs = {}
+	for route in routes:
+		if order.fiscal_mode != "Fiscal" or route.route.fiscal_route != "FISCAL":
+			continue
+		desk = frappe.get_doc("POS Cash Desk", route.cash_desk)
+		if not desk.prro_cash_register:
+			frappe.throw(_("Для каси {0} не налаштовано ПРРО").format(desk.name))
+		jobs[route.invoice.name] = ensure_sales_invoice_job(
+			route.invoice,
+			cash_register=desk.prro_cash_register,
+			pos_order=order.name,
+			cash_desk=desk.name,
+		)
+	return jobs
 
 
 def _route_receipt_state(order, routes):
@@ -2078,6 +2100,15 @@ def _complete_paid_order(doc, desk, session) -> dict:
 			doc.save(ignore_permissions=True)
 		routes = _posted_fulfillment_routes(doc, desk)
 		_cash_movements(doc, session, routes)
+		jobs = _ensure_fiscal_jobs(doc, routes)
+		if jobs:
+			doc.status = "Fiscal Pending"
+			doc.recovery_note = "Фіскальна операція записана у durable outbox"
+			doc.save(ignore_permissions=True)
+			_sync_gsf_fiscal_state(doc)
+			# Deliberate boundary: accounting, cash movements and every fiscal
+			# intent are durable before the first DPS or signer network call.
+			frappe.db.commit()
 		try:
 			_fiscalize_routes(doc, routes)
 		except Exception as exc:

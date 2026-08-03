@@ -12,7 +12,7 @@ from erpnext_ua.tests.integrations.frappe_fixtures import (
     ensure_leaf_master,
     ensure_selling_price_list,
 )
-from erpnext_ua.ua_fiscal import ecommerce
+from erpnext_ua.ua_fiscal import outbox
 from erpnext_ua.ua_fiscal.sales_invoice import _invoice_payments
 
 
@@ -34,6 +34,7 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         self.item = self._item()
         self.bank_account = self._bank_account()
         self.payment_mode = self._payment_mode()
+        self.register = self._register()
         self._enable_test_prro()
 
     def test_payment_submit_uses_updated_outstanding_and_explicit_payment_mode(self):
@@ -41,14 +42,14 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         payment = self._payment_entry(invoice, self.payment_mode)
         observed = {}
 
-        def fiscalize_without_external_prro(sales_invoice):
+        def fiscalize_without_external_prro(sales_invoice, **_kwargs):
             current_invoice = frappe.get_doc("Sales Invoice", sales_invoice)
             observed["outstanding_amount"] = current_invoice.outstanding_amount
             observed["payments"] = _invoice_payments(current_invoice)
             return self._mock_fiscal_receipt(current_invoice)
 
         with patch.object(
-            ecommerce,
+            outbox,
             "fiscalize_invoice",
             side_effect=fiscalize_without_external_prro,
         ) as fiscalize:
@@ -73,7 +74,10 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         self.assertEqual(invoice.outstanding_amount, 0)
         self.assertEqual(invoice.ua_ecommerce_fiscal_status, "Fiscalized")
         self.assertEqual(invoice.ua_ecommerce_fiscal_error, "")
-        fiscalize.assert_called_once_with(invoice.name)
+        self.assertEqual(fiscalize.call_args.args[0], invoice.name)
+        job = frappe.get_doc("PRRO Fiscalization Job", {"sales_invoice": invoice.name})
+        self.assertEqual(job.status, "Completed")
+        self.assertTrue(job.receipt)
 
         self._assert_missing_payment_mode_fails_closed()
 
@@ -81,12 +85,12 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         invoice = self._ecommerce_invoice()
         payment = self._payment_entry(invoice, "")
 
-        def validate_payments_without_external_prro(sales_invoice):
+        def validate_payments_without_external_prro(sales_invoice, **_kwargs):
             _invoice_payments(frappe.get_doc("Sales Invoice", sales_invoice))
             self.fail("Payment without Mode of Payment reached PRRO")
 
         with patch.object(
-            ecommerce,
+            outbox,
             "fiscalize_invoice",
             side_effect=validate_payments_without_external_prro,
         ):
@@ -96,15 +100,14 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         self.assertEqual(invoice.outstanding_amount, 0)
         self.assertEqual(invoice.ua_ecommerce_fiscal_status, "Error")
         self.assertIn("не вказано спосіб оплати", invoice.ua_ecommerce_fiscal_error)
-        self.assertFalse(
-            frappe.db.exists("PRRO Receipt", {"sales_invoice": invoice.name})
-        )
+        self.assertFalse(frappe.db.exists("PRRO Receipt", {"sales_invoice": invoice.name}))
+        job = frappe.get_doc("PRRO Fiscalization Job", {"sales_invoice": invoice.name})
+        self.assertEqual(job.status, "Pending")
+        self.assertGreater(job.attempt_count, 0)
 
     def _company(self):
         if not frappe.db.exists("Warehouse Type", "Transit"):
-            frappe.get_doc(
-                {"doctype": "Warehouse Type", "name": "Transit"}
-            ).insert(ignore_permissions=True)
+            frappe.get_doc({"doctype": "Warehouse Type", "name": "Transit"}).insert(ignore_permissions=True)
         return frappe.get_doc(
             {
                 "doctype": "Company",
@@ -191,18 +194,22 @@ class TestEcommerceFiscalization(IntegrationTestCase):
                 "is_group": 1,
             }
         ).insert(ignore_permissions=True)
-        return frappe.get_doc(
-            {
-                "doctype": "Account",
-                "account_name": f"Ecommerce Bank {self.suffix}",
-                "company": self.company.name,
-                "parent_account": bank_group.name,
-                "root_type": "Asset",
-                "account_type": "Bank",
-                "account_currency": "UAH",
-                "is_group": 0,
-            }
-        ).insert(ignore_permissions=True).name
+        return (
+            frappe.get_doc(
+                {
+                    "doctype": "Account",
+                    "account_name": f"Ecommerce Bank {self.suffix}",
+                    "company": self.company.name,
+                    "parent_account": bank_group.name,
+                    "root_type": "Asset",
+                    "account_type": "Bank",
+                    "account_currency": "UAH",
+                    "is_group": 0,
+                }
+            )
+            .insert(ignore_permissions=True)
+            .name
+        )
 
     def _payment_mode(self):
         payment_mode = frappe.get_doc(
@@ -236,6 +243,36 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         )
         settings.save(ignore_permissions=True)
         frappe.clear_document_cache("PRRO Settings")
+
+    def _register(self):
+        base = f"{int(self.suffix, 36) % 1_000_000_000:09d}"
+        weights = (-1, 5, 7, 9, 4, 6, 10, 5, 7)
+        control = sum(int(digit) * weight for digit, weight in zip(base, weights)) % 11 % 10
+        profile = frappe.get_doc(
+            {
+                "doctype": "FOP Profile",
+                "company": self.company.name,
+                "fop_full_name": f"Test FOP {self.suffix}",
+                "prro_registered_name": f"Test FOP {self.suffix}",
+                "tax_id": f"{base}{control}",
+                "single_tax_group": "3",
+                "tax_rate_mode": "5% без ПДВ",
+                "allow_manual_dps_fields": 1,
+            }
+        ).insert(ignore_permissions=True)
+        return frappe.get_doc(
+            {
+                "doctype": "PRRO Cash Register",
+                "register_name": f"_Test Ecommerce Register {self.suffix}",
+                "fop_profile": profile.name,
+                "status": "Active",
+                "fiscal_number": f"4{int(self.suffix, 36) % 10**11:011d}",
+                "register_local_number": 1,
+                "unit_name": "Integration Test Ecommerce",
+                "unit_address": "Test address",
+                "ecommerce_default": 1,
+            }
+        ).insert(ignore_permissions=True)
 
     def _ecommerce_invoice(self):
         invoice = frappe.get_doc(
@@ -285,7 +322,7 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         receipt = frappe.get_doc(
             {
                 "doctype": "PRRO Receipt",
-                "cash_register": "_Test Ecommerce Register",
+                "cash_register": self.register.name,
                 "shift": "_Test Ecommerce Shift",
                 "receipt_type": "Продаж",
                 "receipt_kind": "Sale",

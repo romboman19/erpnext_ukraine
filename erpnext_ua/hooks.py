@@ -306,6 +306,7 @@ scheduler_events = {
 			"erpnext_ua.ua_fiscal.ecommerce.recover_pending_ecommerce_receipts",
 		],
 		"* * * * *": [
+			"erpnext_ua.ua_fiscal.outbox.recover_due_jobs",
 			"erpnext_ua.ua_pos.print_service.process_print_queue",
 			"erpnext_ua.ua_gift_certificates.services.reservation.release_stale_reservations",
 			"erpnext_ua.integrations.monitoring.system_health.update_scheduler_heartbeat",

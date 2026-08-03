@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import frappe
 
-from erpnext_ua.ua_fiscal.sales_invoice import fiscalize_invoice
+from erpnext_ua.ua_fiscal.outbox import ensure_sales_invoice_job, process_job
 
 COMPLETED_RECEIPT_STATUSES = ("Fiscalized", "Offline")
 PROTECTED_RECEIPT_STATUSES = (*COMPLETED_RECEIPT_STATUSES, "Uncertain")
@@ -92,13 +92,16 @@ def _fiscalize_and_record(sales_invoice: str) -> bool:
         return False
     _set_fiscal_state(sales_invoice, "Pending")
     try:
-        receipt = fiscalize_invoice(sales_invoice)
-        status = (
-            frappe.db.get_value("PRRO Receipt", receipt, "status")
-            if receipt
-            else "Error"
-        )
-        _set_fiscal_state(sales_invoice, status or "Error")
+        job = ensure_sales_invoice_job(sales_invoice)
+        if not job:
+            frappe.throw(f"Для ecommerce рахунку {sales_invoice} не налаштовано касу ПРРО")
+        result = process_job(job.name)
+        receipt = result.get("receipt")
+        status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
+        if not status:
+            status = "Uncertain" if result.get("status") == "Uncertain" else "Error"
+        error = "" if status in PROTECTED_RECEIPT_STATUSES else result.get("error_message") or ""
+        _set_fiscal_state(sales_invoice, status, error)
         return status in COMPLETED_RECEIPT_STATUSES
     except Exception as exc:
         _, status = _receipt_state(sales_invoice)

@@ -1,0 +1,147 @@
+{
+ "actions": [],
+ "autoname": "field:idempotency_key",
+ "creation": "2026-08-03 19:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "sales_invoice",
+  "pos_order",
+  "cash_desk",
+  "cash_register",
+  "status",
+  "receipt",
+  "idempotency_key",
+  "section_retry",
+  "attempt_count",
+  "last_attempt_at",
+  "next_attempt_at",
+  "completed_at",
+  "section_error",
+  "error_message"
+ ],
+ "fields": [
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sales Invoice",
+   "options": "Sales Invoice",
+   "reqd": 1
+  },
+  {
+   "fieldname": "pos_order",
+   "fieldtype": "Link",
+   "label": "POS Order",
+   "options": "POS Order"
+  },
+  {
+   "fieldname": "cash_desk",
+   "fieldtype": "Link",
+   "label": "POS Cash Desk",
+   "options": "POS Cash Desk"
+  },
+  {
+   "fieldname": "cash_register",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Каса ПРРО",
+   "options": "PRRO Cash Register",
+   "reqd": 1
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Статус",
+   "options": "Pending\nProcessing\nUncertain\nCompleted\nManual Review\nCancelled",
+   "reqd": 1
+  },
+  {
+   "fieldname": "receipt",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Чек ПРРО",
+   "options": "PRRO Receipt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Ключ ідемпотентності",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "section_retry",
+   "fieldtype": "Section Break",
+   "label": "Доставка"
+  },
+  {
+   "default": "0",
+   "fieldname": "attempt_count",
+   "fieldtype": "Int",
+   "label": "Кількість спроб",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_attempt_at",
+   "fieldtype": "Datetime",
+   "label": "Остання спроба",
+   "read_only": 1
+  },
+  {
+   "fieldname": "next_attempt_at",
+   "fieldtype": "Datetime",
+   "in_standard_filter": 1,
+   "label": "Наступна спроба",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Завершено",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_error",
+   "fieldtype": "Section Break",
+   "label": "Остання помилка"
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Small Text",
+   "label": "Помилка",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-08-03 19:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "UA Fiscal",
+ "name": "PRRO Fiscalization Job",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "search_fields": "sales_invoice,pos_order,receipt,idempotency_key",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

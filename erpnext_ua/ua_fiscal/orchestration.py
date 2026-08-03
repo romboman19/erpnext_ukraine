@@ -1452,6 +1452,92 @@ def reconcile_receipt(receipt_name: str, client=None) -> dict:
 		return _reconcile_receipt_locked(receipt_name, client)
 
 
+def resume_pending_sale_receipt(receipt_name: str, client=None):
+	"""Resume a durable sale ledger only after DPS proves its number is unused."""
+	receipt = frappe.get_doc("PRRO Receipt", receipt_name)
+	with frappe.cache.lock(
+		f"erpnext_ua:prro:{receipt.cash_register}", timeout=600, blocking_timeout=30
+	):
+		return _resume_pending_sale_receipt_locked(receipt_name, client)
+
+
+def _resume_pending_sale_receipt_locked(receipt_name: str, client=None):
+	client = client or FiscalClient()
+	receipt = frappe.get_doc("PRRO Receipt", receipt_name)
+	if receipt.status in {"Fiscalized", "Offline", "Cancelled"}:
+		return receipt
+	if receipt.receipt_kind not in {"Sale", "Return"}:
+		raise FiscalProtocolError(f"Outbox cannot resume {receipt.receipt_kind} receipt {receipt.name}")
+	if receipt.status in {"Sending", "Uncertain", "Error"}:
+		_reconcile_receipt_locked(receipt.name, client)
+		receipt.reload()
+		if receipt.status in {"Fiscalized", "Offline", "Cancelled", "Error"}:
+			return receipt
+	if receipt.status not in {"Draft", "Signed", "Sending", "Uncertain"}:
+		return receipt
+
+	register = frappe.get_doc("PRRO Cash Register", receipt.cash_register)
+	shift = frappe.get_doc("PRRO Shift", receipt.shift)
+	if frappe.db.exists(
+		"PRRO Receipt",
+		{
+			"cash_register": register.name,
+			"local_number": (">", receipt.local_number),
+			"status": ("!=", "Cancelled"),
+		},
+	):
+		_block_register(
+			register.name,
+			f"Після незавершеного чека {receipt.name} існує пізніший локальний номер; автоматичний повтор заборонено",
+		)
+	state = client.registrar_state(register.fiscal_number, shift.kep_key) or {}
+	shift_state = _state_value(state, "ShiftState")
+	if shift_state is not None and int(shift_state) != 1:
+		_block_register(
+			register.name,
+			f"ДПС повернула стан зміни {shift_state}; повтор чека продажу дозволений лише у відкритій зміні",
+		)
+	server_next = _state_value(state, "NextLocalNum")
+	if server_next is None:
+		raise FiscalProtocolError("ДПС не повернула NextLocalNum; безпечний повтор зупинено")
+	if int(server_next) != int(receipt.local_number):
+		_block_register(
+			register.name,
+			f"ДПС очікує локальний номер {server_next}, а outbox має {receipt.local_number}; повтор заборонено",
+		)
+
+	xml = receipt.receipt_xml.encode("windows-1251")
+	ticket = _send_online(client, receipt, xml, shift.kep_key)
+	receipt.reload()
+	frappe.db.set_value(
+		"PRRO Receipt",
+		receipt.name,
+		"qr_data",
+		_build_qr(
+			register.fiscal_number,
+			ticket["order_tax_num"],
+			receipt.total_amount,
+			_receipt_document_datetime(receipt),
+		),
+		update_modified=False,
+	)
+	frappe.db.commit()
+	receipt.reload()
+	return receipt
+
+
+def _receipt_document_datetime(receipt):
+	root = ET.fromstring(receipt.receipt_xml.encode("windows-1251"))
+	head = root.find("CHECKHEAD")
+	date = head.findtext("ORDERDATE") if head is not None else None
+	time = head.findtext("ORDERTIME") if head is not None else None
+	if date and time and len(date) == 8 and len(time) == 6:
+		return frappe.utils.get_datetime(
+			f"{date[4:8]}-{date[2:4]}-{date[0:2]} {time[0:2]}:{time[2:4]}:{time[4:6]}"
+		)
+	return receipt.creation
+
+
 def _finalize_confirmed_receipt(receipt, register, shift, client=None):
 	"""Idempotently applies local state changes after DPS confirmed a document.
 
@@ -1570,7 +1656,7 @@ def _reconcile_receipt_locked(receipt_name: str, client=None) -> dict:
 		frappe.db.commit()
 		receipt.reload()
 		return receipt.as_dict()
-	if receipt.status not in {"Uncertain", "Error"}:
+	if receipt.status not in {"Sending", "Uncertain", "Error"}:
 		return receipt.as_dict()
 	register = frappe.get_doc("PRRO Cash Register", receipt.cash_register)
 	shift = frappe.get_doc("PRRO Shift", receipt.shift)
