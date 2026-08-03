@@ -15,6 +15,7 @@
 | runbooks (Phase 8) | ✅ усі 17 за §45 |
 | Financial Integrity (§31) | ✅ 5 перевірок, severity, гейт на закриття періоду |
 | Serial sale/return | ✅ clean-site acceptance створює серійні приходи, продажі й повернення |
+| Batch sale/return | ✅ дві партії/два ФОП, cross-company sale і partial return з exact cost |
 | GSF + CC coexistence | ✅ змішаний sale/return, domain lineage і read-only CC discovery у clean-site CI |
 | load / deadlock tests | ⬜ потребують стека зі scheduler і навантаження |
 | production acceptance | ⬜ **операція власника** — див. розділ 11 HANDOFF |
@@ -90,8 +91,6 @@ rollback знову `ok`.
 - **Load / deadlock / failure-injection тести (§41 Phase 8)** — потрібен стек зі
   scheduler і навантаженням. §37.7 (реальне подвійне бронювання) уже доведено
   двома процесами в Phase 3; решта потребує середовища, якого немає.
-- **Batch allocation/return** — Serial уже доведений clean-site фікстурою;
-  окремий Batch-сценарій ще потрібен.
 - **§18.4 renderer друку** — `gsf_display_group` на рядках готовий, самого
   renderer немає.
 - **Проводка коригувань інвентаризації** — свідомо, див. вище.

@@ -76,10 +76,10 @@ These items are not silently enabled by this remediation:
    fulfilment workflow decision. Existing endpoints remain Sales Invoice based.
 3. Automatic seller-FOP routing requires an approved policy for tax limits,
    stock ownership, returns, manual overrides, and audit responsibility.
-4. Serial GSF and mixed GSF/consignment/commission sale and return flows run in
-   clean-site CI. Batch, sustained load, deadlock, and failure-injection
-   scenarios still require a production-shaped staging environment with
-   scheduler and workers.
+4. Serial, Batch, and mixed GSF/consignment/commission sale and return flows run
+   in clean-site CI. Sustained load, deadlock, and failure-injection scenarios
+   still require a production-shaped staging environment with scheduler and
+   workers.
 5. The legal acceptability and custody model of the external KEP signer requires
    owner and legal/compliance approval; code tests cannot grant that approval.
 
