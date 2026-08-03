@@ -67,14 +67,17 @@ Harness послідовно:
    `EXPIRED` від worker;
 3. робить резерв без commit, надсилає процесу `SIGKILL`, перевіряє rollback і
    повторне використання того самого scope lock;
-4. запускає окремі процеси, які одночасно reserve/release по одній одиниці;
-5. агрегує latency, помилки, InnoDB deadlocks, heartbeat, repost queue та
+4. запускає дві окремі DB-сесії, які одночасно забирають усі останні 10
+   одиниць, і вимагає рівно одного переможця без oversell;
+5. запускає окремі процеси, які одночасно reserve/release по одній одиниці;
+6. агрегує latency, помилки, InnoDB deadlocks, heartbeat, repost queue та
    залишкові live allocations.
 
 ## Pass criteria
 
 - scheduled expiry виконаний worker-ом не довше ніж за 45 секунд;
 - аварійний процес не залишив allocation, reserved quantity або lock;
+- у last-stock race рівно один процес отримав усі 10 одиниць, другий відмову;
 - усі `workers × iterations` операцій успішні;
 - p95 reserve/release не перевищує 5 секунд;
 - після тесту `reserved_qty = 0`, live allocation = 0, queued repost = 0;

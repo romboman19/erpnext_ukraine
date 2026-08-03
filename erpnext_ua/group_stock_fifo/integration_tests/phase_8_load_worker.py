@@ -57,6 +57,8 @@ def prepare(
     for worker in range(1, workers + 1):
         _result_path(run_id, worker).unlink(missing_ok=True)
     _failure_ready_path(run_id).unlink(missing_ok=True)
+    for contestant in ("a", "b"):
+        _race_result_path(run_id, contestant).unlink(missing_ok=True)
 
     from ..spikes.fixtures import build as build_phase_0
     from .phase_3_fixture import build as build_phase_3
@@ -292,6 +294,53 @@ def verify_crash_recovery(run_id: str) -> dict[str, Any]:
     return output
 
 
+def verify_last_stock_race(run_id: str) -> dict[str, Any]:
+    """Require exactly one winner when two processes reserve the full pool."""
+    assert_site()
+    run_id = _run_id(run_id)
+    results = [_load_race_result(run_id, contestant) for contestant in ("a", "b")]
+    winners = [result for result in results if result.get("won")]
+    losers = [result for result in results if not result.get("won")]
+    checks = {
+        "exactly_one_winner": len(winners) == 1,
+        "exactly_one_loser": len(losers) == 1,
+        "winner_took_full_pool": (
+            len(winners) == 1 and Decimal(str(winners[0].get("allocated_qty"))) == Decimal("10")
+        ),
+        "reserved_total_never_exceeded_stock": _reserved_total() <= Decimal("10"),
+    }
+
+    for winner in winners:
+        allocation_name = winner.get("allocation")
+        if allocation_name and frappe.db.get_value(
+            "GSF Allocation", allocation_name, "status"
+        ) in LIVE_ALLOCATION_STATUSES:
+            release_allocation(allocation_name, reason=f"Phase 8 last-stock race {run_id}")
+            frappe.db.commit()
+    checks.update(
+        {
+            "no_reserved_qty_after_race": _reserved_total() == 0,
+            "no_live_race_allocations": frappe.db.count(
+                "GSF Allocation",
+                {
+                    "idempotency_key": ("like", f"race:{run_id}:%"),
+                    "status": ("in", LIVE_ALLOCATION_STATUSES),
+                },
+            )
+            == 0,
+        }
+    )
+    output = {
+        "status": "pass" if all(checks.values()) else "fail",
+        "results": results,
+        "checks": checks,
+    }
+    print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
+    if output["status"] != "pass":
+        raise RuntimeError("GSF last-stock race acceptance failed")
+    return output
+
+
 def cleanup_failed_run(confirm_write: str, run_id: str) -> dict[str, Any]:
     """Release live load evidence after a failed acceptance attempt."""
     assert_site()
@@ -435,7 +484,7 @@ def _reserved_total() -> Decimal:
 
 
 def _assert_run_id_unused(run_id: str) -> None:
-    for prefix in ("load", "failure", "expiry"):
+    for prefix in ("load", "failure", "expiry", "race"):
         if frappe.db.exists(
             "GSF Allocation", {"idempotency_key": ("like", f"{prefix}:{run_id}%")}
         ):
@@ -465,6 +514,24 @@ def _result_path(run_id: str, worker: int) -> Path:
 
 def _failure_ready_path(run_id: str) -> Path:
     return Path("/tmp") / f"gsf-failure-{run_id}.ready"
+
+
+def _race_key(run_id: str, contestant: str) -> str:
+    return f"race:{run_id}:{contestant}"
+
+
+def _race_result_path(run_id: str, contestant: str) -> Path:
+    return Path("/tmp") / f"gsf-race-{_race_key(run_id, contestant)}.json"
+
+
+def _load_race_result(run_id: str, contestant: str) -> dict[str, Any]:
+    path = _race_result_path(run_id, contestant)
+    if not path.is_file():
+        raise RuntimeError(f"Missing last-stock race result {contestant}")
+    result = json.loads(path.read_text(encoding="utf-8"))
+    if result.get("key") != _race_key(run_id, contestant):
+        raise RuntimeError(f"Invalid last-stock race coordinates {contestant}")
+    return result
 
 
 def _load_result(run_id: str, worker: int) -> dict[str, Any]:

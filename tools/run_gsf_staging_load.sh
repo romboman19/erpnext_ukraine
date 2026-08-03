@@ -94,6 +94,31 @@ failure_os_pid=""
 docker exec "$container" bench --site "$site" execute "$module.verify_crash_recovery" \
   --kwargs "{\"run_id\":\"$run_id\"}"
 
+race_module=erpnext_ua.group_stock_fifo.integration_tests.phase_3_race
+race_start=$(($(date +%s) + 8))
+race_pids=()
+race_logs=()
+for contestant in a b; do
+  race_key="race:${run_id}:${contestant}"
+  race_log="/tmp/gsf-race-${run_id}-${contestant}.log"
+  race_logs+=("$race_log")
+  docker exec \
+    -e GSF_RACE_KEY="$race_key" \
+    -e GSF_RACE_START="$race_start" \
+    "$container" bench --site "$site" execute "$race_module.run" >"$race_log" 2>&1 &
+  race_pids+=("$!")
+done
+for race_pid in "${race_pids[@]}"; do
+  if ! wait "$race_pid"; then
+    for race_log in "${race_logs[@]}"; do
+      sed -n '1,240p' "$race_log" >&2
+    done
+    exit 1
+  fi
+done
+docker exec "$container" bench --site "$site" execute "$module.verify_last_stock_race" \
+  --kwargs "{\"run_id\":\"$run_id\"}"
+
 start_at=$(($(date +%s) + 8))
 pids=()
 logs=()
