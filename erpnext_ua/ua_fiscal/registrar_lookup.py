@@ -40,7 +40,7 @@ def parse_objects(payload: dict | None) -> list[dict]:
 	return rows
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def list_registered_objects(kep_key: str) -> list[dict]:
 	"""Господарські одиниці й каси ПРРО, вже зареєстровані в ДПС для цього КЕП."""
 	frappe.only_for(["System Manager", "Accounts Manager"])

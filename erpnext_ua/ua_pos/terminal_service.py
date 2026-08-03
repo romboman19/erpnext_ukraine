@@ -31,13 +31,13 @@ def resolve_terminal(terminal: str) -> dict:
 	return {"name": doc.name, "ip": doc.ip_address, "port": int(doc.tcp_port or 2000)}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def test_connection(terminal: str) -> dict:
 	frappe.only_for(("System Manager", "POS Administrator"))
 	return {"ok": get_adapter().ping(resolve_terminal(terminal))}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def test_payment(terminal: str, amount: float = 1) -> dict:
 	frappe.only_for(("System Manager", "POS Administrator"))
 	operation_id = f"TEST-SALE-{frappe.generate_hash(length=12)}"
@@ -45,7 +45,7 @@ def test_payment(terminal: str, amount: float = 1) -> dict:
 	return {"operation_id": operation_id, **result.as_dict()}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def test_refund(terminal: str, amount: float, reference: str) -> dict:
 	frappe.only_for(("System Manager", "POS Administrator"))
 	operation_id = f"TEST-REFUND-{frappe.generate_hash(length=12)}"
@@ -53,7 +53,7 @@ def test_refund(terminal: str, amount: float, reference: str) -> dict:
 	return {"operation_id": operation_id, **result.as_dict()}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def operation_status(terminal: str, operation_id: str) -> dict:
 	frappe.only_for(("System Manager", "POS Administrator"))
 	return get_adapter().status(resolve_terminal(terminal), operation_id).as_dict()

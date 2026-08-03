@@ -268,7 +268,6 @@ def _related_receipt(si) -> str | None:
 	)
 
 
-@frappe.whitelist()
 def fiscalize_invoice(sales_invoice: str, client=None) -> str | None:
 	"""Створює й фіскалізує чек ПРРО з POS-рахунку. Ідемпотентно."""
 	existing = frappe.db.get_value(

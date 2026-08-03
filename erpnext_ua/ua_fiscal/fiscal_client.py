@@ -255,7 +255,8 @@ class FiscalClient:
 		) or {}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def check_server_state():
+	frappe.only_for(("System Manager", "Accounts Manager"))
 	client = FiscalClient()
 	return {"dps": client.server_state(), "signer": client.signer_health()}

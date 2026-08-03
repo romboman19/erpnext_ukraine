@@ -12,7 +12,7 @@ class PRROReceipt(Document):
 			frappe.throw("Фіскальний журнал є незмінним; доставлені, офлайн або невизначені документи видаляти не можна")
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def receipt_preview(name: str) -> dict:
 	doc = frappe.get_doc("PRRO Receipt", name)
 	if not frappe.has_permission("PRRO Receipt", "read", doc=doc):
