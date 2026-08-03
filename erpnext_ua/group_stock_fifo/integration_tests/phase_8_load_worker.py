@@ -307,10 +307,11 @@ def cleanup_failed_run(confirm_write: str, run_id: str) -> dict[str, Any]:
         release_allocation(name, reason=f"Failed Phase 8 acceptance cleanup {run_id}")
         frappe.db.commit()
         released.append(name)
+    reserved_total = _reserved_total()
     output = {
         "run_id": run_id,
         "released": released,
-        "reserved_qty_after": str(_reserved_total()),
+        "reserved_qty_after": str(reserved_total),
         "live_allocations_after": frappe.db.count(
             "GSF Allocation",
             {
@@ -319,7 +320,7 @@ def cleanup_failed_run(confirm_write: str, run_id: str) -> dict[str, Any]:
             },
         ),
     }
-    if output["reserved_qty_after"] != "0" or output["live_allocations_after"]:
+    if reserved_total != 0 or output["live_allocations_after"]:
         raise RuntimeError("Failed Phase 8 run cleanup left a live reservation")
     return output
 
