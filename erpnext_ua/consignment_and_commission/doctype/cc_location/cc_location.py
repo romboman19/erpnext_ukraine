@@ -88,3 +88,18 @@ class CCLocation(Document):
         )
         if not desk or desk.status != "Active" or desk.company != self.company:
             frappe.throw("POS Cash Desk must be active and belong to the CC Location Company")
+
+    def on_update(self) -> None:
+        self._sync_gsf_warehouse_registry()
+
+    def after_delete(self) -> None:
+        self._sync_gsf_warehouse_registry()
+
+    @staticmethod
+    def _sync_gsf_warehouse_registry() -> None:
+        """Keep read-only CC ownership visible to GSF without writing CC data."""
+        from erpnext_ua.group_stock_fifo.setup.cc_discovery import (
+            discover_cc_warehouses,
+        )
+
+        discover_cc_warehouses()

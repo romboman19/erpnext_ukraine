@@ -24,6 +24,8 @@ docker exec frappe-test-backend-1 bench --site <site> execute erpnext_ua.group_s
 - `CLEARING_ACCOUNT_MISSING` — немає Due From/Due To або вони витратні (§15.3);
 - `Selling Settings does not allow one Item on several rows` — §18.3;
 - `Warehouse ... is bound to two stock domains` — `warehouse-provisioning.md`;
+- `CC Warehouse ... discovery is stale` — виконайте migrate і перевірте
+  `cc-coexistence.md`; не перепризначайте склад вручну;
 - `Staging lane ... is dirty` — `dirty-stage-recovery.md`.
 
 ## Перевірка

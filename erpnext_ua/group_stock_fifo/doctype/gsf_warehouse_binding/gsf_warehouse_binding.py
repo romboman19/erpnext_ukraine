@@ -25,6 +25,7 @@ class GSFWarehouseBinding(Document):
         if not warehouse:
             frappe.throw(f"Warehouse {self.warehouse} not found", title="WAREHOUSE_BINDING_MISSING")
 
+        previous = self.get_doc_before_save()
         request = BindingRequest(
             warehouse=WarehouseFacts(
                 name=self.warehouse,
@@ -37,7 +38,7 @@ class GSFWarehouseBinding(Document):
             manager_app=self.manager_app,
             existing_binding_app=self._foreign_domain(),
             has_stock_movements=bool(self.first_stock_posting),
-            previous_role=self.get_doc_before_save().warehouse_role if not self.is_new() else None,
+            previous_role=previous.warehouse_role if previous else None,
         )
         try:
             validate_binding(request)
