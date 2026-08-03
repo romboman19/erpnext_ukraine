@@ -24,7 +24,10 @@ from frappe.utils import get_datetime, now_datetime
 from frappe.utils.background_jobs import get_workers
 from frappe.utils.scheduler import is_scheduler_inactive
 
-from erpnext_ua.integrations.monitoring.system_health import SCHEDULER_HEARTBEAT_KEY
+from erpnext_ua.integrations.monitoring.system_health import (
+    SCHEDULER_HEARTBEAT_KEY,
+    scheduler_heartbeat_window_seconds,
+)
 
 from ..services.allocations import release_allocation, reserve
 from ..services.reservation import (
@@ -93,6 +96,7 @@ def health() -> dict[str, Any]:
         "scheduler_active": not is_scheduler_inactive(),
         "scheduler_heartbeat": heartbeat,
         "scheduler_heartbeat_age_seconds": heartbeat_age,
+        "scheduler_heartbeat_window_seconds": scheduler_heartbeat_window_seconds(),
         "workers": len(get_workers()),
         "queued_reposts": frappe.db.count(
             "Repost Item Valuation",
@@ -285,6 +289,41 @@ def verify_crash_recovery(run_id: str) -> dict[str, Any]:
     return output
 
 
+def cleanup_failed_run(confirm_write: str, run_id: str) -> dict[str, Any]:
+    """Release live load evidence after a failed acceptance attempt."""
+    assert_site()
+    if confirm_write != "RELEASE_FAILED_GSF_PHASE_8_RUN":
+        raise RuntimeError("confirm_write token required")
+    run_id = _run_id(run_id)
+    released = []
+    for name in frappe.get_all(
+        "GSF Allocation",
+        {
+            "idempotency_key": ("like", f"load:{run_id}:%"),
+            "status": ("in", LIVE_ALLOCATION_STATUSES),
+        },
+        pluck="name",
+    ):
+        release_allocation(name, reason=f"Failed Phase 8 acceptance cleanup {run_id}")
+        frappe.db.commit()
+        released.append(name)
+    output = {
+        "run_id": run_id,
+        "released": released,
+        "reserved_qty_after": str(_reserved_total()),
+        "live_allocations_after": frappe.db.count(
+            "GSF Allocation",
+            {
+                "idempotency_key": ("like", f"load:{run_id}:%"),
+                "status": ("in", LIVE_ALLOCATION_STATUSES),
+            },
+        ),
+    }
+    if output["reserved_qty_after"] != "0" or output["live_allocations_after"]:
+        raise RuntimeError("Failed Phase 8 run cleanup left a live reservation")
+    return output
+
+
 def report(
     run_id: str,
     expected_workers: int,
@@ -324,7 +363,8 @@ def report(
         "scheduler_active": health_snapshot["scheduler_active"],
         "scheduler_heartbeat_recent": (
             health_snapshot["scheduler_heartbeat_age_seconds"] is not None
-            and health_snapshot["scheduler_heartbeat_age_seconds"] <= 180
+            and health_snapshot["scheduler_heartbeat_age_seconds"]
+            <= health_snapshot["scheduler_heartbeat_window_seconds"]
         ),
         "worker_online": health_snapshot["workers"] >= 1,
     }

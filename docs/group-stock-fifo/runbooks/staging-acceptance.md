@@ -78,7 +78,8 @@ Harness послідовно:
 - усі `workers × iterations` операцій успішні;
 - p95 reserve/release не перевищує 5 секунд;
 - після тесту `reserved_qty = 0`, live allocation = 0, queued repost = 0;
-- scheduler active, heartbeat не старший 180 секунд, worker online.
+- scheduler active, heartbeat вкладається в application health window
+  (`max(3 × scheduler tick, 15 хвилин)`), worker online.
 
 Наявність InnoDB deadlock не є автоматичним fail, якщо bounded retry завершив
 усі операції без витоку. Лічильник фіксується в evidence для порівняння між
@@ -94,6 +95,15 @@ docker exec <backend> bench --site <acceptance-site> execute \
   erpnext_ua.group_stock_fifo.integration_tests.phase_3_fixture.teardown \
   --kwargs '{"confirm_write":"DROP_GSF_PHASE_3"}'
 docker exec <backend> bench --site <acceptance-site> disable-scheduler
+```
+
+Якщо harness зупинився після вже закоміченого резерву, спершу зберегти fail
+evidence, а потім перевести лише allocation цього `run-id` у terminal state:
+
+```bash
+docker exec <backend> bench --site <acceptance-site> execute \
+  erpnext_ua.group_stock_fifo.integration_tests.phase_8_load_worker.cleanup_failed_run \
+  --kwargs '{"confirm_write":"RELEASE_FAILED_GSF_PHASE_8_RUN","run_id":"<run-id>"}'
 ```
 
 ## Відомі image gates перед production

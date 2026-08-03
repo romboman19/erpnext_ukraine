@@ -279,8 +279,17 @@ def _lock_scope(request: ReservationRequest) -> str:
             # Another request created the same scope row first; that is the row
             # we wanted, so take its lock rather than retry the whole attempt.
             pass
-    frappe.db.sql("select name from `tabGSF Scope Lock` where name = %s for update", (name,))
+    _lock_scope_row(name)
     return name
+
+
+def _lock_scope_row(name: str) -> None:
+    rows = frappe.db.sql(
+        "select name from `tabGSF Scope Lock` where name = %s for update",
+        (name,),
+    )
+    if not rows:
+        raise GSFError(f"FIFO scope lock {name} does not exist", "ALLOCATION_CONFLICT")
 
 
 def _plan(request: ReservationRequest) -> list:
@@ -530,6 +539,26 @@ def release_positions(allocation: Any) -> None:
 
 
 def _finish(allocation_name: str, *, status: str, **fields) -> Any:
+    # Release/consume/expire touches the same balance rows as reserve. It must
+    # therefore enter through the same level-2 scope lock before taking the
+    # allocation and balance locks. Without this, concurrent releases invert
+    # §13.2 and MariaDB can raise error 1020 after the reservation was already
+    # committed, leaving a live hold behind.
+    scope = frappe.db.get_value(
+        "GSF Allocation",
+        allocation_name,
+        ["company_group", "physical_location", "item_code"],
+        as_dict=True,
+    )
+    if not scope:
+        raise GSFError(f"Allocation {allocation_name} does not exist", "ALLOCATION_CONFLICT")
+    _lock_scope_row(
+        scope_lock_identity(
+            company_group=scope.company_group,
+            physical_location=scope.physical_location,
+            item_code=scope.item_code,
+        )
+    )
     rows = frappe.db.sql(
         "select status from `tabGSF Allocation` where name = %s for update",
         (allocation_name,),
