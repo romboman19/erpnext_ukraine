@@ -9,6 +9,7 @@
   "single_tax_group",
   "column_break_main",
   "minimum_wage",
+  "subsistence_minimum",
   "income_limit",
   "section_rates",
   "single_tax_monthly",
@@ -17,7 +18,11 @@
   "column_break_rates",
   "military_levy_monthly",
   "military_levy_percent",
-  "esv_monthly"
+  "esv_monthly",
+  "section_sources",
+  "official_sources",
+  "column_break_sources",
+  "verified_on"
  ],
  "fields": [
   {
@@ -42,7 +47,13 @@
   {
    "fieldname": "minimum_wage",
    "fieldtype": "Currency",
-   "label": "Мінімальна зарплата, грн"
+   "label": "Мінімальна зарплата, грн",
+   "reqd": 1
+  },
+  {
+   "fieldname": "subsistence_minimum",
+   "fieldtype": "Currency",
+   "label": "Прожитковий мінімум працездатної особи, грн"
   },
   {
    "fieldname": "income_limit",
@@ -59,7 +70,7 @@
   {
    "fieldname": "single_tax_monthly",
    "fieldtype": "Currency",
-   "label": "Єдиний податок, грн/міс"
+   "label": "Єдиний податок (максимум), грн/міс"
   },
   {
    "fieldname": "single_tax_percent_no_vat",
@@ -88,7 +99,30 @@
   {
    "fieldname": "esv_monthly",
    "fieldtype": "Currency",
-   "label": "ЄСВ (мінімальний), грн/міс"
+   "label": "ЄСВ (мінімальний), грн/міс",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_sources",
+   "fieldtype": "Section Break",
+   "label": "Нормативні джерела"
+  },
+  {
+   "description": "Один офіційний HTTPS URL у домені gov.ua на рядок; для груп 1–2 додайте рішення громади.",
+   "fieldname": "official_sources",
+   "fieldtype": "Small Text",
+   "label": "Офіційні джерела",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_sources",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "verified_on",
+   "fieldtype": "Date",
+   "label": "Перевірено станом на",
+   "reqd": 1
   }
  ],
  "links": [],
@@ -124,5 +158,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
+ "track_changes": 1,
  "states": []
 }

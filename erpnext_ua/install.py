@@ -6,51 +6,131 @@ from pathlib import Path
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
-# Довідкові параметри 2026 (МЗП 8647 грн, ПМ для працездатних 3028 грн)
+# Довідкові параметри 2026, перевірені за Законом про Держбюджет і ДПС.
+# ЄП груп 1–2 — законодавчий максимум; фактична ставка залежить від рішення громади.
+TAX_SOURCE_BUDGET_2026 = "https://zakon.rada.gov.ua/laws/show/4695-20"
+TAX_SOURCE_GROUPS_1_2_2026 = "https://tax.gov.ua/media-tsentr/novini/968282.html"
+TAX_SOURCE_GROUP_3_2026 = "https://mk.tax.gov.ua/media-ark/news-ark/976670.html"
 TAX_PARAMETERS = [
 	{
 		"year": 2026,
 		"single_tax_group": "1",
 		"minimum_wage": 8647,
+		"subsistence_minimum": 3328,
 		"income_limit": 1_444_049,
-		"single_tax_monthly": 302.80,
+		"single_tax_monthly": 332.80,
 		"military_levy_monthly": 864.70,
 		"esv_monthly": 1902.34,
+		"official_sources": f"{TAX_SOURCE_BUDGET_2026}\n{TAX_SOURCE_GROUPS_1_2_2026}",
+		"verified_on": "2026-08-03",
 	},
 	{
 		"year": 2026,
 		"single_tax_group": "2",
 		"minimum_wage": 8647,
+		"subsistence_minimum": 3328,
 		"income_limit": 7_211_598,
 		"single_tax_monthly": 1729.40,
 		"military_levy_monthly": 864.70,
 		"esv_monthly": 1902.34,
+		"official_sources": f"{TAX_SOURCE_BUDGET_2026}\n{TAX_SOURCE_GROUPS_1_2_2026}",
+		"verified_on": "2026-08-03",
 	},
 	{
 		"year": 2026,
 		"single_tax_group": "3",
 		"minimum_wage": 8647,
+		"subsistence_minimum": 3328,
 		"income_limit": 10_091_049,
 		"single_tax_percent_no_vat": 5,
 		"single_tax_percent_vat": 3,
 		"military_levy_percent": 1,
 		"esv_monthly": 1902.34,
+		"official_sources": f"{TAX_SOURCE_BUDGET_2026}\n{TAX_SOURCE_GROUP_3_2026}",
+		"verified_on": "2026-08-03",
 	},
 ]
 
 
 def ensure_tax_parameters():
-	"""Створює довідкові UA Tax Parameters, якщо їх ще немає (існуючі не перезаписує)."""
+	"""Create tax parameters and safely repair known seed/provenance defects."""
 	for row in TAX_PARAMETERS:
-		if frappe.db.exists(
+		name = frappe.db.exists(
 			"UA Tax Parameters",
 			{"year": row["year"], "single_tax_group": row["single_tax_group"]},
-		):
+		)
+		if name:
+			_repair_seeded_tax_parameters(name, row)
 			continue
 		doc = frappe.new_doc("UA Tax Parameters")
 		doc.update(row)
 		doc.insert(ignore_permissions=True)
 	frappe.db.commit()
+
+
+def _repair_seeded_tax_parameters(name: str, row: dict) -> None:
+	"""Backfill provenance without overwriting deliberate administrator values."""
+	doc = frappe.get_doc("UA Tax Parameters", name)
+	if not _matches_known_tax_seed(doc, row):
+		return
+
+	updates = {}
+	for fieldname in ("subsistence_minimum", "official_sources"):
+		if not doc.get(fieldname):
+			updates[fieldname] = row[fieldname]
+
+	# 302.80 was the app's erroneous 2026 group-1 seed (the 2025 subsistence
+	# minimum). Auto-correct it only while the record is demonstrably untouched;
+	# a modified row could coincidentally contain a deliberate local rate.
+	wrong_group_one_seed = (
+		row["year"] == 2026
+		and row["single_tax_group"] == "1"
+		and frappe.utils.flt(doc.single_tax_monthly, 2) == 302.80
+	)
+	if wrong_group_one_seed:
+		if doc.creation == doc.modified:
+			updates["single_tax_monthly"] = 332.80
+			updates["verified_on"] = row["verified_on"]
+		else:
+			frappe.log_error(
+				title=f"Потрібна перевірка податкових параметрів: {doc.name}",
+				message=(
+					"Значення ЄП 302,80 грн збігається зі старим помилковим seed, але запис уже "
+					"змінювали. Автоматичне виправлення пропущено; звірте ставку громади, "
+					"виправте суму та встановіть дату перевірки."
+				),
+			)
+	elif not doc.verified_on:
+		updates["verified_on"] = row["verified_on"]
+
+	if updates:
+		frappe.db.set_value("UA Tax Parameters", doc.name, updates, update_modified=False)
+
+
+def _matches_known_tax_seed(doc, row: dict) -> bool:
+	"""Recognize the old app defaults before attaching app-owned provenance."""
+	numeric_fields = (
+		"minimum_wage",
+		"income_limit",
+		"single_tax_monthly",
+		"single_tax_percent_no_vat",
+		"single_tax_percent_vat",
+		"military_levy_monthly",
+		"military_levy_percent",
+		"esv_monthly",
+	)
+	for fieldname in numeric_fields:
+		expected = row.get(fieldname)
+		actual = doc.get(fieldname)
+		if row["single_tax_group"] == "1" and fieldname == "single_tax_monthly":
+			if frappe.utils.flt(actual, 2) not in (302.80, 332.80):
+				return False
+		elif expected is None:
+			if actual not in (None, "", 0):
+				return False
+		elif frappe.utils.flt(actual, 2) != frappe.utils.flt(expected, 2):
+			return False
+	return True
 
 
 POS_ROLES = ["POS Cashier", "POS Senior Cashier", "POS Manager", "POS Administrator", "PRRO Operator"]

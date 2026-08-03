@@ -11,6 +11,11 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, nowdate
 
+from erpnext_ua.ua_fop.tax_rules import (
+	COMMON_PARAMETER_FIELDS,
+	GROUP_PARAMETER_FIELDS,
+	missing_parameter_fields,
+)
 from erpnext_ua.ua_setup.readiness import (
 	REQUIRED_LANGUAGE,
 	Check,
@@ -46,6 +51,7 @@ def collect_state(company: str | None = None) -> SetupState:
 	"""
 	company = company or _default_company()
 	company_row = _company_row(company)
+	current_year = getdate(nowdate()).year
 
 	return SetupState(
 		company=company or "",
@@ -57,7 +63,8 @@ def collect_state(company: str | None = None) -> SetupState:
 		tax_parameter_years=frozenset(
 			int(year) for year in _all("UA Tax Parameters", pluck="year") if year
 		),
-		current_year=getdate(nowdate()).year,
+		tax_parameter_groups=_complete_tax_parameter_groups(current_year),
+		current_year=current_year,
 		active_fop_profiles=_count("FOP Profile", {"status": "Active"}),
 		fop_has_kved=bool(_count("FOP Profile", {"status": "Active", "kved_main": ("is", "set")})),
 		warehouses=_count("Warehouse", {"company": company, "is_group": 0}) if company else 0,
@@ -75,6 +82,25 @@ def collect_state(company: str | None = None) -> SetupState:
 		prro_signer_configured=bool(_single_value("PRRO Settings", "signservice_url")),
 		print_formats=_count("Print Format", {"module": ("in", ("UA POS", "UA Price Tags"))}),
 		enabled_connectors=_enabled_connectors(),
+	)
+
+
+def _complete_tax_parameter_groups(year: int) -> frozenset[str]:
+	doctype = "UA Tax Parameters"
+	fields = {
+		"single_tax_group",
+		*COMMON_PARAMETER_FIELDS,
+		*(fieldname for required in GROUP_PARAMETER_FIELDS.values() for fieldname in required),
+	}
+	if not frappe.db.table_exists(doctype) or any(
+		not frappe.db.has_column(doctype, fieldname) for fieldname in fields
+	):
+		return frozenset()
+	rows = frappe.get_all(doctype, filters={"year": year}, fields=sorted(fields))
+	return frozenset(
+		str(row.single_tax_group)
+		for row in rows
+		if not missing_parameter_fields(str(row.single_tax_group), row)
 	)
 
 

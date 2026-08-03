@@ -50,6 +50,19 @@ The clean-site workflow explicitly runs:
 The static workflow also verifies that GSF, loyalty, gift-certificate, Nova
 Poshta, and Ukrposhta DocType definitions are included in the wheel.
 
+### Tax parameters and calendar
+
+- The 2026 group-1 seed is corrected from `302.80` to the official maximum
+  `332.80`; provenance and a verification date are stored with every yearly set.
+- Readiness requires a complete current-year set for groups 1–3.
+- Calendar generation fails closed on missing fields, is POST-only, and requires
+  an accounting-manager or system-manager role.
+- Statutory and operational dates are stored separately. Weekend rules for
+  declarations, quarterly tax, military levy, advance single tax, and ЄСВ are
+  tested independently.
+- Open generated deadlines are refreshed after migration; completed rows retain
+  their historical operational date and receive missing provenance only.
+
 ## Remaining production gates
 
 These items are not silently enabled by this remediation:

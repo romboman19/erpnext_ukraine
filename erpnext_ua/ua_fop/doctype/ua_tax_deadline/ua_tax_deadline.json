@@ -10,11 +10,13 @@
   "tax_type",
   "column_break_main",
   "period_label",
+  "statutory_due_date",
   "due_date",
   "status",
   "section_amount",
   "amount",
   "column_break_amount",
+  "tax_parameters",
   "notes",
   "section_flags",
   "notified_due_soon",
@@ -58,6 +60,13 @@
    "reqd": 1
   },
   {
+   "fieldname": "statutory_due_date",
+   "fieldtype": "Date",
+   "label": "Строк за календарними днями",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
    "fieldname": "due_date",
    "fieldtype": "Date",
    "in_list_view": 1,
@@ -86,6 +95,13 @@
   {
    "fieldname": "column_break_amount",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "tax_parameters",
+   "fieldtype": "Link",
+   "label": "Набір податкових параметрів",
+   "options": "UA Tax Parameters",
+   "read_only": 1
   },
   {
    "fieldname": "notes",

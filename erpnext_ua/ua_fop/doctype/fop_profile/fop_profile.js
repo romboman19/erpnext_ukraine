@@ -28,9 +28,10 @@ frappe.ui.form.on("FOP Profile", {
 						.then((r) => {
 							const m = r.message;
 							frappe.msgprint(
-								__("Календар на {0}: створено {1}, вже існувало {2}", [
+								__("Календар на {0}: створено {1}, оновлено {2}, без змін {3}", [
 									m.year,
 									m.created,
+									m.updated,
 									m.skipped,
 								])
 							);
