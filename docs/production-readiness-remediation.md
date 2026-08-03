@@ -55,6 +55,8 @@ Poshta, and Ukrposhta DocType definitions are included in the wheel.
 - The 2026 group-1 seed is corrected from `302.80` to the official maximum
   `332.80`; provenance and a verification date are stored with every yearly set.
 - Readiness requires a complete current-year set for groups 1–3.
+- Groups 1–2 require a separately verified local rate on every FOP Profile, so
+  Multi-FOP companies never share one community decision by accident.
 - Calendar generation fails closed on missing fields, is POST-only, and requires
   an accounting-manager or system-manager role.
 - Statutory and operational dates are stored separately. Weekend rules for

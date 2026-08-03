@@ -129,6 +129,14 @@ class TestSetupReadiness(unittest.TestCase):
 		self.assertIs(check.status, Status.PENDING)
 		self.assertIn("2", check.detail)
 
+	def test_group_one_or_two_fop_needs_a_current_verified_local_rate(self):
+		state = replace(READY_TO_SELL, fop_profiles_missing_tax_rate=1)
+
+		check = check_for(state, "fop_profile")
+		self.assertIs(check.status, Status.PENDING)
+		self.assertIn("фактичної ставки", check.detail)
+		self.assertFalse(can_sell(evaluate(state)))
+
 	def test_cash_only_payment_setup_is_not_enough(self):
 		state = replace(READY_TO_SELL, pos_cashless_payment_methods=0)
 

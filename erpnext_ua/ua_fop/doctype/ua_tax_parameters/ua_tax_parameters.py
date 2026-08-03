@@ -1,17 +1,13 @@
-from urllib.parse import urlparse
-
 import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt
 
-from erpnext_ua.ua_fop.tax_rules import missing_parameter_fields
-
-
-def _is_official_source(url: str) -> bool:
-	parsed = urlparse(url)
-	hostname = (parsed.hostname or "").lower()
-	return parsed.scheme == "https" and (hostname == "gov.ua" or hostname.endswith(".gov.ua"))
+from erpnext_ua.ua_fop.tax_rules import (
+	is_official_source,
+	missing_parameter_fields,
+	official_source_urls,
+)
 
 
 class UATaxParameters(Document):
@@ -60,10 +56,10 @@ class UATaxParameters(Document):
 			)
 
 	def _validate_sources(self):
-		sources = [line.strip() for line in (self.official_sources or "").splitlines() if line.strip()]
+		sources = official_source_urls(self.official_sources)
 		if not sources:
 			frappe.throw(_("Додайте хоча б одне офіційне нормативне джерело"))
-		invalid = [source for source in sources if not _is_official_source(source)]
+		invalid = [source for source in sources if not is_official_source(source)]
 		if invalid:
 			frappe.throw(
 				_("Дозволені лише HTTPS-посилання на офіційні домени gov.ua: {0}").format(

@@ -24,6 +24,12 @@
   "column_break_tax",
   "vat_payer",
   "vat_number",
+  "section_fixed_tax_rate",
+  "single_tax_rate_year",
+  "single_tax_monthly_amount",
+  "column_break_fixed_tax_rate",
+  "single_tax_rate_verified_on",
+  "single_tax_rate_sources",
   "section_bank",
   "iban",
   "column_break_bank",
@@ -165,6 +171,43 @@
    "mandatory_depends_on": "vat_payer"
   },
   {
+   "depends_on": "eval:doc.single_tax_group == '1' || doc.single_tax_group == '2'",
+   "fieldname": "section_fixed_tax_rate",
+   "fieldtype": "Section Break",
+   "label": "Фактична фіксована ставка ЄП"
+  },
+  {
+   "depends_on": "eval:doc.single_tax_group == '1' || doc.single_tax_group == '2'",
+   "fieldname": "single_tax_rate_year",
+   "fieldtype": "Int",
+   "label": "Рік ставки"
+  },
+  {
+   "depends_on": "eval:doc.single_tax_group == '1' || doc.single_tax_group == '2'",
+   "description": "Фактична ставка за рішенням громади; не загальнодержавний максимум.",
+   "fieldname": "single_tax_monthly_amount",
+   "fieldtype": "Currency",
+   "label": "Єдиний податок, грн/міс"
+  },
+  {
+   "depends_on": "eval:doc.single_tax_group == '1' || doc.single_tax_group == '2'",
+   "fieldname": "column_break_fixed_tax_rate",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.single_tax_group == '1' || doc.single_tax_group == '2'",
+   "fieldname": "single_tax_rate_verified_on",
+   "fieldtype": "Date",
+   "label": "Ставку перевірено станом на"
+  },
+  {
+   "depends_on": "eval:doc.single_tax_group == '1' || doc.single_tax_group == '2'",
+   "description": "Один HTTPS URL рішення громади у домені gov.ua на рядок.",
+   "fieldname": "single_tax_rate_sources",
+   "fieldtype": "Small Text",
+   "label": "Джерела фактичної ставки"
+  },
+  {
    "fieldname": "section_bank",
    "fieldtype": "Section Break",
    "label": "Банківські реквізити"
@@ -278,5 +321,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
+ "track_changes": 1,
  "states": []
 }

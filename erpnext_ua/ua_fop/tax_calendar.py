@@ -11,7 +11,9 @@ from frappe import _
 from erpnext_ua.ua_fop.tax_rules import (
 	TaxAmounts,
 	build_deadline_rows,
+	is_official_source,
 	missing_parameter_fields,
+	official_source_urls,
 )
 
 PARAMETER_LABELS = {
@@ -27,6 +29,10 @@ PARAMETER_LABELS = {
 	"official_sources": "офіційні джерела",
 	"verified_on": "дата перевірки",
 }
+
+
+class FOPTaxRateConfigurationError(frappe.ValidationError):
+	pass
 
 
 def _get_params(year: int, group: str):
@@ -49,17 +55,62 @@ def _get_params(year: int, group: str):
 	return params
 
 
-def _rows_for_group(year: int, group: str):
+def _fixed_rate_provenance(fop, year: int, params) -> dict:
+	if fop.single_tax_group not in ("1", "2"):
+		return {
+			"fop_tax_rate_year": None,
+			"fop_tax_rate_verified_on": None,
+			"fop_tax_rate_sources": None,
+		}
+	fields = (
+		"single_tax_rate_year",
+		"single_tax_monthly_amount",
+		"single_tax_rate_verified_on",
+		"single_tax_rate_sources",
+	)
+	missing = [fieldname for fieldname in fields if fop.get(fieldname) in (None, "")]
+	if missing or int(fop.single_tax_rate_year or 0) != year:
+		frappe.throw(
+			_("Для {0} не підтверджено фактичну ставку ЄП на {1} рік. Календар не створено.").format(
+				fop.name, year
+			),
+			FOPTaxRateConfigurationError,
+		)
+	sources = official_source_urls(fop.single_tax_rate_sources)
+	if not sources or any(not is_official_source(source) for source in sources):
+		frappe.throw(
+			_("Для {0} вкажіть офіційне gov.ua джерело фактичної ставки ЄП").format(fop.name),
+			FOPTaxRateConfigurationError,
+		)
+	if frappe.utils.flt(fop.single_tax_monthly_amount, 2) > frappe.utils.flt(
+		params.single_tax_monthly, 2
+	):
+		frappe.throw(
+			_("Фактична ставка ЄП для {0} перевищує максимум року").format(fop.name),
+			FOPTaxRateConfigurationError,
+		)
+	return {
+		"fop_tax_rate_year": year,
+		"fop_tax_rate_verified_on": fop.single_tax_rate_verified_on,
+		"fop_tax_rate_sources": "\n".join(sources),
+	}
+
+
+def _rows_for_group(year: int, fop):
+	group = fop.single_tax_group
 	params = _get_params(year, group)
+	rate_provenance = _fixed_rate_provenance(fop, year, params)
 	amounts = TaxAmounts(
-		single_tax_monthly=params.single_tax_monthly,
+		single_tax_monthly=(
+			fop.single_tax_monthly_amount if group in ("1", "2") else params.single_tax_monthly
+		),
 		military_levy_monthly=params.military_levy_monthly,
 		esv_monthly=params.esv_monthly,
 		single_tax_percent_no_vat=params.single_tax_percent_no_vat,
 		single_tax_percent_vat=params.single_tax_percent_vat,
 		military_levy_percent=params.military_levy_percent,
 	)
-	return params, build_deadline_rows(year, group, amounts)
+	return params, rate_provenance, build_deadline_rows(year, group, amounts)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -73,7 +124,7 @@ def generate_deadlines(fop_profile: str, year: int | None = None) -> dict:
 def _generate_deadlines(fop_profile: str, year: int | None = None) -> dict:
 	year = int(year) if year else frappe.utils.getdate().year
 	fop = frappe.get_doc("FOP Profile", fop_profile)
-	params, rows = _rows_for_group(year, fop.single_tax_group)
+	params, rate_provenance, rows = _rows_for_group(year, fop)
 	created = updated = skipped = 0
 	for rule in rows:
 		row = asdict(rule)
@@ -95,7 +146,7 @@ def _generate_deadlines(fop_profile: str, year: int | None = None) -> dict:
 				},
 			)
 		if existing:
-			changed = _refresh_deadline(existing, row, params.name, fop)
+			changed = _refresh_deadline(existing, row, params.name, rate_provenance, fop)
 			updated += int(changed)
 			skipped += int(not changed)
 			continue
@@ -105,13 +156,20 @@ def _generate_deadlines(fop_profile: str, year: int | None = None) -> dict:
 		doc.company = fop.company
 		doc.fop_profile = fop.name
 		doc.tax_parameters = params.name
+		doc.update(rate_provenance)
 		doc.insert(ignore_permissions=True)
 		created += 1
 	frappe.db.commit()
 	return {"created": created, "updated": updated, "skipped": skipped, "year": year}
 
 
-def _refresh_deadline(name: str, row: dict, tax_parameters: str, fop) -> bool:
+def _refresh_deadline(
+	name: str,
+	row: dict,
+	tax_parameters: str,
+	rate_provenance: dict,
+	fop,
+) -> bool:
 	doc = frappe.get_doc("UA Tax Deadline", name)
 	if doc.status == "Виконано":
 		provenance = {}
@@ -121,6 +179,9 @@ def _refresh_deadline(name: str, row: dict, tax_parameters: str, fop) -> bool:
 			provenance["tax_parameters"] = tax_parameters
 		if not doc.fop_profile:
 			provenance["fop_profile"] = fop.name
+		for fieldname, value in rate_provenance.items():
+			if value is not None and not doc.get(fieldname):
+				provenance[fieldname] = value
 		if provenance:
 			frappe.db.set_value("UA Tax Deadline", doc.name, provenance, update_modified=False)
 		return bool(provenance)
@@ -128,6 +189,7 @@ def _refresh_deadline(name: str, row: dict, tax_parameters: str, fop) -> bool:
 	due_date_changed = frappe.utils.getdate(doc.due_date) != row["due_date"]
 	values = {
 		**row,
+		**rate_provenance,
 		"company": fop.company,
 		"fop_profile": fop.name,
 		"tax_parameters": tax_parameters,
@@ -163,11 +225,64 @@ def generate_for_all_fops():
 		for year in years:
 			try:
 				_generate_deadlines(name, year)
+			except FOPTaxRateConfigurationError:
+				_repair_existing_deadline_dates(name, year)
+				frappe.log_error(
+					title=f"Потрібна фактична ставка ЄП: {name}, {year}",
+					message=frappe.get_traceback(),
+				)
 			except Exception:
 				frappe.log_error(
 					title=f"Не створено податковий календар: {name}, {year}",
 					message=frappe.get_traceback(),
 				)
+
+
+def _repair_existing_deadline_dates(fop_profile: str, year: int) -> None:
+	"""Repair dates without inventing a missing per-FOP fixed-tax amount."""
+	fop = frappe.get_doc("FOP Profile", fop_profile)
+	params = _get_params(year, fop.single_tax_group)
+	rows = build_deadline_rows(
+		year,
+		fop.single_tax_group,
+		TaxAmounts(
+			single_tax_monthly=params.single_tax_monthly,
+			military_levy_monthly=params.military_levy_monthly,
+			esv_monthly=params.esv_monthly,
+			single_tax_percent_no_vat=params.single_tax_percent_no_vat,
+			single_tax_percent_vat=params.single_tax_percent_vat,
+			military_levy_percent=params.military_levy_percent,
+		),
+	)
+	for rule in rows:
+		existing = frappe.db.exists(
+			"UA Tax Deadline",
+			{
+				"company": fop.company,
+				"tax_type": rule.tax_type,
+				"period_label": rule.period_label,
+			},
+		)
+		if not existing:
+			continue
+		doc = frappe.get_doc("UA Tax Deadline", existing)
+		values = {
+			"fop_profile": fop.name,
+			"tax_parameters": params.name,
+			"statutory_due_date": rule.statutory_due_date,
+		}
+		if doc.status != "Виконано":
+			values["due_date"] = rule.due_date
+			if frappe.utils.getdate(doc.due_date) != rule.due_date:
+				values.update(
+					{
+						"status": "Заплановано",
+						"notified_due_soon": 0,
+						"notified_overdue": 0,
+					}
+				)
+		frappe.db.set_value("UA Tax Deadline", doc.name, values, update_modified=False)
+	frappe.db.commit()
 
 
 def update_statuses_and_notify():

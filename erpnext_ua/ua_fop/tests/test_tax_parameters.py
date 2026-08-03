@@ -16,6 +16,21 @@ class TestTaxParameterSeed(IntegrationTestCase):
 		self.assertEqual(group_one.subsistence_minimum, 3328)
 		self.assertEqual(group_one.single_tax_monthly, 332.80)
 
+	def test_fop_fixed_rate_must_not_exceed_the_yearly_maximum(self):
+		profile = frappe.get_doc(
+			{
+				"doctype": "FOP Profile",
+				"single_tax_group": "1",
+				"single_tax_rate_year": 2026,
+				"single_tax_monthly_amount": 332.81,
+				"single_tax_rate_verified_on": "2026-08-03",
+				"single_tax_rate_sources": "https://example.gov.ua/local-decision",
+			}
+		)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "перевищує максимум"):
+			profile.validate_fixed_single_tax_rate()
+
 	def _params(self, group: str):
 		name = frappe.db.get_value(
 			"UA Tax Parameters", {"year": 2026, "single_tax_group": group}

@@ -6,7 +6,9 @@ from datetime import date
 from erpnext_ua.ua_fop.tax_rules import (
 	TaxAmounts,
 	build_deadline_rows,
+	is_official_source,
 	missing_parameter_fields,
+	official_source_urls,
 )
 
 AMOUNTS = TaxAmounts(
@@ -73,6 +75,15 @@ class TestUATaxRules(unittest.TestCase):
 		self.assertEqual(missing_parameter_fields("1", values), ())
 		del values["official_sources"]
 		self.assertEqual(missing_parameter_fields("1", values), ("official_sources",))
+
+	def test_only_official_https_sources_are_accepted(self):
+		sources = official_source_urls(
+			"https://tax.gov.ua/rule\n\nhttps://example.gov.ua/local-decision"
+		)
+		self.assertEqual(len(sources), 2)
+		self.assertTrue(all(is_official_source(source) for source in sources))
+		self.assertFalse(is_official_source("http://tax.gov.ua/insecure"))
+		self.assertFalse(is_official_source("https://example.com/not-official"))
 
 
 if __name__ == "__main__":

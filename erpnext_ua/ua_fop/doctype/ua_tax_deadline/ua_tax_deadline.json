@@ -17,6 +17,9 @@
   "amount",
   "column_break_amount",
   "tax_parameters",
+  "fop_tax_rate_year",
+  "fop_tax_rate_verified_on",
+  "fop_tax_rate_sources",
   "notes",
   "section_flags",
   "notified_due_soon",
@@ -104,6 +107,24 @@
    "read_only": 1
   },
   {
+   "fieldname": "fop_tax_rate_year",
+   "fieldtype": "Int",
+   "label": "Рік фактичної ставки ФОП",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fop_tax_rate_verified_on",
+   "fieldtype": "Date",
+   "label": "Фактичну ставку перевірено",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fop_tax_rate_sources",
+   "fieldtype": "Small Text",
+   "label": "Джерела фактичної ставки ФОП",
+   "read_only": 1
+  },
+  {
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Примітки"
@@ -168,5 +189,6 @@
  ],
  "sort_field": "due_date",
  "sort_order": "ASC",
+ "track_changes": 1,
  "states": []
 }

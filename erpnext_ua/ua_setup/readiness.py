@@ -60,6 +60,7 @@ class SetupState:
 	tax_parameter_groups: frozenset[str] = frozenset()
 	current_year: int = 0
 	active_fop_profiles: int = 0
+	fop_profiles_missing_tax_rate: int = 0
 	fop_has_kved: bool = False
 	warehouses: int = 0
 	retail_customers: int = 0
@@ -196,6 +197,15 @@ def _tax_parameters(state: SetupState) -> Check:
 
 def _fop_profile(state: SetupState) -> Check:
 	if state.active_fop_profiles:
+		if state.fop_profiles_missing_tax_rate:
+			return Check(
+				"fop_profile",
+				"Профіль ФОП",
+				Status.PENDING,
+				Severity.REQUIRED,
+				"Для ФОП груп 1–2 немає підтвердженої фактичної ставки ЄП на "
+				f"{state.current_year} рік; профілів: {state.fop_profiles_missing_tax_rate}.",
+			)
 		return Check(
 			"fop_profile",
 			"Профіль ФОП",

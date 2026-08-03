@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
+from urllib.parse import urlparse
 
 QUARTERS = {1: (1, 3), 2: (4, 6), 3: (7, 9), 4: (10, 12)}
 MONTH_NAMES = (
@@ -39,6 +40,16 @@ GROUP_PARAMETER_FIELDS = {
 	"2": ("single_tax_monthly", "military_levy_monthly"),
 	"3": ("single_tax_percent_no_vat", "single_tax_percent_vat", "military_levy_percent"),
 }
+
+
+def is_official_source(url: str) -> bool:
+	parsed = urlparse(url)
+	hostname = (parsed.hostname or "").lower()
+	return parsed.scheme == "https" and (hostname == "gov.ua" or hostname.endswith(".gov.ua"))
+
+
+def official_source_urls(value: str | None) -> tuple[str, ...]:
+	return tuple(line.strip() for line in (value or "").splitlines() if line.strip())
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,8 +147,8 @@ def _monthly_advance_rows(year: int, amounts: TaxAmounts) -> list[DeadlineRow]:
 				due_date=previous_working_day(statutory),
 				amount=amounts.single_tax_monthly,
 				notes=(
-					"Авансовий ЄП; указано максимальну ставку, фактичну ставку звірте з рішенням "
-					"громади. Якщо 20-те — вихідний, сплатіть у попередній операційний день."
+					"Авансовий ЄП за підтвердженою ставкою цього ФОП. Якщо 20-те — вихідний, "
+					"сплатіть у попередній операційний день."
 				),
 			)
 		)
