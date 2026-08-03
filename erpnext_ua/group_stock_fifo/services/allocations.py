@@ -78,6 +78,13 @@ def reserve(request: ReservationRequest) -> Any:
     retry_limit = max(int(settings.allocation_retry_limit or 1), 1)
     ttl_minutes = int(settings.allocation_ttl_minutes or 0)
 
+    # The validation/idempotency preflight above uses consistent reads. Reset
+    # that read-only transaction so the scope lock becomes the first statement
+    # of the write transaction and every later candidate/balance read sees the
+    # state committed by the previous lock owner. Without this reset, MariaDB
+    # can correctly reject an UPDATE against that older snapshot as error 1020.
+    frappe.db.rollback()
+
     for attempt in range(1, retry_limit + 1):
         savepoint = f"gsf_reservation_{attempt}"
         frappe.db.savepoint(savepoint)
@@ -265,7 +272,7 @@ def _lock_scope(request: ReservationRequest) -> str:
         physical_location=request.physical_location,
         item_code=request.item_code,
     )
-    if not frappe.db.exists("GSF Scope Lock", name):
+    if not _lock_scope_row(name, required=False):
         try:
             frappe.get_doc(
                 {
@@ -279,17 +286,18 @@ def _lock_scope(request: ReservationRequest) -> str:
             # Another request created the same scope row first; that is the row
             # we wanted, so take its lock rather than retry the whole attempt.
             pass
-    _lock_scope_row(name)
+        _lock_scope_row(name)
     return name
 
 
-def _lock_scope_row(name: str) -> None:
+def _lock_scope_row(name: str, *, required: bool = True) -> bool:
     rows = frappe.db.sql(
         "select name from `tabGSF Scope Lock` where name = %s for update",
         (name,),
     )
-    if not rows:
+    if not rows and required:
         raise GSFError(f"FIFO scope lock {name} does not exist", "ALLOCATION_CONFLICT")
+    return bool(rows)
 
 
 def _plan(request: ReservationRequest) -> list:
@@ -552,6 +560,10 @@ def _finish(allocation_name: str, *, status: str, **fields) -> Any:
     )
     if not scope:
         raise GSFError(f"Allocation {allocation_name} does not exist", "ALLOCATION_CONFLICT")
+    if not frappe.db.transaction_writes:
+        # As in reserve(), discard the coordinate lookup's consistent-read
+        # snapshot before the scope lock becomes the first write-path read.
+        frappe.db.rollback()
     _lock_scope_row(
         scope_lock_identity(
             company_group=scope.company_group,

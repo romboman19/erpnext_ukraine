@@ -127,9 +127,11 @@ def run() -> dict[str, Any]:
             **request_base,
         )
         operation_began = time.monotonic()
+        phase = "reserve"
         try:
             allocation = reserve(request)
             frappe.db.commit()
+            phase = "release"
             release_allocation(allocation.name, reason=f"Phase 8 load {run_id}")
             frappe.db.commit()
             latencies.append(time.monotonic() - operation_began)
@@ -138,6 +140,7 @@ def run() -> dict[str, Any]:
             errors.append(
                 {
                     "iteration": iteration,
+                    "phase": phase,
                     "type": type(error).__name__,
                     "code": getattr(error, "code", None),
                     "message": str(error)[:200],
