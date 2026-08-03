@@ -49,7 +49,8 @@ failure_os_pid=""
 
 cleanup_failure_worker() {
   if [[ $failure_os_pid =~ ^[0-9]+$ ]]; then
-    docker exec "$container" kill -9 "$failure_os_pid" >/dev/null 2>&1 || true
+    docker exec "$container" sh -c 'kill -9 "$1"' _ "$failure_os_pid" \
+      >/dev/null 2>&1 || true
   fi
   if [[ $failure_exec_pid =~ ^[0-9]+$ ]]; then
     kill "$failure_exec_pid" >/dev/null 2>&1 || true
@@ -82,7 +83,7 @@ if [[ ! $failure_os_pid =~ ^[0-9]+$ ]]; then
   echo "failure-injection worker published an invalid pid" >&2
   exit 1
 fi
-docker exec "$container" kill -9 "$failure_os_pid"
+docker exec "$container" sh -c 'kill -9 "$1"' _ "$failure_os_pid"
 if wait "$failure_exec_pid"; then
   echo "failure-injection worker exited successfully instead of being killed" >&2
   exit 1
