@@ -1,7 +1,11 @@
 import re
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
+from frappe.utils import flt
+
+from erpnext_ua.ua_fop.tax_rules import is_official_source, official_source_urls
 
 RNOKPP_WEIGHTS = (-1, 5, 7, 9, 4, 6, 10, 5, 7)
 
@@ -25,6 +29,7 @@ class FOPProfile(Document):
 	def validate(self):
 		self.validate_tax_id()
 		self.validate_tax_mode()
+		self.validate_fixed_single_tax_rate()
 		self.validate_iban()
 
 	def validate_tax_id(self):
@@ -52,6 +57,51 @@ class FOPProfile(Document):
 		self.iban = self.iban.replace(" ", "").upper()
 		if not re.fullmatch(r"UA\d{27}", self.iban):
 			frappe.throw("Український IBAN має формат UA + 27 цифр (разом 29 символів)")
+
+	def validate_fixed_single_tax_rate(self):
+		if self.single_tax_group not in ("1", "2"):
+			return
+		fields = (
+			"single_tax_rate_year",
+			"single_tax_monthly_amount",
+			"single_tax_rate_verified_on",
+			"single_tax_rate_sources",
+		)
+		configured = any(self.get(fieldname) not in (None, "") for fieldname in fields)
+		if not configured:
+			return
+		missing = [fieldname for fieldname in fields if self.get(fieldname) in (None, "")]
+		if missing:
+			frappe.throw(_("Заповніть усі поля фактичної ставки ЄП: {0}").format(", ".join(missing)))
+
+		year = int(self.single_tax_rate_year)
+		params_name = frappe.db.exists(
+			"UA Tax Parameters", {"year": year, "single_tax_group": self.single_tax_group}
+		)
+		if not params_name:
+			frappe.throw(
+				_("Спершу створіть UA Tax Parameters на {0} рік для групи {1}").format(
+					year, self.single_tax_group
+				)
+			)
+		maximum = frappe.db.get_value("UA Tax Parameters", params_name, "single_tax_monthly")
+		if flt(self.single_tax_monthly_amount, 2) > flt(maximum, 2):
+			frappe.throw(
+				_("Фактична ставка ЄП {0} перевищує максимум {1}").format(
+					frappe.utils.fmt_money(self.single_tax_monthly_amount, currency="UAH"),
+					frappe.utils.fmt_money(maximum, currency="UAH"),
+				)
+			)
+
+		sources = official_source_urls(self.single_tax_rate_sources)
+		invalid = [source for source in sources if not is_official_source(source)]
+		if invalid:
+			frappe.throw(
+				_("Джерело ставки має бути HTTPS-посиланням на офіційний домен gov.ua: {0}").format(
+					", ".join(invalid)
+				)
+			)
+		self.single_tax_rate_sources = "\n".join(sources)
 
 	@frappe.whitelist()
 	def get_current_tax_parameters(self):

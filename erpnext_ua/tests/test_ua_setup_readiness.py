@@ -5,8 +5,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from erpnext_ua.ua_setup.readiness import (
-	Severity,
 	SetupState,
+	Severity,
 	Status,
 	blocking,
 	can_fiscalize,
@@ -23,6 +23,7 @@ READY_TO_SELL = SetupState(
 	system_language="uk",
 	chart_template="full_291",
 	tax_parameter_years=frozenset({2026}),
+	tax_parameter_groups=frozenset({"1", "2", "3"}),
 	current_year=2026,
 	active_fop_profiles=1,
 	fop_has_kved=True,
@@ -110,11 +111,31 @@ class TestSetupReadiness(unittest.TestCase):
 		self.assertEqual(chart.fix_action, "", "a company with postings must not offer a chart replacement")
 
 	def test_tax_parameters_are_checked_for_the_current_year(self):
-		state = replace(READY_TO_SELL, tax_parameter_years=frozenset({2025}), current_year=2026)
+		state = replace(
+			READY_TO_SELL,
+			tax_parameter_years=frozenset({2025}),
+			tax_parameter_groups=frozenset(),
+			current_year=2026,
+		)
 
 		check = check_for(state, "tax_parameters")
 		self.assertIs(check.status, Status.PENDING)
 		self.assertIn("2026", check.detail)
+
+	def test_tax_parameters_require_every_supported_group(self):
+		state = replace(READY_TO_SELL, tax_parameter_groups=frozenset({"1", "3"}))
+
+		check = check_for(state, "tax_parameters")
+		self.assertIs(check.status, Status.PENDING)
+		self.assertIn("2", check.detail)
+
+	def test_group_one_or_two_fop_needs_a_current_verified_local_rate(self):
+		state = replace(READY_TO_SELL, fop_profiles_missing_tax_rate=1)
+
+		check = check_for(state, "fop_profile")
+		self.assertIs(check.status, Status.PENDING)
+		self.assertIn("фактичної ставки", check.detail)
+		self.assertFalse(can_sell(evaluate(state)))
 
 	def test_cash_only_payment_setup_is_not_enough(self):
 		state = replace(READY_TO_SELL, pos_cashless_payment_methods=0)

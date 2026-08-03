@@ -11,6 +11,13 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, nowdate
 
+from erpnext_ua.ua_fop.tax_rules import (
+	COMMON_PARAMETER_FIELDS,
+	GROUP_PARAMETER_FIELDS,
+	is_official_source,
+	missing_parameter_fields,
+	official_source_urls,
+)
 from erpnext_ua.ua_setup.readiness import (
 	REQUIRED_LANGUAGE,
 	Check,
@@ -46,6 +53,7 @@ def collect_state(company: str | None = None) -> SetupState:
 	"""
 	company = company or _default_company()
 	company_row = _company_row(company)
+	current_year = getdate(nowdate()).year
 
 	return SetupState(
 		company=company or "",
@@ -57,9 +65,20 @@ def collect_state(company: str | None = None) -> SetupState:
 		tax_parameter_years=frozenset(
 			int(year) for year in _all("UA Tax Parameters", pluck="year") if year
 		),
-		current_year=getdate(nowdate()).year,
-		active_fop_profiles=_count("FOP Profile", {"status": "Active"}),
-		fop_has_kved=bool(_count("FOP Profile", {"status": "Active", "kved_main": ("is", "set")})),
+		tax_parameter_groups=_complete_tax_parameter_groups(current_year),
+		current_year=current_year,
+		active_fop_profiles=(
+			_count("FOP Profile", {"status": "Active", "company": company}) if company else 0
+		),
+		fop_profiles_missing_tax_rate=_fops_missing_fixed_tax_rate(current_year, company),
+		fop_has_kved=bool(
+			_count(
+				"FOP Profile",
+				{"status": "Active", "company": company, "kved_main": ("is", "set")},
+			)
+		)
+		if company
+		else False,
 		warehouses=_count("Warehouse", {"company": company, "is_group": 0}) if company else 0,
 		retail_customers=_count("Customer"),
 		active_cash_desks=_count("POS Cash Desk", {"status": "Active"}),
@@ -75,6 +94,75 @@ def collect_state(company: str | None = None) -> SetupState:
 		prro_signer_configured=bool(_single_value("PRRO Settings", "signservice_url")),
 		print_formats=_count("Print Format", {"module": ("in", ("UA POS", "UA Price Tags"))}),
 		enabled_connectors=_enabled_connectors(),
+	)
+
+
+def _fops_missing_fixed_tax_rate(year: int, company: str) -> int:
+	doctype = "FOP Profile"
+	if not company:
+		return 0
+	filters = {"status": "Active", "company": company}
+	fields = (
+		"name",
+		"single_tax_group",
+		"single_tax_rate_year",
+		"single_tax_monthly_amount",
+		"single_tax_rate_verified_on",
+		"single_tax_rate_sources",
+	)
+	if not frappe.db.table_exists(doctype):
+		return 0
+	if any(not frappe.db.has_column(doctype, fieldname) for fieldname in fields):
+		return frappe.db.count(doctype, {**filters, "single_tax_group": ("in", ("1", "2"))})
+
+	maximum_by_group = {}
+	if frappe.db.table_exists("UA Tax Parameters") and frappe.db.has_column(
+		"UA Tax Parameters", "single_tax_monthly"
+	):
+		maximum_by_group = {
+			str(row.single_tax_group): row.single_tax_monthly
+			for row in frappe.get_all(
+				"UA Tax Parameters",
+				filters={"year": year, "single_tax_group": ("in", ("1", "2"))},
+				fields=["single_tax_group", "single_tax_monthly"],
+			)
+		}
+	missing = 0
+	for fop in frappe.get_all(doctype, filters=filters, fields=fields):
+		group = str(fop.single_tax_group)
+		if group not in ("1", "2"):
+			continue
+		sources = official_source_urls(fop.single_tax_rate_sources)
+		invalid = (
+			int(fop.single_tax_rate_year or 0) != year
+			or fop.single_tax_monthly_amount is None
+			or not fop.single_tax_rate_verified_on
+			or not sources
+			or any(not is_official_source(source) for source in sources)
+			or group not in maximum_by_group
+			or frappe.utils.flt(fop.single_tax_monthly_amount, 2)
+			> frappe.utils.flt(maximum_by_group[group], 2)
+		)
+		missing += int(invalid)
+	return missing
+
+
+def _complete_tax_parameter_groups(year: int) -> frozenset[str]:
+	doctype = "UA Tax Parameters"
+	fields = {
+		"single_tax_group",
+		*COMMON_PARAMETER_FIELDS,
+		*(fieldname for required in GROUP_PARAMETER_FIELDS.values() for fieldname in required),
+	}
+	if not frappe.db.table_exists(doctype) or any(
+		not frappe.db.has_column(doctype, fieldname) for fieldname in fields
+	):
+		return frozenset()
+	rows = frappe.get_all(doctype, filters={"year": year}, fields=sorted(fields))
+	return frozenset(
+		str(row.single_tax_group)
+		for row in rows
+		if not missing_parameter_fields(str(row.single_tax_group), row)
 	)
 
 

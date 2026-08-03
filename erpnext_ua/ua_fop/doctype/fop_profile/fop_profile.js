@@ -28,9 +28,10 @@ frappe.ui.form.on("FOP Profile", {
 						.then((r) => {
 							const m = r.message;
 							frappe.msgprint(
-								__("Календар на {0}: створено {1}, вже існувало {2}", [
+								__("Календар на {0}: створено {1}, оновлено {2}, без змін {3}", [
 									m.year,
 									m.created,
+									m.updated,
 									m.skipped,
 								])
 							);
@@ -205,7 +206,17 @@ function render_headline(frm) {
 			);
 		}
 		if (p) {
-			if (p.single_tax_monthly) parts.push(`ЄП: <b>${fmt(p.single_tax_monthly)}/міс</b>`);
+			if (["1", "2"].includes(frm.doc.single_tax_group)) {
+				const currentYear = new Date().getFullYear();
+				if (
+					frm.doc.single_tax_rate_year === currentYear &&
+					frm.doc.single_tax_monthly_amount != null
+				) {
+					parts.push(`ЄП: <b>${fmt(frm.doc.single_tax_monthly_amount)}/міс</b> (ставка ФОП)`);
+				} else if (p.single_tax_monthly) {
+					parts.push(`ЄП: <b>до ${fmt(p.single_tax_monthly)}/міс</b> (потрібне рішення громади)`);
+				}
+			}
 			if (p.single_tax_percent_no_vat && frm.doc.tax_rate_mode === "5% без ПДВ")
 				parts.push(`ЄП: <b>${p.single_tax_percent_no_vat}%</b>`);
 			if (p.single_tax_percent_vat && frm.doc.tax_rate_mode === "3% з ПДВ")

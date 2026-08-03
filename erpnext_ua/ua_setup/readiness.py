@@ -57,8 +57,10 @@ class SetupState:
 	chart_template: str = ""
 	company_has_gl_entries: bool = False
 	tax_parameter_years: frozenset[int] = frozenset()
+	tax_parameter_groups: frozenset[str] = frozenset()
 	current_year: int = 0
 	active_fop_profiles: int = 0
+	fop_profiles_missing_tax_rate: int = 0
 	fop_has_kved: bool = False
 	warehouses: int = 0
 	retail_customers: int = 0
@@ -172,26 +174,38 @@ def _chart(state: SetupState) -> Check:
 
 
 def _tax_parameters(state: SetupState) -> Check:
-	if state.current_year in state.tax_parameter_years:
+	expected_groups = frozenset({"1", "2", "3"})
+	missing_groups = sorted(expected_groups - state.tax_parameter_groups)
+	if not missing_groups:
 		return Check(
 			"tax_parameters",
 			"Податкові параметри",
 			Status.DONE,
 			Severity.REQUIRED,
-			str(state.current_year),
+			f"{state.current_year}: повний перевірений комплект для груп 1–3",
 		)
 	return Check(
 		"tax_parameters",
 		"Податкові параметри",
 		Status.PENDING,
 		Severity.REQUIRED,
-		f"Немає параметрів на {state.current_year} рік: МЗП, ліміт доходу, ЄП, ЄСВ, військовий збір.",
+		f"Немає повних перевірених параметрів на {state.current_year} рік для груп: "
+		+ ", ".join(missing_groups),
 		fix_action="apply_tax_parameters",
 	)
 
 
 def _fop_profile(state: SetupState) -> Check:
 	if state.active_fop_profiles:
+		if state.fop_profiles_missing_tax_rate:
+			return Check(
+				"fop_profile",
+				"Профіль ФОП",
+				Status.PENDING,
+				Severity.REQUIRED,
+				"Для ФОП груп 1–2 немає підтвердженої фактичної ставки ЄП на "
+				f"{state.current_year} рік; профілів: {state.fop_profiles_missing_tax_rate}.",
+			)
 		return Check(
 			"fop_profile",
 			"Профіль ФОП",
