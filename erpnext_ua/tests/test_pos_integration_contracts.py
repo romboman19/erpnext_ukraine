@@ -135,7 +135,7 @@ class TestPOSIntegrationContracts(unittest.TestCase):
             source,
         )
         cash_operation = source[source.index("def cash_operation(") :]
-        cash_operation = cash_operation[: cash_operation.index("\n@frappe.whitelist()", 1)]
+        cash_operation = cash_operation[: cash_operation.index("\n@frappe.whitelist(", 1)]
         self.assertIn("denominations=None", cash_operation)
         self.assertIn("rows = parse_rows(denominations) if denominations else []", cash_operation)
         self.assertIn("if rows and movement_type not in DENOMINATION_CONTEXT_BY_MOVEMENT_TYPE:", cash_operation)
@@ -215,7 +215,7 @@ class TestPOSIntegrationContracts(unittest.TestCase):
 
         api_source = (APP / "ua_pos" / "api.py").read_text(encoding="utf-8")
         daily_report = api_source[api_source.index("def daily_report(") :]
-        daily_report = daily_report[: daily_report.index("\n@frappe.whitelist()", 1)]
+        daily_report = daily_report[: daily_report.index("\n@frappe.whitelist(", 1)]
         # Scoped to this cash desk, across every shift opened that calendar day (not just
         # the one currently open shift, unlike shift_report).
         self.assertIn('"cash_desk": session["cash_desk"]', daily_report)
@@ -237,7 +237,7 @@ class TestPOSIntegrationContracts(unittest.TestCase):
         self.assertIn('order["items"] = items_by_order.get(order.name, [])', attach_items)
 
         shift_report = source[source.index("def shift_report(") :]
-        shift_report = shift_report[: shift_report.index("\n@frappe.whitelist()", 1)]
+        shift_report = shift_report[: shift_report.index("\n@frappe.whitelist(", 1)]
         self.assertIn("_attach_order_items(orders, order_names)", shift_report)
 
     def test_non_fiscal_receipt_reprints_show_the_original_sale_time_not_now(self):

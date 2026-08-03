@@ -1,6 +1,6 @@
 frappe.ui.form.on("Sales Invoice", {
 	refresh(frm) {
-		if (frm.doc.docstatus !== 1) return;
+		if (frm.doc.docstatus !== 1 || (!frm.doc.is_pos && !frm.doc.ua_ecommerce_channel)) return;
 
 		frappe.db.get_value(
 			"PRRO Receipt",
@@ -18,7 +18,7 @@ frappe.ui.form.on("Sales Invoice", {
 			} else {
 				frm.add_custom_button(__("Фіскалізувати чек"), () => {
 					frappe.call({
-						method: "erpnext_ua.ua_fiscal.sales_invoice.fiscalize_invoice",
+						method: "erpnext_ua.ua_fiscal.api.fiscalize_sales_invoice",
 						args: { sales_invoice: frm.doc.name },
 						freeze: true,
 						freeze_message: __("Фіскалізація…"),

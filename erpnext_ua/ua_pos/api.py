@@ -75,7 +75,7 @@ def _cash_balance(shift: str) -> float:
 	)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def list_cash_desks() -> list[dict]:
 	"""Return active desks for the login selector without exposing secrets."""
 	return frappe.get_all(
@@ -124,14 +124,14 @@ def login_by_barcode(cash_desk: str, barcode: str, device_token: str | None = No
 	return {"session_token": token, **session, "shift": active_shift(cash_desk)}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def logout(pos_session_token: str):
 	session = get_session(pos_session_token)
 	audit("logout", session)
 	frappe.cache.delete_value(session_key(pos_session_token))
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def session_state(pos_session_token: str) -> dict:
 	session = get_session(pos_session_token)
 	shift = active_shift(session["cash_desk"])
@@ -159,7 +159,7 @@ def session_state(pos_session_token: str) -> dict:
 	}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def unfinished_orders(pos_session_token: str) -> list[dict]:
 	session = get_session(pos_session_token)
 	return frappe.get_all(
@@ -175,7 +175,7 @@ def unfinished_orders(pos_session_token: str) -> list[dict]:
 	)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def stock_search(pos_session_token: str, query: str, limit: int = 30) -> list[dict]:
 	session = get_session(pos_session_token)
 	desk = frappe.get_doc("POS Cash Desk", session["cash_desk"])
@@ -216,7 +216,7 @@ DENOMINATION_CONTEXT_BY_MOVEMENT_TYPE = {
 }
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def cash_operation(
 	pos_session_token: str,
 	movement_type: str,
@@ -334,7 +334,7 @@ def _sales_and_returns_totals(orders: list) -> tuple[float, float]:
 	return sales_total, returns_total
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def shift_report(pos_session_token: str) -> dict:
 	session = get_session(pos_session_token)
 	shift = _require_shift(session)
@@ -378,7 +378,7 @@ def shift_report(pos_session_token: str) -> dict:
 	}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def daily_report(pos_session_token: str, report_date: str | None = None) -> dict:
 	"""Cross-shift summary for one cash desk on one calendar day, for the office printer:
 	every chek with its fiscalization mark, plus totals by payment method."""
@@ -417,7 +417,7 @@ def daily_report(pos_session_token: str, report_date: str | None = None) -> dict
 	}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def fiscal_status(pos_session_token: str) -> dict:
 	session = get_session(pos_session_token)
 	desk = frappe.get_doc("POS Cash Desk", session["cash_desk"])
@@ -654,13 +654,13 @@ def _fiscal_report_data(cash_desk: str, report_type: str, shift_name: str | None
 	}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def fiscal_report_data(pos_session_token: str, report_type: str, shift: str | None = None) -> dict:
 	session = get_session(pos_session_token)
 	return _fiscal_report_data(session["cash_desk"], report_type, shift)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def queue_fiscal_report_print(
 	pos_session_token: str,
 	report_type: str,
@@ -683,7 +683,7 @@ def queue_fiscal_report_print(
 	return {"fallback_browser": False, "job": job.name, "status": job.status}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def fiscal_open_shift(pos_session_token: str) -> dict:
 	session = get_session(pos_session_token)
 	operational_shift = _require_shift(session)
@@ -748,7 +748,7 @@ def fiscal_open_shift(pos_session_token: str) -> dict:
 	return fiscal_status(pos_session_token)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def fiscal_close_shift(pos_session_token: str) -> dict:
 	session = get_session(pos_session_token)
 	if session["access_role"] not in {"Senior Cashier", "Manager"}:
@@ -798,7 +798,7 @@ def _count_total(rows: list[dict]) -> float:
 	return sum(frappe.utils.flt(row.get("denomination")) * int(row.get("qty") or 0) for row in rows)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def open_shift(pos_session_token: str, denominations, idem_key: str) -> dict:
 	session = get_session(pos_session_token)
 	existing = frappe.db.get_value("POS Operational Shift", {"idem_key": idem_key}, "name")
@@ -853,7 +853,7 @@ def _expected_cash(shift: str) -> float:
 	)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def close_shift_begin(pos_session_token: str) -> dict:
 	session = get_session(pos_session_token)
 	shift = active_shift(session["cash_desk"])
@@ -867,7 +867,7 @@ def close_shift_begin(pos_session_token: str) -> dict:
 	return {"shift": shift, "expected": _expected_cash(shift), "blocking_orders": blocking}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def close_shift_confirm(pos_session_token: str, denominations, idem_key: str, comment: str = "") -> dict:
 	session = get_session(pos_session_token)
 	existing = frappe.db.get_value("POS Operational Shift", {"close_idem_key": idem_key}, "name")
@@ -901,7 +901,7 @@ def close_shift_confirm(pos_session_token: str, denominations, idem_key: str, co
 	return doc.as_dict()
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_order(pos_session_token: str, idem_key: str, customer: str | None = None, fiscal_mode="Fiscal") -> dict:
 	session = get_session(pos_session_token)
 	existing = frappe.db.get_value("POS Order", {"idem_key": idem_key}, "name")
@@ -948,7 +948,7 @@ def _resolve_item(query: str) -> tuple[str, str | None, str | None]:
 	return rows[0], None, None
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def scan_item(pos_session_token: str, order: str, query: str, qty: float = 1) -> dict:
 	session = get_session(pos_session_token)
 	doc = _owned_order(session, order, {"Building"})
@@ -1031,7 +1031,7 @@ def _birthday_window(birth_date, days_before: int, days_after: int, today=None):
 	return None
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def birthday_offer(pos_session_token: str, customer: str, order: str | None = None) -> dict:
 	session = get_session(pos_session_token)
 	settings = frappe.get_cached_doc("POS Birthday Settings")
@@ -1084,7 +1084,7 @@ def birthday_offer(pos_session_token: str, customer: str, order: str | None = No
 	}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def apply_birthday_discount(pos_session_token: str, order: str) -> dict:
 	session = get_session(pos_session_token)
 	doc = _owned_order(session, order, {"Building"})
@@ -1104,7 +1104,7 @@ def apply_birthday_discount(pos_session_token: str, order: str) -> dict:
 	return doc.as_dict()
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def set_item_qty(pos_session_token: str, order: str, row_name: str, qty: float) -> dict:
 	session = get_session(pos_session_token)
 	doc = _owned_order(session, order, {"Building"})
@@ -1122,7 +1122,7 @@ def set_item_qty(pos_session_token: str, order: str, row_name: str, qty: float) 
 	return doc.as_dict()
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def get_order(pos_session_token: str, order: str) -> dict:
 	session = get_session(pos_session_token)
 	doc = frappe.get_doc("POS Order", order)
@@ -1131,7 +1131,7 @@ def get_order(pos_session_token: str, order: str) -> dict:
 	return doc.as_dict()
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def set_order_customer(pos_session_token: str, order: str, customer: str) -> dict:
 	session = get_session(pos_session_token)
 	doc = _owned_order(session, order, {"Building"})
@@ -1148,7 +1148,7 @@ def set_order_customer(pos_session_token: str, order: str, customer: str) -> dic
 	return doc.as_dict()
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def set_order_mode(pos_session_token: str, order: str, fiscal_mode: str) -> dict:
 	session = get_session(pos_session_token)
 	doc = _owned_order(session, order, {"Building"})
@@ -1213,7 +1213,7 @@ def _try_identify_loyalty_account(doc):
 	quote_order(doc, doc.loyalty_requested_amount or 0)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def set_order_discount(
 	pos_session_token: str,
 	order: str,
@@ -1266,7 +1266,7 @@ def loyalty_identify(pos_session_token: str, order: str, identifier: str, identi
 	return {"identity": result, "order": frappe.get_doc("POS Order", doc.name).as_dict()}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def set_item_tracking(
 	pos_session_token: str,
 	order: str,
@@ -1285,7 +1285,7 @@ def set_item_tracking(
 	return doc.as_dict()
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def hold_order(pos_session_token: str, order: str) -> dict:
 	session = get_session(pos_session_token)
 	doc = _owned_order(session, order, EDITABLE_ORDER_STATUSES)
@@ -1302,7 +1302,7 @@ def hold_order(pos_session_token: str, order: str) -> dict:
 	return doc.as_dict()
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def cancel_order(pos_session_token: str, order: str) -> dict:
 	session = get_session(pos_session_token)
 	doc = frappe.get_doc("POS Order", order)
@@ -1468,7 +1468,7 @@ def _validate_order_items(order):
 			)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_draft_invoice(pos_session_token: str, order: str) -> dict:
 	"""Convert a cart to a draft non-stock Sales Invoice without posting or stock movement."""
 	session = get_session(pos_session_token)
@@ -1927,7 +1927,7 @@ def _return_summary(original) -> dict:
 	return {"items": items, "refund_limits": refund_limits}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def return_details(pos_session_token: str, token: str) -> dict:
 	session = get_session(pos_session_token)
 	from erpnext_ua.ua_pos.barcode import decode_lookup_token
@@ -1958,7 +1958,7 @@ def return_details(pos_session_token: str, token: str) -> dict:
 	return {"order": original.as_dict(), **_return_summary(original)}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def create_return_order(pos_session_token: str, token: str, items, idem_key: str) -> dict:
 	session = get_session(pos_session_token)
 	shift = _require_shift(session)
@@ -2208,7 +2208,7 @@ def _queue_print_if_configured(doc):
 	return job
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def retry_fiscalization(pos_session_token: str, order: str) -> dict:
 	session = get_session(pos_session_token)
 	doc = _owned_order(session, order)
@@ -2265,7 +2265,7 @@ def recover_pos_fiscal_pending():
 			frappe.log_error(frappe.get_traceback(), f"POS fiscal recovery {name}")
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) -> dict:
 	session = get_session(pos_session_token)
 	frappe.db.sql("select name from `tabPOS Order` where name=%s for update", order)
@@ -2469,7 +2469,7 @@ def _prepare_gift_certificate_checkout(doc, idem_key: str) -> list[dict]:
 		frappe.throw(str(error), title=error.code)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def card_status(pos_session_token: str, attempt: str) -> dict:
 	session = get_session(pos_session_token)
 	doc = frappe.get_doc("POS Payment Attempt", attempt)
@@ -2525,12 +2525,12 @@ def card_status(pos_session_token: str, attempt: str) -> dict:
 	return {"attempt": doc.as_dict(), "order": order_payload}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def lookup_return(pos_session_token: str, token: str) -> dict:
 	return return_details(pos_session_token, token)["order"]
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def receipt_data(pos_session_token: str, order: str) -> dict:
 	session = get_session(pos_session_token)
 	doc = _owned_order(session, order)
@@ -2593,7 +2593,7 @@ def receipt_data(pos_session_token: str, order: str) -> dict:
 	}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def queue_receipt_print(pos_session_token: str, order: str, idem_key: str) -> dict:
 	"""Queue original/reprint safely; a repeat request with the same key returns the same job."""
 	session = get_session(pos_session_token)

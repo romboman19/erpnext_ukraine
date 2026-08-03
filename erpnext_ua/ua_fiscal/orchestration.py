@@ -417,7 +417,6 @@ def _apply_register_state(register, state: dict, *, enforce_local_number: bool =
 	return state
 
 
-@frappe.whitelist()
 def register_device(cash_register: str, kep_key: str | None = None, forced: bool = False, client=None) -> dict:
 	client = client or FiscalClient()
 	register = frappe.get_doc("PRRO Cash Register", cash_register)
@@ -446,7 +445,6 @@ def register_device(cash_register: str, kep_key: str | None = None, forced: bool
 	return result
 
 
-@frappe.whitelist()
 def sync_register_state(cash_register: str, kep_key: str | None = None, client=None) -> dict:
 	client = client or FiscalClient()
 	register = frappe.get_doc("PRRO Cash Register", cash_register)
@@ -503,7 +501,6 @@ def _create_shift(register, kep_key: str, operational_shift: str | None = None):
 	).insert(ignore_permissions=True)
 
 
-@frappe.whitelist()
 @_serialize_register_operation
 def open_shift(
 	cash_register: str,
@@ -835,7 +832,6 @@ def _queue_offline_sale(
 	return receipt
 
 
-@frappe.whitelist()
 @_serialize_register_operation
 def fiscalize_sale(
 	cash_register: str,
@@ -1013,7 +1009,6 @@ def fiscalize_sale(
 	return receipt.name
 
 
-@frappe.whitelist()
 @_serialize_register_operation
 def fiscalize_service_cash(
 	cash_register: str,
@@ -1166,7 +1161,6 @@ def _queue_offline_zrep(register, shift, kep_key, totals, client):
 	return _queue_signed_offline(receipt, xml, kep_key, client, session, financial=True)
 
 
-@frappe.whitelist()
 @_serialize_register_operation
 def close_shift(cash_register: str, kep_key: str, client: FiscalClient | None = None) -> str:
 	client = client or FiscalClient()
@@ -1450,7 +1444,6 @@ def flush_offline_session(session_name: str, client=None):
 	return session
 
 
-@frappe.whitelist()
 def reconcile_receipt(receipt_name: str, client=None) -> dict:
 	receipt = frappe.get_doc("PRRO Receipt", receipt_name)
 	with frappe.cache.lock(
