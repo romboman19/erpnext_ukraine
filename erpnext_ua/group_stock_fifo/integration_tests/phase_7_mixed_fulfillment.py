@@ -696,7 +696,7 @@ def _assert_cc_registry(cc: dict, physical_location: str) -> None:
         }
     )
     try:
-        attempted_overlap.validate()
+        attempted_overlap.insert(ignore_permissions=True)
     except frappe.ValidationError as error:
         assert "already belongs to stock domain CC" in str(error)
     else:
