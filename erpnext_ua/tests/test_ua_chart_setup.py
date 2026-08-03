@@ -19,7 +19,7 @@ except ModuleNotFoundError:
 
 @unittest.skipIf(frappe is None, "requires a Frappe test site")
 class TestUAChartSetup(IntegrationTestCase):
-	def _apply_and_assert(self, template_key: str):
+	def _ensure_transit_warehouse_type(self):
 		if not frappe.db.exists("Warehouse Type", "Transit"):
 			frappe.get_doc(
 				{
@@ -27,6 +27,9 @@ class TestUAChartSetup(IntegrationTestCase):
 					"name": "Transit",
 				}
 			).insert(ignore_permissions=True)
+
+	def _apply_and_assert(self, template_key: str):
+		self._ensure_transit_warehouse_type()
 
 		suffix = uuid4().hex[:5].upper()
 		company_name = f"_UA Chart {template_key} Test {suffix}"
@@ -92,6 +95,7 @@ class TestUAChartSetup(IntegrationTestCase):
 		Manager and Accounts Manager roles that _only_accounting_administrators()
 		requires. Reproduces the real-world session, not just the role check.
 		"""
+		self._ensure_transit_warehouse_type()
 		suffix = uuid4().hex[:5].upper()
 		user_email = f"_ua_chart_accountant_{suffix.lower()}@example.com"
 		frappe.get_doc(

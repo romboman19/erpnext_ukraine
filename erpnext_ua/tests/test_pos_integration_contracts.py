@@ -147,15 +147,15 @@ class TestPOSIntegrationContracts(unittest.TestCase):
             encoding="utf-8"
         )
 
-        # A finished chek (cash/cashless payment, mixed payment, a return payout, or a
-        # resolved "Payment Unknown") must always clear the cart the same way: through
-        # finishOrderFlow, not a one-off renderOrder() call left over after checkout.
+        # A finished chek (cash/cashless payment, fully certificate-funded payment,
+        # mixed payment, a return payout, or a resolved "Payment Unknown") must always
+        # clear the cart through finishOrderFlow, not a one-off renderOrder() call.
         self.assertEqual(source.count("async function finishOrderFlow("), 1)
         self.assertIn(
             'const FINAL_ORDER_STATUSES = new Set(["Completed", "Completed Print Error"]);',
             source,
         )
-        self.assertEqual(source.count("await finishOrderFlow("), 4)
+        self.assertEqual(source.count("await finishOrderFlow("), 5)
         self.assertNotIn("renderOrder(completed); dialog.hide();", source)
 
         # "Друк чека" must still reach the chek that was just paid even after the cart

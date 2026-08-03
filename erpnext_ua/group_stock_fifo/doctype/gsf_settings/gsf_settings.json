@@ -1,0 +1,197 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "creation": "2026-07-28 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "schema_version",
+  "section_allocation",
+  "allocation_ttl_minutes",
+  "allocation_retry_limit",
+  "default_reallocation_mode",
+  "section_guards",
+  "require_same_base_currency",
+  "block_negative_stock",
+  "block_backdated_mutations",
+  "currency_tolerance",
+  "block_unmanaged_gsf_stock_docs",
+  "closed_through_date",
+  "section_compat",
+  "enable_cc_discovery",
+  "enable_external_stock_aggregation",
+  "enable_cc_provider_adapter",
+  "section_ops",
+  "integrity_check_schedule",
+  "manual_review_role",
+  "debug_trace_enabled"
+ ],
+ "fields": [
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "0",
+   "description": "Feature gate. Must stay off after install and migrate (§44)."
+  },
+  {
+   "fieldname": "schema_version",
+   "fieldtype": "Data",
+   "label": "Schema Version",
+   "read_only": 1,
+   "default": "1"
+  },
+  {
+   "fieldname": "section_allocation",
+   "fieldtype": "Section Break",
+   "label": "Allocation"
+  },
+  {
+   "fieldname": "allocation_ttl_minutes",
+   "fieldtype": "Int",
+   "label": "Allocation TTL (minutes)",
+   "default": "15"
+  },
+  {
+   "fieldname": "allocation_retry_limit",
+   "fieldtype": "Int",
+   "label": "Allocation Retry Limit",
+   "default": "3"
+  },
+  {
+   "fieldname": "default_reallocation_mode",
+   "fieldtype": "Select",
+   "label": "Default Reallocation Mode",
+   "options": "MANAGEMENT_REALLOCATION",
+   "default": "MANAGEMENT_REALLOCATION",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_guards",
+   "fieldtype": "Section Break",
+   "label": "Fail-closed Guards"
+  },
+  {
+   "fieldname": "require_same_base_currency",
+   "fieldtype": "Check",
+   "label": "Require Same Base Currency",
+   "default": "1"
+  },
+  {
+   "fieldname": "block_negative_stock",
+   "fieldtype": "Check",
+   "label": "Block Negative Stock",
+   "default": "1"
+  },
+  {
+   "fieldname": "block_backdated_mutations",
+   "fieldtype": "Check",
+   "label": "Block Backdated Mutations",
+   "default": "1"
+  },
+  {
+   "fieldname": "currency_tolerance",
+   "fieldtype": "Currency",
+   "label": "Currency Tolerance",
+   "default": "0.01",
+   "description": "§16.2: the largest base-currency gap allowed between a source issue and its destination receipt."
+  },
+  {
+   "fieldname": "block_unmanaged_gsf_stock_docs",
+   "fieldtype": "Check",
+   "label": "Block Unmanaged GSF Stock Documents",
+   "default": "1"
+  },
+  {
+   "fieldname": "closed_through_date",
+   "fieldtype": "Date",
+   "label": "Closed Through Date"
+  },
+  {
+   "fieldname": "section_compat",
+   "fieldtype": "Section Break",
+   "label": "Compatibility"
+  },
+  {
+   "fieldname": "enable_cc_discovery",
+   "fieldtype": "Check",
+   "label": "Enable CC Warehouse Discovery",
+   "default": "1"
+  },
+  {
+   "fieldname": "enable_external_stock_aggregation",
+   "fieldtype": "Check",
+   "label": "Enable External Stock Aggregation",
+   "default": "0"
+  },
+  {
+   "fieldname": "enable_cc_provider_adapter",
+   "fieldtype": "Check",
+   "label": "Enable CC Provider Adapter",
+   "default": "0",
+   "read_only": 1,
+   "description": "Out of MVP scope (§2.4)."
+  },
+  {
+   "fieldname": "section_ops",
+   "fieldtype": "Section Break",
+   "label": "Operations"
+  },
+  {
+   "fieldname": "integrity_check_schedule",
+   "fieldtype": "Data",
+   "label": "Integrity Check Schedule"
+  },
+  {
+   "fieldname": "manual_review_role",
+   "fieldtype": "Link",
+   "label": "Manual Review Role",
+   "options": "Role"
+  },
+  {
+   "fieldname": "debug_trace_enabled",
+   "fieldtype": "Check",
+   "label": "Debug Trace Enabled",
+   "default": "0"
+  }
+ ],
+ "issingle": 1,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-07-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

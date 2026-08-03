@@ -19,11 +19,20 @@ PAYFORM_CASHLESS = 1
 
 
 def _register_for_invoice(si) -> str | None:
-	if not si.get("pos_profile"):
-		return None
-	return frappe.db.get_value(
-		"PRRO Cash Register", {"pos_profile": si.pos_profile, "status": "Active"}
-	)
+	if si.get("pos_profile"):
+		return frappe.db.get_value(
+			"PRRO Cash Register", {"pos_profile": si.pos_profile, "status": "Active"}
+		)
+	if si.get("ua_ecommerce_channel") and si.get("company"):
+		return frappe.db.get_value(
+			"PRRO Cash Register",
+			{
+				"company": si.company,
+				"ecommerce_default": 1,
+				"status": "Active",
+			},
+		)
+	return None
 
 
 def _kep_key_for_invoice(si, register_name: str) -> str | None:
@@ -61,6 +70,7 @@ def _invoice_lines(si) -> list[dict]:
 			"qty": qty,
 			"price": gross_rate if discount_sum else final_rate,
 			"amount": amount,
+			"loyalty_discount_sum": abs(frappe.utils.flt(it.get("ua_loyalty_redeemed_amount"))),
 		}
 		if discount_sum:
 			line.update(
@@ -72,12 +82,62 @@ def _invoice_lines(si) -> list[dict]:
 				}
 			)
 		lines.append(line)
-	return lines
+	return _group_gsf_lines(si, lines)
+
+
+def _group_gsf_lines(si, lines: list[dict]) -> list[dict]:
+	"""Collapse technical FIFO rows only when their fiscal identity is equal."""
+	groups: dict[str, list[dict]] = {}
+	order: list[str] = []
+	for item, line in zip(si.get("items") or [], lines, strict=True):
+		key = item.get("gsf_display_group") or item.name
+		if key not in groups:
+			groups[key] = []
+			order.append(key)
+		groups[key].append(line)
+	result = []
+	for key in order:
+		rows = groups[key]
+		if len(rows) == 1:
+			result.append(rows[0])
+			continue
+		_assert_same_fiscal_identity(key, rows)
+		merged = dict(rows[0])
+		merged["qty"] = sum(row["qty"] for row in rows)
+		merged["amount"] = frappe.utils.flt(sum(row["amount"] for row in rows), 2)
+		merged["loyalty_discount_sum"] = frappe.utils.flt(
+			sum(row.get("loyalty_discount_sum") or 0 for row in rows), 2
+		)
+		if any(row.get("discount_sum") for row in rows):
+			merged["subtotal"] = frappe.utils.flt(sum(row.get("subtotal") or 0 for row in rows), 2)
+			merged["discount_sum"] = frappe.utils.flt(
+				sum(row.get("discount_sum") or 0 for row in rows), 2
+			)
+			merged["discount_percent"] = (
+				frappe.utils.flt(merged["discount_sum"] * 100 / merged["subtotal"], 2)
+				if merged["subtotal"]
+				else 0
+			)
+		result.append(merged)
+	return result
+
+
+def _assert_same_fiscal_identity(group: str, rows: list[dict]) -> None:
+	fields = ("code", "barcode", "uktzed", "dkpp", "unit_cd", "letters", "name", "uom", "price")
+	first = rows[0]
+	mismatches = [field for field in fields if any(row.get(field) != first.get(field) for row in rows[1:])]
+	if mismatches:
+		frappe.throw(
+			f"GSF display group {group} cannot be fiscalized as one line: {', '.join(mismatches)} differ"
+		)
 
 
 def _invoice_payments(si) -> list[dict]:
 	payments = []
-	for p in si.get("payments", []):
+	payment_rows = list(si.get("payments", []))
+	if not payment_rows and si.get("ua_ecommerce_channel"):
+		payment_rows = _submitted_payment_rows(si.name)
+	for p in payment_rows:
 		amount = abs(frappe.utils.flt(p.amount))
 		if not amount:
 			continue
@@ -104,10 +164,61 @@ def _invoice_payments(si) -> list[dict]:
 			row["provided"] = amount + frappe.utils.flt(si.change_amount)
 			row["remains"] = frappe.utils.flt(si.change_amount)
 		payments.append(row)
-	if not payments:  # рахунок без POS-оплат — вважаємо готівкою на всю суму
+	if not payments and si.get("ua_ecommerce_channel"):
+		frappe.throw(
+			f"Для ecommerce-рахунку {si.name} немає проведеної оплати",
+			FiscalServerError,
+		)
+	if not payments:  # legacy non-POS manual fiscalization
 		payments.append({"code": PAYFORM_CASH, "name": "ГОТІВКА", "form": "ГОТІВКА",
 						 "sum": abs(frappe.utils.flt(si.rounded_total or si.grand_total))})
+	if si.get("ua_ecommerce_channel"):
+		total = abs(frappe.utils.flt(si.rounded_total or si.grand_total))
+		paid = frappe.utils.flt(sum(row["sum"] for row in payments), 2)
+		if abs(total - paid) > 0.01:
+			frappe.throw(
+				f"Оплати ecommerce-рахунку {si.name} ({paid}) не збігаються з підсумком ({total})",
+				FiscalServerError,
+			)
 	return payments
+
+
+def _submitted_payment_rows(sales_invoice: str) -> list:
+	references = frappe.get_all(
+		"Payment Entry Reference",
+		filters={
+			"parenttype": "Payment Entry",
+			"reference_doctype": "Sales Invoice",
+			"reference_name": sales_invoice,
+		},
+		fields=["parent", "allocated_amount"],
+		order_by="parent asc, idx asc",
+	)
+	rows = []
+	for reference in references:
+		payment = frappe.db.get_value(
+			"Payment Entry",
+			reference.parent,
+			["docstatus", "mode_of_payment"],
+			as_dict=True,
+		)
+		if not payment or int(payment.docstatus or 0) != 1:
+			continue
+		mode_of_payment = str(payment.mode_of_payment or "").strip()
+		if not mode_of_payment:
+			frappe.throw(
+				f"У проведеної оплати {reference.parent} не вказано спосіб оплати",
+				FiscalServerError,
+			)
+		payment_type = frappe.db.get_value("Mode of Payment", mode_of_payment, "type")
+		rows.append(
+			frappe._dict(
+				mode_of_payment=mode_of_payment,
+				type=payment_type,
+				amount=reference.allocated_amount,
+			)
+		)
+	return rows
 
 
 def _invoice_taxes(si) -> list[dict]:
@@ -173,7 +284,8 @@ def fiscalize_invoice(sales_invoice: str, client=None) -> str | None:
 	if not register:
 		frappe.throw(
 			f"Для рахунку {sales_invoice} не знайдено активної каси ПРРО "
-			f"(POS Profile: {si.get('pos_profile') or '—'})",
+			f"(POS Profile: {si.get('pos_profile') or '—'}, "
+			f"ecommerce channel: {si.get('ua_ecommerce_channel') or '—'})",
 			FiscalServerError,
 		)
 	kep_key = _kep_key_for_invoice(si, register)
@@ -183,7 +295,7 @@ def fiscalize_invoice(sales_invoice: str, client=None) -> str | None:
 	no_rounding_total = abs(frappe.utils.flt(si.grand_total))
 	total = abs(frappe.utils.flt(si.rounded_total or si.grand_total))
 	has_rounding = abs(total - no_rounding_total) > 0.001
-	return orch.fiscalize_sale(
+	receipt = orch.fiscalize_sale(
 		cash_register=register,
 		kep_key=kep_key,
 		items=_invoice_lines(si),
@@ -199,6 +311,18 @@ def fiscalize_invoice(sales_invoice: str, client=None) -> str | None:
 		idem_key=f"{'return' if si.is_return else 'sale'}:{register}:{sales_invoice}",
 		client=client,
 	)
+	if receipt and si.get("ua_loyalty_account"):
+		frappe.db.set_value(
+			"PRRO Receipt",
+			receipt,
+			{
+				"loyalty_redeemed_amount": abs(frappe.utils.flt(si.get("ua_loyalty_redeemed_amount"))),
+				"loyalty_scope": si.get("ua_loyalty_scope"),
+				"loyalty_snapshot_hash": si.get("ua_loyalty_snapshot_hash"),
+			},
+			update_modified=False,
+		)
+	return receipt
 
 
 def on_submit(doc, method=None):

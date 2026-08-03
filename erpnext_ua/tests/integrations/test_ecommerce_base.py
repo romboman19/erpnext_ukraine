@@ -568,13 +568,19 @@ class EcommerceBaseTest(unittest.TestCase):
                 "items": [{"external_id": "SKU-1", "quantity": 1, "price": 100}],
             }
         )
-        invoice = types.SimpleNamespace(name="SINV-1", grand_total=100)
+        invoice = types.SimpleNamespace(name="SINV-1", grand_total=100, company="HUNTER")
         database = Mock()
-        database.get_value.return_value = types.SimpleNamespace(
-            company="HUNTER",
-            account_currency="UAH",
-            is_group=0,
-        )
+
+        def account_value(_doctype, _name, fields, **_kwargs):
+            if fields == "company":
+                return "HUNTER"
+            return types.SimpleNamespace(
+                company="HUNTER",
+                account_currency="UAH",
+                is_group=0,
+            )
+
+        database.get_value.side_effect = account_value
         reservation = types.SimpleNamespace(doc=types.SimpleNamespace(), created=False)
         with (
             patch.object(orders.frappe, "db", database),
@@ -627,7 +633,9 @@ class EcommerceBaseTest(unittest.TestCase):
         )
         action = {"erp_action": "Create SO+SI+Payment"}
         sales_order = types.SimpleNamespace(name="SO-1", docstatus=1)
-        sales_invoice = types.SimpleNamespace(name="SINV-1", docstatus=1, grand_total=100)
+        sales_invoice = types.SimpleNamespace(
+            name="SINV-1", docstatus=1, grand_total=100, company="HUNTER"
+        )
 
         def get_doc(doctype, name):
             return sales_order if doctype == "Sales Order" else sales_invoice
@@ -658,6 +666,7 @@ class EcommerceBaseTest(unittest.TestCase):
             "OcStore Settings:hunter.rv.ua",
             order,
             sales_invoice,
+            amount=100.0,
         )
         resolve_items.assert_not_called()
         resolve_customer.assert_not_called()
@@ -684,7 +693,9 @@ class EcommerceBaseTest(unittest.TestCase):
             }
         )
         sales_order = types.SimpleNamespace(name="SO-2", docstatus=1)
-        sales_invoice = types.SimpleNamespace(name="SINV-2", docstatus=1, grand_total=100)
+        sales_invoice = types.SimpleNamespace(
+            name="SINV-2", docstatus=1, grand_total=100, company="HUNTER"
+        )
         with (
             patch.object(orders, "_existing_documents", return_value={"sales_order": "SO-2"}),
             patch.object(orders.frappe, "get_doc", return_value=sales_order, create=True),
@@ -705,12 +716,89 @@ class EcommerceBaseTest(unittest.TestCase):
 
         self.assertEqual(result["outcome"], "reconciled")
         create_invoice.assert_called_once_with(
+            channel,
             sales_order,
             "ecom:o:paid-race-2",
             "OcStore Settings:hunter.rv.ua",
             order,
         )
         payment.assert_called_once()
+
+    def test_paid_fulfillment_pays_each_legal_company_invoice(self):
+        channel = {
+            "doctype": "OcStore Settings",
+            "name": "hunter.rv.ua",
+            "company": "FOP A",
+            "currency": "UAH",
+        }
+        order = orders.normalize_order(
+            {
+                "channel_order_id": "OC-MULTI-FOP-1",
+                "channel_status": "paid",
+                "customer": {"phone": "0501234567"},
+                "payment": {
+                    "type": "online",
+                    "amount": 100,
+                    "currency": "UAH",
+                    "paid": True,
+                },
+                "items": [{"external_id": "SKU-1", "quantity": 1, "price": 100}],
+            }
+        )
+        sales_order = types.SimpleNamespace(name="SO-MULTI", docstatus=1)
+        primary = types.SimpleNamespace(
+            name="SINV-A",
+            docstatus=1,
+            grand_total=60,
+            company="FOP A",
+        )
+        primary.get = (
+            lambda key, default=None: "FUL-1" if key == "ua_sale_fulfillment" else default
+        )
+        second = types.SimpleNamespace(
+            name="SINV-B",
+            docstatus=1,
+            grand_total=40,
+            company="FOP B",
+        )
+
+        def get_doc(doctype, name):
+            if doctype == "Sales Order":
+                return sales_order
+            return {"SINV-A": primary, "SINV-B": second}[name]
+
+        with (
+            patch.object(orders.frappe, "get_doc", side_effect=get_doc, create=True),
+            patch.object(
+                orders.frappe.db,
+                "get_value",
+                return_value='["SINV-A","SINV-B"]',
+                create=True,
+            ),
+            patch.object(
+                orders,
+                "_create_payment",
+                side_effect=["ACC-PAY-A", "ACC-PAY-B"],
+            ) as payment,
+        ):
+            result = orders._converge_sales_order_invoice_payment(
+                channel,
+                "OcStore Settings:hunter.rv.ua",
+                order,
+                "ecom:o:multi-fop-1",
+                {"erp_action": "Create SO+SI+Payment"},
+                {"sales_order": "SO-MULTI", "sales_invoice": "SINV-A"},
+            )
+
+        self.assertEqual(result["payment_entries"], ["ACC-PAY-A", "ACC-PAY-B"])
+        self.assertEqual(
+            [call.kwargs["amount"] for call in payment.call_args_list],
+            [60.0, 40.0],
+        )
+        self.assertEqual(
+            [call.args[3].company for call in payment.call_args_list],
+            ["FOP A", "FOP B"],
+        )
 
     def test_existing_matching_payment_is_reused_from_invoice_references(self):
         reference = types.SimpleNamespace(parent="ACC-PAY-3", allocated_amount=100)

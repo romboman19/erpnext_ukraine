@@ -1,0 +1,155 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "creation": "2026-07-28 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "group_name",
+  "group_code",
+  "enabled",
+  "base_currency",
+  "reporting_parent_company",
+  "section_defaults",
+  "default_global_fifo_policy",
+  "default_reallocation_mode",
+  "default_clearing_dimension",
+  "section_members",
+  "members",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "group_name",
+   "fieldtype": "Data",
+   "label": "Group Name",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "group_code",
+   "fieldtype": "Data",
+   "label": "Group Code",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "base_currency",
+   "fieldtype": "Link",
+   "label": "Base Currency",
+   "options": "Currency",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reporting_parent_company",
+   "fieldtype": "Link",
+   "label": "Reporting Parent Company",
+   "options": "Company",
+   "description": "Consolidated reporting only. No stock, sales or PRRO on this company (§6.1)."
+  },
+  {
+   "fieldname": "section_defaults",
+   "fieldtype": "Section Break",
+   "label": "Defaults"
+  },
+  {
+   "fieldname": "default_global_fifo_policy",
+   "fieldtype": "Select",
+   "label": "Default Global FIFO Policy",
+   "options": "GLOBAL_FIFO_AUTO_REALLOCATE\nGLOBAL_FIFO_MANUAL_APPROVAL",
+   "default": "GLOBAL_FIFO_AUTO_REALLOCATE"
+  },
+  {
+   "fieldname": "default_reallocation_mode",
+   "fieldtype": "Select",
+   "label": "Default Reallocation Mode",
+   "options": "MANAGEMENT_REALLOCATION",
+   "default": "MANAGEMENT_REALLOCATION"
+  },
+  {
+   "fieldname": "default_clearing_dimension",
+   "fieldtype": "Data",
+   "label": "Counterparty Accounting Dimension",
+   "default": "Counterparty Accounting Company"
+  },
+  {
+   "fieldname": "section_members",
+   "fieldtype": "Section Break",
+   "label": "Members"
+  },
+  {
+   "fieldname": "members",
+   "fieldtype": "Table",
+   "label": "Members",
+   "options": "GSF Group Member"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "issingle": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-07-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Company Group",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF Stock Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "field:group_name",
+ "title_field": "group_name"
+}

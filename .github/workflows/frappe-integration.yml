@@ -108,7 +108,39 @@ jobs:
           bench --site integration.local run-tests --module erpnext_ua.tests.test_ua_chart_setup
           bench --site integration.local run-tests --module erpnext_ua.tests.test_ua_off_balance_entry
 
-      - name: Run commission trade integration tests
+      - name: Verify scheduled GSF services on a clean site
+        working-directory: frappe-bench
+        run: >-
+          bench --site integration.local execute
+          erpnext_ua.group_stock_fifo.services.allocations.expire_due_allocations
+
+      - name: Run multi-FOP Global FIFO acceptance on clean master data
+        working-directory: frappe-bench
+        run: |
+          bench --site integration.local execute \
+            erpnext_ua.group_stock_fifo.spikes.fixtures.build \
+            --kwargs '{"confirm_site":"integration.local","confirm_write":"BUILD_GSF_PHASE_0"}'
+          bench --site integration.local execute \
+            erpnext_ua.group_stock_fifo.integration_tests.phase_3_fixture.build \
+            --kwargs '{"confirm_write":"BUILD_GSF_PHASE_3"}'
+          bench --site integration.local execute \
+            erpnext_ua.group_stock_fifo.integration_tests.phase_7_mixed_fulfillment.run
+          bench --site integration.local execute \
+            erpnext_ua.group_stock_fifo.integration_tests.phase_6_serial_returns.run
+
+      - name: Run loyalty and gift certificate integration tests
+        working-directory: frappe-bench
+        run: |
+          bench --site integration.local run-tests --module erpnext_ua.ua_loyalty.tests.test_services
+          bench --site integration.local run-tests --module erpnext_ua.ua_gift_certificates.tests.test_services
+
+      - name: Run ecommerce fiscal integration tests
+        working-directory: frappe-bench
+        run: >-
+          bench --site integration.local run-tests
+          --module erpnext_ua.ua_fiscal.tests.test_ecommerce
+
+      - name: Run all application integration tests
         working-directory: frappe-bench
         run: >-
           bench --site integration.local run-tests

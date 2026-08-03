@@ -88,7 +88,6 @@ REQUIRED_CUSTOM_FIELDS = {
 
 SECRET_FIELDS = {
     "Customer Identification Settings": (
-        "telegram_bot_token",
         "telegram_webhook_secret",
     ),
     "Ecommerce Channel": ("api_password",),
@@ -110,7 +109,7 @@ def run_installation_checks(*, raise_on_error: bool = True) -> dict:
     errors: list[str] = []
 
     installed_apps = set(frappe.get_installed_apps())
-    for app in ("erpnext", "ukrainian_integrations"):
+    for app in ("erpnext", "erpnext_ua"):
         if app not in installed_apps:
             errors.append(f"Required app is not installed: {app}")
 
@@ -149,7 +148,7 @@ def run_installation_checks(*, raise_on_error: bool = True) -> dict:
     result = {
         "ok": not errors,
         "errors": errors,
-        "installed_apps": sorted(installed_apps.intersection({"frappe", "erpnext", "ukrainian_integrations"})),
+        "installed_apps": sorted(installed_apps.intersection({"frappe", "erpnext", "erpnext_ua"})),
         "required_doctypes": len(REQUIRED_DOCTYPES),
     }
     if errors and raise_on_error:

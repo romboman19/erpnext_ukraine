@@ -8,6 +8,7 @@ from contextlib import suppress
 import frappe
 from frappe import _
 
+from erpnext_ua.integrations.shipment.profile_selection import select_sender_profile
 from erpnext_ua.integrations.shipment.ukr_poshta.api import UkrPoshtaClient
 from erpnext_ua.integrations.utils.logger import log_event
 from erpnext_ua.integrations.utils.operations import mark_operation, require_new_or_return_success, reserve_operation
@@ -113,7 +114,7 @@ def _up_sender_profiles_list() -> list[dict]:
     rows = frappe.get_all(
         "UP Sender Profile",
         fields=[
-            "name", "profile_name", "is_active", "is_default", "sender_name", "sender_phone", "sender_email",
+            "name", "profile_name", "company", "is_active", "is_default", "sender_name", "sender_phone", "sender_email",
             "postcode", "region", "city", "street", "house_number", "apartment_number", "api_base",
         ],
         filters={"is_active": 1},
@@ -124,6 +125,7 @@ def _up_sender_profiles_list() -> list[dict]:
         doc = frappe.get_doc("UP Sender Profile", r["name"])
         out.append({
             "name": r.get("profile_name") or r.get("name"),
+            "company": r.get("company"),
             "default": bool(r.get("is_default")),
             "sender_name": r.get("sender_name"),
             "sender_phone": r.get("sender_phone"),
@@ -142,20 +144,21 @@ def _up_sender_profiles_list() -> list[dict]:
     return out
 
 
-def _resolve_up_profile(sender_profile: str | None = None) -> dict:
+def _resolve_up_profile(sender_profile: str | None = None, *, company: str | None = None) -> dict:
     profiles = _up_sender_profiles_list()
     if profiles:
-        if sender_profile:
-            for p in profiles:
-                if (p.get("name") or "") == sender_profile:
-                    return p
-            frappe.throw(_("Ukrposhta sender profile not found or inactive: {0}").format(sender_profile))
-        for p in profiles:
-            if p.get("default"):
-                return p
-        return profiles[0]
-    return {
+        try:
+            return select_sender_profile(
+                profiles,
+                carrier="Ukrposhta",
+                requested=sender_profile,
+                company=company,
+            )
+        except ValueError as exc:
+            frappe.throw(_(str(exc)))
+    profile = {
         "name": "default",
+        "company": _cfg("default_company"),
         "sender_name": _cfg("ukrposhta_sender_name", "HUNTER"),
         "sender_phone": _cfg("ukrposhta_sender_phone", ""),
         "sender_email": _cfg("ukrposhta_sender_email", ""),
@@ -170,6 +173,15 @@ def _resolve_up_profile(sender_profile: str | None = None) -> dict:
         "tracking_token": _cfg("ukrposhta_tracking_token"),
         "counterparty_token": _cfg("ukrposhta_counterparty_token"),
     }
+    try:
+        return select_sender_profile(
+            [profile],
+            carrier="Ukrposhta",
+            requested=sender_profile,
+            company=company,
+        )
+    except ValueError as exc:
+        frappe.throw(_(str(exc)))
 
 
 def _client_from_profile(profile: dict) -> UkrPoshtaClient:
@@ -185,11 +197,21 @@ def _client_from_profile(profile: dict) -> UkrPoshtaClient:
 
 
 @frappe.whitelist()
-def up_sender_profiles_list() -> dict:
+def up_sender_profiles_list(company: str | None = None) -> dict:
     require_roles(*SALES_ROLES)
-    items=[{"name": p.get("name"), "default": 1 if p.get("default") else 0} for p in _up_sender_profiles_list()]
+    items = [
+        {
+            "name": profile.get("name"),
+            "company": profile.get("company"),
+            "default": 1 if profile.get("default") else 0,
+        }
+        for profile in _up_sender_profiles_list()
+        if not company or profile.get("company") == company
+    ]
     if not items:
-        items=[{"name":"default", "default":1}]
+        fallback_company = _cfg("default_company")
+        if not company or company == fallback_company:
+            items = [{"name": "default", "company": fallback_company, "default": 1}]
     return {"ok": True, "items": items}
 
 
@@ -347,7 +369,7 @@ def sync_sales_invoice_up_statuses(limit: int = 50) -> dict:
     docs = frappe.get_all(
         "Sales Invoice",
         filters={"up_barcode": ["is", "set"]},
-        fields=["name", "up_barcode", "up_status", "up_sender_profile", "up_last_sync_at"],
+        fields=["name", "company", "up_barcode", "up_status", "up_sender_profile", "up_last_sync_at"],
         order_by="up_last_sync_at asc, modified asc",
         limit=max(1, min(int(limit or 50), 500)),
     )
@@ -361,7 +383,10 @@ def sync_sales_invoice_up_statuses(limit: int = 50) -> dict:
         if not code:
             continue
         try:
-            profile = _resolve_up_profile(d.get("up_sender_profile") or None)
+            profile = _resolve_up_profile(
+                d.get("up_sender_profile") or None,
+                company=d.get("company"),
+            )
             client = _client_from_profile(profile)
             row = client.track(_validated_barcode(code))
             status = row.get("status") or row.get("eventName") or row.get("state") or ""
@@ -418,7 +443,7 @@ def create_shipment_from_sales_invoice(
     si = permitted_doc("Sales Invoice", sales_invoice, "read")
     if int(si.docstatus or 0) != 1:
         frappe.throw(_("Sales Invoice must be submitted"))
-    profile = _resolve_up_profile(sender_profile)
+    profile = _resolve_up_profile(sender_profile, company=si.company)
     client = _client_from_profile(profile)
 
     # ── 1a. Sender address ────────────────────────────────────────────────────

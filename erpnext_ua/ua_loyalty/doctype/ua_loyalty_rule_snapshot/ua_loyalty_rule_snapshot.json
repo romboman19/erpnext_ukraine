@@ -1,0 +1,10 @@
+{
+ "doctype":"DocType","name":"UA Loyalty Rule Snapshot","module":"UA Loyalty","engine":"InnoDB","autoname":"format:LOY-RULE-{########}",
+ "field_order":["program","version","published_at","published_by","effective_from","effective_to","snapshot_json","snapshot_hash","app_version","status"],
+ "fields":[
+  {"fieldname":"program","fieldtype":"Link","label":"Програма","options":"UA Loyalty Program","reqd":1,"in_list_view":1},{"fieldname":"version","fieldtype":"Int","label":"Версія","reqd":1},{"fieldname":"published_at","fieldtype":"Datetime","label":"Опубліковано","reqd":1},{"fieldname":"published_by","fieldtype":"Link","label":"Автор","options":"User","reqd":1},
+  {"fieldname":"effective_from","fieldtype":"Datetime","label":"Чинний з"},{"fieldname":"effective_to","fieldtype":"Datetime","label":"Чинний до"},{"fieldname":"snapshot_json","fieldtype":"Long Text","label":"JSON","reqd":1},{"fieldname":"snapshot_hash","fieldtype":"Data","label":"Hash","reqd":1,"unique":1,"search_index":1},{"fieldname":"app_version","fieldtype":"Data","label":"Версія застосунку"},
+  {"fieldname":"status","fieldtype":"Select","label":"Стан","options":"ACTIVE\nSUPERSEDED\nREVOKED_FOR_FUTURE_USE","default":"ACTIVE","reqd":1}
+ ],
+ "permissions":[{"role":"System Manager","read":1},{"role":"UA Loyalty Auditor","read":1},{"role":"UA Loyalty Administrator","read":1}]
+}

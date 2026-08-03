@@ -71,12 +71,17 @@ def _validate_reported_return(frappe: Any, sale: Any) -> None:
         )
 
 
-def create_return_invoice(request: ManagedReturnRequest) -> Any:
+def create_return_invoice(
+    request: ManagedReturnRequest,
+    *,
+    invoice_values: dict[str, Any] | None = None,
+    allow_transaction_writes: bool = False,
+) -> Any:
     """Create one idempotent exact-source return for a managed Sales Invoice."""
     import frappe
     from frappe.utils import getdate
 
-    if frappe.db.transaction_writes:
+    if frappe.db.transaction_writes and not allow_transaction_writes:
         raise ManagedReturnError(
             "Managed return creation must start before unrelated transaction writes"
         )
@@ -123,6 +128,7 @@ def create_return_invoice(request: ManagedReturnRequest) -> Any:
             RETURN_FINGERPRINT_FIELD: fingerprint,
         }
     )
+    invoice.update(_allowed_invoice_values(invoice_values or {}))
     original_rows = {row.name: row for row in original.items}
     for line in request.lines:
         sale = sales[line.sale_allocation]
@@ -168,6 +174,7 @@ def create_return_invoice(request: ManagedReturnRequest) -> Any:
                 "expense_account": source.expense_account,
                 "cost_center": source.cost_center,
                 "sales_invoice_item": source.name,
+                "ua_pos_order_item": source.get("ua_pos_order_item"),
                 "use_serial_batch_fields": int(bool(sale.serial_no or sale.batch_no)),
                 "serial_no": sale.serial_no,
                 "batch_no": sale.batch_no,
@@ -177,6 +184,21 @@ def create_return_invoice(request: ManagedReturnRequest) -> Any:
             },
         )
         row.set(OWNERSHIP_FIELD, sale.stock_lot)
+    payments = (invoice_values or {}).get("payments")
+    if payments is not None:
+        invoice.set("payments", payments)
+        invoice.run_method("calculate_taxes_and_totals")
+    if invoice.get("ua_pos_order"):
+        order = frappe.get_doc("POS Order", invoice.ua_pos_order)
+        from erpnext_ua.ua_gift_certificates.adapters.sales_invoice import (
+            prepare_invoice as prepare_gift,
+        )
+        from erpnext_ua.ua_loyalty.adapters.sales_invoice import (
+            prepare_invoice as prepare_loyalty,
+        )
+
+        prepare_loyalty(invoice, order)
+        prepare_gift(invoice, order)
     name = "CC-RET-" + sha256(
         f"{request.idempotency_key}:{fingerprint}".encode()
     ).hexdigest()[:20].upper()
@@ -197,6 +219,21 @@ def create_return_invoice(request: ManagedReturnRequest) -> Any:
             return existing
         raise ManagedReturnError("Concurrent managed return database conflict did not settle") from None
     return invoice
+
+
+def _allowed_invoice_values(values: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "is_pos",
+        "ua_pos_order",
+        "ua_pos_desk",
+        "ua_pos_shift",
+        "ua_fop_profile",
+        "change_amount",
+        "remarks",
+        "ua_sale_fulfillment",
+        "ua_fulfillment_route",
+    }
+    return {key: value for key, value in values.items() if key in allowed}
 
 
 def _tracking_names(frappe: Any, row: Any, doctype: str) -> set[str]:

@@ -4,7 +4,6 @@ import frappe
 
 from erpnext_ua.ua_fiscal.payment_catalog import CHANNEL_KIND, PAYMENT_CONTEXTS, PAYMENT_FORMS
 
-
 _PAYFORM_NAMES = {
 	0: "ГОТІВКА",
 	1: "КАРТКА",
@@ -24,6 +23,8 @@ _PAYFORM_ALIASES = {
 	"iban": "ПЕРЕКАЗ НА РАХУНОК",
 	"bank transfer": "ПЕРЕКАЗ НА РАХУНОК",
 	"bonus": "БОНУСИ",
+	"gift certificate": "ПОДАРУНКОВИЙ СЕРТИФІКАТ",
+	"подарунковий сертифікат": "ПОДАРУНКОВИЙ СЕРТИФІКАТ",
 	"installment": "РОЗСТРОЧКА",
 }
 
@@ -54,6 +55,7 @@ def fiscal_payform_name(kind: str | None, code: int | str | None, configured_nam
 		"Card": "КАРТКА",
 		"IBAN": "ПЕРЕКАЗ НА РАХУНОК",
 		"Bonus": "БОНУСИ",
+		"Gift Certificate": "ПОДАРУНКОВИЙ СЕРТИФІКАТ",
 		"Installment": "РОЗСТРОЧКА",
 	}
 	return by_kind.get(str(kind or "")) or canonical_payform_name(code, configured_name)

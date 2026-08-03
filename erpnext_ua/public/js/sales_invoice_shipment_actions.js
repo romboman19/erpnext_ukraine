@@ -9,7 +9,10 @@ frappe.ui.form.on('Sales Invoice', {
           : frappe.utils.get_random(32);
       let senderOptions = [];
       try {
-        const p = await frappe.call({ method: 'erpnext_ua.integrations.shipment.nova_poshta.service.np_sender_profiles_list' });
+        const p = await frappe.call({
+          method: 'erpnext_ua.integrations.shipment.nova_poshta.service.np_sender_profiles_list',
+          args: { company: frm.doc.company }
+        });
         senderOptions = ((p.message && p.message.items) || []).map(x => x.name).filter(Boolean);
       } catch (_) {}
 
@@ -101,7 +104,10 @@ frappe.ui.form.on('Sales Invoice', {
           : frappe.utils.get_random(32);
       let upSenderOptions = [];
       try {
-        const p = await frappe.call({ method: 'erpnext_ua.integrations.shipment.ukr_poshta.service.up_sender_profiles_list' });
+        const p = await frappe.call({
+          method: 'erpnext_ua.integrations.shipment.ukr_poshta.service.up_sender_profiles_list',
+          args: { company: frm.doc.company }
+        });
         upSenderOptions = ((p.message && p.message.items) || []).map(x => x.name).filter(Boolean);
       } catch (_) {}
       const d = new frappe.ui.Dialog({

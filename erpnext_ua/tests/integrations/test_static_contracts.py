@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 import csv
 import json
-import re
 import unittest
 from pathlib import Path
 
@@ -119,6 +118,12 @@ class ProductionStaticContractsTest(unittest.TestCase):
         for path in [json_path for module in MODULES for json_path in module.glob("doctype/*/*.json")]:
             found.add(json.loads(path.read_text(encoding="utf-8"))["name"])
         self.assertTrue(required.issubset(found), required - found)
+
+    def test_installation_diagnostics_match_the_consolidated_app(self):
+        diagnostics = (INTEGRATIONS / "diagnostics.py").read_text(encoding="utf-8")
+        self.assertIn('for app in ("erpnext", "erpnext_ua")', diagnostics)
+        self.assertNotIn('for app in ("erpnext", "ukrainian_integrations")', diagnostics)
+        self.assertNotIn('"telegram_bot_token",', diagnostics)
 
     def test_turbosms_log_keeps_upgrade_safe_hash_names(self):
         path = (
@@ -328,6 +333,16 @@ class ProductionStaticContractsTest(unittest.TestCase):
         self.assertIn("serialize_worker", monitoring)
         self.assertIn('self.scheduler_status = "Active"', monitoring)
 
+    def test_gsf_expiry_sweeper_is_scheduled(self):
+        hooks = (APP / "hooks.py").read_text(encoding="utf-8")
+        allocations = (
+            APP / "group_stock_fifo" / "services" / "allocations.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('f"{GSF}.services.allocations.expire_due_allocations"', hooks)
+        self.assertIn("def expire_due_allocations(limit: int = 500)", allocations)
+        self.assertNotIn("not wired into `scheduler_events`", allocations)
+
     def test_prom_stock_contract_matches_official_external_id_endpoint(self):
         client = (ECOMMERCE / "providers" / "prom_ua" / "api.py").read_text(
             encoding="utf-8"
@@ -419,7 +434,7 @@ class ProductionStaticContractsTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("payment_key =", order_intake)
-        self.assertIn("'channel_order_id': order.channel_order_id", order_intake)
+        self.assertIn('"channel_order_id": order.channel_order_id', order_intake)
         self.assertIn("_converge_sales_order_invoice_payment", order_intake)
         self.assertIn("_find_matching_payment_entry", order_intake)
         self.assertIn("retry_failed=True", order_intake)

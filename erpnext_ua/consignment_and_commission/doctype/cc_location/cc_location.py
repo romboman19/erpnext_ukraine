@@ -30,6 +30,8 @@ class CCLocation(Document):
         self.legal_entity_label = entity.display_name
         for fieldname in ("own_warehouse", "commission_warehouse", "consignment_warehouse"):
             self._validate_warehouse(fieldname)
+        self._validate_pos_cash_desk()
+        self._validate_gsf_provider()
 
     def _validate_warehouse(self, fieldname: str) -> None:
         warehouse_name = self.get(fieldname)
@@ -47,3 +49,42 @@ class CCLocation(Document):
             frappe.throw(f"Warehouse {warehouse_name} must be a leaf warehouse")
         if warehouse.disabled:
             frappe.throw(f"Warehouse {warehouse_name} is disabled")
+
+    def _validate_gsf_provider(self) -> None:
+        if not self.gsf_physical_location:
+            if self.read_stock_enabled:
+                frappe.throw("Select a GSF Physical Location before enabling the provider")
+            return
+        location = frappe.db.get_value(
+            "GSF Physical Location",
+            self.gsf_physical_location,
+            ["company_group", "disabled"],
+            as_dict=True,
+        )
+        if not location or location.disabled:
+            frappe.throw("The linked GSF Physical Location must be active")
+        if not frappe.db.exists(
+            "GSF Group Member",
+            {
+                "parent": location.company_group,
+                "company": self.company,
+                "enabled": 1,
+                "can_sell_stock": 1,
+            },
+        ):
+            frappe.throw(
+                f"Company {self.company} must be an active selling member of "
+                f"GSF group {location.company_group}"
+            )
+
+    def _validate_pos_cash_desk(self) -> None:
+        if not self.pos_cash_desk:
+            return
+        desk = frappe.db.get_value(
+            "POS Cash Desk",
+            self.pos_cash_desk,
+            ["company", "status"],
+            as_dict=True,
+        )
+        if not desk or desk.status != "Active" or desk.company != self.company:
+            frappe.throw("POS Cash Desk must be active and belong to the CC Location Company")

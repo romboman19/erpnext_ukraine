@@ -8,13 +8,20 @@ from decimal import Decimal
 from typing import Literal
 
 RelationshipModel = Literal["OWN", "COMMISSION", "CONSIGNMENT"]
-SourceMethod = Literal["BUYOUT", "DEFERRED_PURCHASE", "COMMISSION", "CONSIGNMENT"]
+SourceMethod = Literal[
+    "BUYOUT", "DEFERRED_PURCHASE", "COMMISSION", "CONSIGNMENT", "GSF_LAYER"
+]
 
+# `GSF_LAYER` is the group-FIFO domain's own stock, and it is here rather than
+# in a second allocator because gate 0g found this module already
+# company-agnostic: the whole difference between the two domains lives in the
+# adapter that produces candidates (ADR-013).
 SOURCE_METHOD_RELATIONSHIP_MODEL: dict[SourceMethod, RelationshipModel] = {
     "BUYOUT": "OWN",
     "DEFERRED_PURCHASE": "OWN",
     "COMMISSION": "COMMISSION",
     "CONSIGNMENT": "CONSIGNMENT",
+    "GSF_LAYER": "OWN",
 }
 
 

@@ -17,6 +17,7 @@
   "unit_address",
   "column_break_unit",
   "pos_profile",
+  "ecommerce_default",
   "section_signing",
   "default_kep_key",
   "column_break_signing",
@@ -117,6 +118,13 @@
    "fieldtype": "Link",
    "label": "POS Profile",
    "options": "POS Profile"
+  },
+  {
+   "default": "0",
+   "description": "Use this register for paid ecommerce Sales Invoices of the same company.",
+   "fieldname": "ecommerce_default",
+   "fieldtype": "Check",
+   "label": "Default for Ecommerce"
   },
   {
    "fieldname": "section_signing",

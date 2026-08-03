@@ -5,9 +5,10 @@
   "autoname": "field:profile_name",
   "title_field": "profile_name",
   "engine": "InnoDB",
-  "field_order": ["profile_name", "is_active", "is_default", "api_key", "sender_ref", "contact_ref", "phone", "default_settlement_ref", "default_warehouse_ref", "sender_branches"],
+  "field_order": ["profile_name", "company", "is_active", "is_default", "api_key", "sender_ref", "contact_ref", "phone", "default_settlement_ref", "default_warehouse_ref", "sender_branches"],
   "fields": [
     {"fieldname": "profile_name", "fieldtype": "Data", "label": "Profile Name", "reqd": 1, "unique": 1, "in_list_view": 1},
+    {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "reqd": 1, "in_list_view": 1},
     {"fieldname": "is_active", "fieldtype": "Check", "label": "Active", "default": "1", "in_list_view": 1},
     {"fieldname": "is_default", "fieldtype": "Check", "label": "Default", "default": "0", "in_list_view": 1},
     {"fieldname": "api_key", "fieldtype": "Password", "label": "API Key", "reqd": 1},

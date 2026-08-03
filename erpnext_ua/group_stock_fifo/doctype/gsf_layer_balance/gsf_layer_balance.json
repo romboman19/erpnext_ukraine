@@ -1,0 +1,178 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "creation": "2026-07-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "stock_layer",
+  "company",
+  "warehouse",
+  "column_break_position",
+  "physical_location",
+  "warehouse_role",
+  "section_cache",
+  "actual_qty_cache",
+  "reserved_qty_cache",
+  "available_qty_cache",
+  "column_break_cache",
+  "stock_value_cache",
+  "last_sle",
+  "last_reconciled_at",
+  "integrity_status"
+ ],
+ "fields": [
+  {
+   "fieldname": "stock_layer",
+   "fieldtype": "Link",
+   "label": "Stock Layer",
+   "options": "GSF Stock Layer",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_position",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "physical_location",
+   "fieldtype": "Link",
+   "label": "Physical Location",
+   "options": "GSF Physical Location"
+  },
+  {
+   "fieldname": "warehouse_role",
+   "fieldtype": "Data",
+   "label": "Warehouse Role"
+  },
+  {
+   "fieldname": "section_cache",
+   "fieldtype": "Section Break",
+   "label": "Cache",
+   "description": "A cache over the Stock Ledger Entry aggregate, never a substitute for it (§9.10)."
+  },
+  {
+   "fieldname": "actual_qty_cache",
+   "fieldtype": "Float",
+   "label": "Actual Qty (cache)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "reserved_qty_cache",
+   "fieldtype": "Float",
+   "label": "Reserved Qty (cache)"
+  },
+  {
+   "fieldname": "available_qty_cache",
+   "fieldtype": "Float",
+   "label": "Available Qty (cache)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_cache",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stock_value_cache",
+   "fieldtype": "Currency",
+   "label": "Stock Value (cache)",
+   "description": "Informational only. Cost is read from the ledger, never from here (ADR-002)."
+  },
+  {
+   "fieldname": "last_sle",
+   "fieldtype": "Link",
+   "label": "Last Stock Ledger Entry",
+   "options": "Stock Ledger Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_reconciled_at",
+   "fieldtype": "Datetime",
+   "label": "Last Reconciled At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "integrity_status",
+   "fieldtype": "Select",
+   "label": "Integrity Status",
+   "options": "OK\nSTALE\nDIVERGED",
+   "default": "OK",
+   "search_index": 1,
+   "in_standard_filter": 1
+  }
+ ],
+ "issingle": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-07-30 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Layer Balance",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF Stock Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Stock User",
+   "read": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "stock_layer"
+}

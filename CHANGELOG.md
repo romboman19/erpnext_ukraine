@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.11.0 — 2026-07-31
+
+- додано модуль `UA Loyalty` зі scoped shared accounts, окремими signed bonus і
+  metric ledgers, item-level allocations, immutable rule snapshots та debt;
+- POS-UA отримав окремі non-loyalty/bonus discounts, quote/reservation до
+  terminal call, 100% redemption і відновлення після payment uncertainty;
+- `Sales Invoice` проводить earn/redeem, а повернення за первинним рядком окремо
+  створює earned reversal та redeemed restore з residual до копійки;
+- додано pending activation, expiry без створення debt, reconciliation,
+  card lifecycle audit, dual-control adjustments, opening import, workspace,
+  звіти та feature flag, який після міграції лишається вимкненим.
+
 ## 0.10.0 — 2026-07-26
 
 - новий модуль `UA Setup`: `UA Setup Wizard` і звіт готовності сайту до роботи в

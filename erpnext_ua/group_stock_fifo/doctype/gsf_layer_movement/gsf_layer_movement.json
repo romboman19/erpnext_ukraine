@@ -1,0 +1,225 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "creation": "2026-07-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "autoname": "hash",
+ "field_order": [
+  "stock_layer",
+  "movement_type",
+  "posting_datetime",
+  "column_break_event",
+  "qty",
+  "stock_value",
+  "idempotency_key",
+  "section_positions",
+  "source_company",
+  "source_warehouse",
+  "column_break_positions",
+  "target_company",
+  "target_warehouse",
+  "section_voucher",
+  "voucher_type",
+  "voucher_no",
+  "voucher_detail_no",
+  "column_break_voucher",
+  "checkout",
+  "reallocation",
+  "section_reversal",
+  "is_reversal",
+  "reversal_of"
+ ],
+ "fields": [
+  {
+   "fieldname": "stock_layer",
+   "fieldtype": "Link",
+   "label": "Stock Layer",
+   "options": "GSF Stock Layer",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "movement_type",
+   "fieldtype": "Select",
+   "label": "Movement Type",
+   "options": "ORIGIN_RECEIPT\nOWN_POOL_TO_STAGE\nINTERCOMPANY_ISSUE\nINTERCOMPANY_RECEIPT\nSALE_CONSUMPTION\nSALE_RETURN\nPURCHASE_RETURN\nRECONCILIATION\nPHYSICAL_TRANSFER\nREVERSAL",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "posting_datetime",
+   "fieldtype": "Datetime",
+   "label": "Posting Datetime",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_event",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "stock_value",
+   "fieldtype": "Currency",
+   "label": "Stock Value",
+   "description": "Copied from the actual Stock Ledger Entry, never computed ahead of it (ADR-003)."
+  },
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Idempotency Key",
+   "reqd": 1,
+   "unique": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "section_positions",
+   "fieldtype": "Section Break",
+   "label": "Positions"
+  },
+  {
+   "fieldname": "source_company",
+   "fieldtype": "Link",
+   "label": "Source Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "label": "Source Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "column_break_positions",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "target_company",
+   "fieldtype": "Link",
+   "label": "Target Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "target_warehouse",
+   "fieldtype": "Link",
+   "label": "Target Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "section_voucher",
+   "fieldtype": "Section Break",
+   "label": "Voucher"
+  },
+  {
+   "fieldname": "voucher_type",
+   "fieldtype": "Link",
+   "label": "Voucher Type",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "voucher_no",
+   "fieldtype": "Dynamic Link",
+   "label": "Voucher No",
+   "options": "voucher_type",
+   "search_index": 1
+  },
+  {
+   "fieldname": "voucher_detail_no",
+   "fieldtype": "Data",
+   "label": "Voucher Detail No"
+  },
+  {
+   "fieldname": "column_break_voucher",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "checkout",
+   "fieldtype": "Data",
+   "label": "Checkout"
+  },
+  {
+   "fieldname": "reallocation",
+   "fieldtype": "Data",
+   "label": "Reallocation"
+  },
+  {
+   "fieldname": "section_reversal",
+   "fieldtype": "Section Break",
+   "label": "Reversal"
+  },
+  {
+   "fieldname": "is_reversal",
+   "fieldtype": "Check",
+   "label": "Is Reversal",
+   "default": "0"
+  },
+  {
+   "fieldname": "reversal_of",
+   "fieldtype": "Link",
+   "label": "Reversal Of",
+   "options": "GSF Layer Movement"
+  }
+ ],
+ "issingle": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-07-30 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Layer Movement",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF System Manager",
+   "read": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF Stock Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Stock User",
+   "read": 1
+  }
+ ],
+ "sort_field": "posting_datetime",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "movement_type"
+}

@@ -7,6 +7,7 @@ inside a configured Frappe test site.
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 try:
 	import frappe
@@ -19,9 +20,154 @@ class TestReceivingFrappe(unittest.TestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
 		frappe.db.savepoint("ua_receiving_smoke")
+		self.company = self._get_company()
+		self._ensure_fiscal_year()
+		self.supplier = self._ensure_supplier()
+		self._ensure_uom()
+		self._ensure_selling_price_list()
+		self.item_code = self._ensure_item()
+		self.warehouse = self._ensure_warehouse()
 
 	def tearDown(self):
 		frappe.db.rollback(save_point="ua_receiving_smoke")
+
+	def _get_company(self):
+		company_name = "_UA Receiving Integration Company"
+		if frappe.db.exists("Company", company_name):
+			return company_name
+		if not frappe.db.exists("Warehouse Type", "Transit"):
+			frappe.get_doc({"doctype": "Warehouse Type", "name": "Transit"}).insert(
+				ignore_permissions=True
+			)
+		return frappe.get_doc(
+			{
+				"doctype": "Company",
+				"company_name": company_name,
+				"abbr": "UARI",
+				"country": "Ukraine",
+				"default_currency": "UAH",
+				"create_chart_of_accounts_based_on": "Standard Template",
+				"chart_of_accounts": "Standard",
+			}
+		).insert(ignore_permissions=True).name
+
+	def _ensure_supplier(self):
+		name = "UA Receiving Integration Test Supplier"
+		if frappe.db.exists("Supplier", name):
+			return name
+		supplier_group = self._ensure_leaf_group(
+			"Supplier Group",
+			"_UA Receiving Suppliers",
+			"supplier_group_name",
+			"parent_supplier_group",
+		)
+		return frappe.get_doc(
+			{
+				"doctype": "Supplier",
+				"supplier_name": name,
+				"supplier_group": supplier_group,
+				"supplier_type": "Company",
+				"default_currency": frappe.get_cached_value(
+					"Company", self.company, "default_currency"
+				),
+			}
+		).insert(ignore_permissions=True).name
+
+	def _ensure_fiscal_year(self):
+		name = "_UA Receiving Fiscal Year 2026"
+		if not frappe.db.exists("Fiscal Year", name):
+			frappe.get_doc(
+				{
+					"doctype": "Fiscal Year",
+					"year": name,
+					"year_start_date": "2026-01-01",
+					"year_end_date": "2026-12-31",
+					"companies": [{"company": self.company}],
+				}
+			).insert(ignore_permissions=True)
+
+	def _ensure_item(self):
+		item_code = "UA-RECEIVING-INTEGRATION-ITEM"
+		if frappe.db.exists("Item", item_code):
+			return item_code
+		item_group = self._ensure_leaf_group(
+			"Item Group",
+			"_UA Receiving Items",
+			"item_group_name",
+			"parent_item_group",
+		)
+		return frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": item_code,
+				"item_name": "UA Receiving Integration Item",
+				"item_group": item_group,
+				"stock_uom": "Nos",
+				"is_stock_item": 1,
+			}
+		).insert(ignore_permissions=True).name
+
+	def _ensure_uom(self):
+		if not frappe.db.exists("UOM", "Nos"):
+			frappe.get_doc(
+				{
+					"doctype": "UOM",
+					"uom_name": "Nos",
+					"must_be_whole_number": 1,
+				}
+			).insert(ignore_permissions=True)
+
+	def _ensure_selling_price_list(self):
+		name = "Standard Selling"
+		if not frappe.db.exists("Price List", name):
+			frappe.get_doc(
+				{
+					"doctype": "Price List",
+					"price_list_name": name,
+					"currency": "UAH",
+					"selling": 1,
+					"enabled": 1,
+				}
+			).insert(ignore_permissions=True)
+
+	def _ensure_leaf_group(self, doctype, name, name_field, parent_field):
+		if frappe.db.exists(doctype, name):
+			return name
+		parent = frappe.db.get_value(
+			doctype,
+			{"is_group": 1},
+			"name",
+			order_by="lft asc",
+		)
+		if not parent:
+			parent = frappe.get_doc(
+				{
+					"doctype": doctype,
+					name_field: f"_UA Receiving {doctype} Root",
+					"is_group": 1,
+				}
+			).insert(ignore_permissions=True).name
+		return frappe.get_doc(
+			{
+				"doctype": doctype,
+				name_field: name,
+				parent_field: parent,
+				"is_group": 0,
+			}
+		).insert(ignore_permissions=True).name
+
+	def _ensure_warehouse(self):
+		abbr = frappe.get_cached_value("Company", self.company, "abbr")
+		name = f"UA Receiving Integration - {abbr}"
+		if frappe.db.exists("Warehouse", name):
+			return name
+		return frappe.get_doc(
+			{
+				"doctype": "Warehouse",
+				"warehouse_name": "UA Receiving Integration",
+				"company": self.company,
+			}
+		).insert(ignore_permissions=True).name
 
 	def test_receipt_posts_stock_then_creates_prices_labels_and_draft_invoice(self):
 		from erpnext_ua.ua_receiving.service import (
@@ -29,10 +175,10 @@ class TestReceivingFrappe(unittest.TestCase):
 			preview_receipt_completion,
 		)
 
-		company = "POS Test Ukraine"
-		supplier = "TP Gate 0D Supplier UAH"
-		item_code = "POS-TEST-001"
-		warehouse = "Stores - PTU"
+		company = self.company
+		supplier = self.supplier
+		item_code = self.item_code
+		warehouse = self.warehouse
 		price_list = "Standard Selling"
 		uom = frappe.get_cached_value("Item", item_code, "stock_uom")
 		cost_center = frappe.get_cached_value("Company", company, "cost_center")
@@ -145,10 +291,10 @@ class TestReceivingFrappe(unittest.TestCase):
 	def test_vat_checkbox_posts_only_the_gross_item_price(self):
 		from erpnext_ua.ua_receiving.service import _create_purchase_invoice_draft
 
-		company = "POS Test Ukraine"
-		supplier = "TP Gate 0D Supplier UAH"
-		item_code = "POS-TEST-001"
-		warehouse = "Stores - PTU"
+		company = self.company
+		supplier = self.supplier
+		item_code = self.item_code
+		warehouse = self.warehouse
 		uom = frappe.get_cached_value("Item", item_code, "stock_uom")
 		cost_center = frappe.get_cached_value("Company", company, "cost_center")
 
@@ -184,11 +330,12 @@ class TestReceivingFrappe(unittest.TestCase):
 		self.assertEqual(receipt.items[0].rate, 120)
 		self.assertEqual(receipt.grand_total, 240)
 		self.assertEqual(receipt.taxes, [])
-		control_sheet = frappe.get_print(
-			"Purchase Receipt",
-			receipt.name,
-			"Прибуткова накладна (UA)",
-		)
+		with patch("frappe.utils.get_assets_json", return_value={}):
+			control_sheet = frappe.get_print(
+				"Purchase Receipt",
+				receipt.name,
+				"Прибуткова накладна (UA)",
+			)
 		self.assertIn("КОНТРОЛЬНИЙ ЛИСТ — ЧЕРНЕТКА", control_sheet)
 		self.assertIn("120.00", control_sheet)
 		receipt.submit()

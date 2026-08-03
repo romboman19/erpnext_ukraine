@@ -1,0 +1,16 @@
+[
+  {
+    "customer": "CUST-0001",
+    "scope": "RETAIL-NETWORK",
+    "program": "BONUS-UAH",
+    "marketing_balance": "240.00",
+    "metric_balance": "12500.00"
+  },
+  {
+    "customer": "CUST-0002",
+    "scope": "RETAIL-NETWORK",
+    "program": "BONUS-UAH",
+    "marketing_balance": "-40.00",
+    "metric_balance": "750.00"
+  }
+]

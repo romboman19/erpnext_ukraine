@@ -27,6 +27,10 @@ class UPSenderProfile(Document):
             frappe.throw(_("The default Ukrposhta profile must be active"))
         if int(self.is_default or 0) == 1:
             frappe.db.sql("SELECT name FROM `tabDocType` WHERE name = %s FOR UPDATE", ("UP Sender Profile",))
-            existing = frappe.db.get_value("UP Sender Profile", {"is_default": 1, "name": ["!=", self.name]}, "name")
+            existing = frappe.db.get_value(
+                "UP Sender Profile",
+                {"company": self.company, "is_default": 1, "name": ["!=", self.name]},
+                "name",
+            )
             if existing:
-                frappe.throw(_("Only one default Ukrposhta profile is allowed"))
+                frappe.throw(_("Only one default Ukrposhta profile is allowed per company"))

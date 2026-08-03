@@ -1,0 +1,18 @@
+{
+ "doctype":"DocType","name":"UA Loyalty Scope","module":"UA Loyalty","engine":"InnoDB","autoname":"field:scope_code","title_field":"scope_name","track_changes":1,
+ "field_order":["scope_code","scope_name","currency","default_program","active","valid_from","valid_to","allow_cross_company_earn","allow_cross_company_redeem","allow_cross_location_return","settlement_mode","description"],
+ "fields":[
+  {"fieldname":"scope_code","fieldtype":"Data","label":"Код","reqd":1,"unique":1,"search_index":1},
+  {"fieldname":"scope_name","fieldtype":"Data","label":"Назва","reqd":1,"in_list_view":1},
+  {"fieldname":"currency","fieldtype":"Link","label":"Валюта","options":"Currency","reqd":1,"default":"UAH"},
+  {"fieldname":"default_program","fieldtype":"Link","label":"Типова програма","options":"UA Loyalty Program"},
+  {"fieldname":"active","fieldtype":"Check","label":"Активна","default":"1","in_list_view":1},
+  {"fieldname":"valid_from","fieldtype":"Date","label":"Чинна з"},{"fieldname":"valid_to","fieldtype":"Date","label":"Чинна до"},
+  {"fieldname":"allow_cross_company_earn","fieldtype":"Check","label":"Нарахування між ФОП","default":"1"},
+  {"fieldname":"allow_cross_company_redeem","fieldtype":"Check","label":"Списання між ФОП","default":"1"},
+  {"fieldname":"allow_cross_location_return","fieldtype":"Check","label":"Повернення з іншої каси","default":"1"},
+  {"fieldname":"settlement_mode","fieldtype":"Select","label":"Взаєморозрахунки","options":"REPORT_ONLY","default":"REPORT_ONLY"},
+  {"fieldname":"description","fieldtype":"Text","label":"Опис"}
+ ],
+ "permissions":[{"role":"System Manager","read":1,"write":1,"create":1},{"role":"UA Loyalty Administrator","read":1,"write":1,"create":1},{"role":"UA Loyalty Auditor","read":1}]
+}

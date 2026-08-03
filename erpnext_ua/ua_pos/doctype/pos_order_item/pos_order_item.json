@@ -1,6 +1,6 @@
 {
  "doctype":"DocType","name":"POS Order Item","module":"UA POS","istable":1,
- "field_order":["item_code","item_name","image","barcode","qty","uom","rate","amount","warehouse","batch_no","serial_no","discount_amount","fop_profile","return_against_item"],
+ "field_order":["item_code","item_name","image","barcode","qty","uom","rate","gross_amount","non_loyalty_discount_amount","loyalty_redeemed_amount","discount_amount","amount_before_loyalty","amount","warehouse","batch_no","serial_no","fop_profile","return_against_item","loyalty_earn_eligible","loyalty_redeem_eligible","loyalty_metric_eligible","loyalty_eligibility_reason","loyalty_earn_base","loyalty_metric_delta","loyalty_earn_percent","loyalty_extra_percent","loyalty_earned_amount","loyalty_rule_snapshot","loyalty_original_order_item","loyalty_original_allocation_hash"],
  "fields":[
   {"fieldname":"item_code","fieldtype":"Link","label":"Item","options":"Item","reqd":1},
   {"fieldname":"item_name","fieldtype":"Data","label":"Item Name","read_only":1},
@@ -9,12 +9,28 @@
   {"fieldname":"qty","fieldtype":"Float","label":"Quantity","default":"1","reqd":1},
   {"fieldname":"uom","fieldtype":"Link","label":"UOM","options":"UOM","reqd":1},
   {"fieldname":"rate","fieldtype":"Currency","label":"Rate","reqd":1},
+  {"fieldname":"gross_amount","fieldtype":"Currency","label":"Gross Amount","read_only":1},
+  {"fieldname":"non_loyalty_discount_amount","fieldtype":"Currency","label":"Other Discount","default":"0"},
+  {"fieldname":"loyalty_redeemed_amount","fieldtype":"Currency","label":"Loyalty Discount","default":"0","read_only":1},
   {"fieldname":"amount","fieldtype":"Currency","label":"Amount","read_only":1},
+  {"fieldname":"amount_before_loyalty","fieldtype":"Currency","label":"Amount Before Loyalty","read_only":1},
   {"fieldname":"warehouse","fieldtype":"Link","label":"Warehouse","options":"Warehouse","reqd":1},
   {"fieldname":"batch_no","fieldtype":"Link","label":"Batch","options":"Batch"},
   {"fieldname":"serial_no","fieldtype":"Small Text","label":"Serial Numbers"},
   {"fieldname":"discount_amount","fieldtype":"Currency","label":"Discount Amount","default":"0"},
   {"fieldname":"fop_profile","fieldtype":"Link","label":"FOP Profile","options":"FOP Profile"},
-  {"fieldname":"return_against_item","fieldtype":"Data","label":"Return Against Item","read_only":1}
+  {"fieldname":"return_against_item","fieldtype":"Data","label":"Return Against Item","read_only":1},
+  {"fieldname":"loyalty_earn_eligible","fieldtype":"Check","label":"Earn Eligible","read_only":1},
+  {"fieldname":"loyalty_redeem_eligible","fieldtype":"Check","label":"Redeem Eligible","read_only":1},
+  {"fieldname":"loyalty_metric_eligible","fieldtype":"Check","label":"Metric Eligible","read_only":1},
+  {"fieldname":"loyalty_eligibility_reason","fieldtype":"Data","label":"Loyalty Reason","read_only":1},
+  {"fieldname":"loyalty_earn_base","fieldtype":"Currency","label":"Earn Base","read_only":1},
+  {"fieldname":"loyalty_metric_delta","fieldtype":"Currency","label":"Metric Delta","read_only":1},
+  {"fieldname":"loyalty_earn_percent","fieldtype":"Percent","label":"Earn Percent","read_only":1},
+  {"fieldname":"loyalty_extra_percent","fieldtype":"Percent","label":"Extra Percent","read_only":1},
+  {"fieldname":"loyalty_earned_amount","fieldtype":"Currency","label":"Earned Bonus","read_only":1},
+  {"fieldname":"loyalty_rule_snapshot","fieldtype":"Long Text","label":"Loyalty Rule Snapshot","read_only":1},
+  {"fieldname":"loyalty_original_order_item","fieldtype":"Data","label":"Original POS Item","read_only":1},
+  {"fieldname":"loyalty_original_allocation_hash","fieldtype":"Data","label":"Original Allocation Hash","read_only":1}
  ]
 }

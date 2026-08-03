@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 # Pure-logic tests elsewhere in the suite install a stub `frappe` module, so a
 # successful `import frappe` is not proof of a test site. Importing the
@@ -12,6 +12,7 @@ try:
     from frappe.tests.utils import FrappeTestCase
 
     from erpnext_ua.integrations.customer_identification.telegram import webhook
+    from erpnext_ua.tests.integrations.frappe_fixtures import ensure_customer_master_links
 except ModuleNotFoundError:
     frappe = None
     FrappeTestCase = unittest.TestCase
@@ -47,6 +48,7 @@ class _MockRequest:
 class TelegramWebhookTest(FrappeTestCase):
     def setUp(self):
         super().setUp()
+        self.customer_group, self.territory = ensure_customer_master_links()
         self._telegram_calls: list[tuple[str, dict]] = []
         self._validate_secret_patcher = patch(
             "erpnext_ua.integrations.customer_identification.telegram._validate_secret"
@@ -87,8 +89,8 @@ class TelegramWebhookTest(FrappeTestCase):
                 "doctype": "Customer",
                 "customer_name": "Test Telegram Customer",
                 "customer_type": "Individual",
-                "customer_group": "Individual",
-                "territory": "Ukraine",
+                "customer_group": self.customer_group,
+                "territory": self.territory,
                 "mobile_no": phone,
             }
         )

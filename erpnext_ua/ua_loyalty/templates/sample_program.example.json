@@ -1,0 +1,24 @@
+{
+  "scope": {
+    "scope_code": "RETAIL-NETWORK",
+    "scope_name": "Роздрібна мережа",
+    "currency": "UAH",
+    "allow_cross_company_earn": 1,
+    "allow_cross_company_redeem": 1,
+    "allow_cross_location_return": 1
+  },
+  "program": {
+    "program_code": "BONUS-UAH",
+    "program_name": "Накопичувальна програма",
+    "rate_timing": "BEFORE_CURRENT_SALE",
+    "activation_mode": "IMMEDIATE",
+    "expiry_mode": "NONE",
+    "max_redemption_percent": "100.00",
+    "tiers": [
+      {"tier_code": "START", "threshold_amount": "500.00", "earn_percent": "1.00"},
+      {"tier_code": "SILVER", "threshold_amount": "10000.00", "earn_percent": "3.00"},
+      {"tier_code": "GOLD", "threshold_amount": "40000.00", "earn_percent": "5.00"},
+      {"tier_code": "PLATINUM", "threshold_amount": "80000.00", "earn_percent": "7.00"}
+    ]
+  }
+}

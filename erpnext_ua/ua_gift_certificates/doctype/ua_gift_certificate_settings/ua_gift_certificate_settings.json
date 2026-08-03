@@ -1,0 +1,32 @@
+{
+ "doctype":"DocType","name":"UA Gift Certificate Settings","module":"UA Gift Certificates","issingle":1,
+ "field_order":["enabled","pos_sale_enabled","pos_redemption_enabled","strict_compliance_mode","default_network","default_program","default_currency","reservation_ttl_seconds","token_hmac_key_version","allow_encrypted_token_storage","allow_certificate_purchase_with_certificate","allow_certificate_purchase_with_bonus","allow_forfeit_remainder","allow_manual_activation","allow_partial_refund_of_used_certificate","vat_profiles_enabled","deferred_discount_enabled","cross_entity_enabled","ecommerce_enabled","import_enabled","failed_token_attempt_limit","public_balance_lookup_enabled","default_return_restore_mode","feature_version","stage0_status"],
+ "fields":[
+  {"fieldname":"enabled","fieldtype":"Check","label":"Enabled","default":"0"},
+  {"fieldname":"pos_sale_enabled","fieldtype":"Check","label":"POS Sale Enabled","default":"0"},
+  {"fieldname":"pos_redemption_enabled","fieldtype":"Check","label":"POS Redemption Enabled","default":"0"},
+  {"fieldname":"strict_compliance_mode","fieldtype":"Check","label":"Strict Compliance","default":"1"},
+  {"fieldname":"default_network","fieldtype":"Link","label":"Default Network","options":"UA Gift Certificate Network"},
+  {"fieldname":"default_program","fieldtype":"Link","label":"Default Program","options":"UA Gift Certificate Program"},
+  {"fieldname":"default_currency","fieldtype":"Link","label":"Currency","options":"Currency","default":"UAH","reqd":1},
+  {"fieldname":"reservation_ttl_seconds","fieldtype":"Int","label":"Reservation TTL, seconds","default":"600","reqd":1},
+  {"fieldname":"token_hmac_key_version","fieldtype":"Data","label":"HMAC Key Version","default":"v1"},
+  {"fieldname":"allow_encrypted_token_storage","fieldtype":"Check","label":"Allow Encrypted Token Storage","default":"1"},
+  {"fieldname":"allow_certificate_purchase_with_certificate","fieldtype":"Check","label":"Certificate Can Buy Certificate","default":"0"},
+  {"fieldname":"allow_certificate_purchase_with_bonus","fieldtype":"Check","label":"Bonus Can Buy Certificate","default":"0"},
+  {"fieldname":"allow_forfeit_remainder","fieldtype":"Check","label":"Allow Remainder Forfeiture","default":"0"},
+  {"fieldname":"allow_manual_activation","fieldtype":"Check","label":"Allow Manual Activation","default":"0"},
+  {"fieldname":"allow_partial_refund_of_used_certificate","fieldtype":"Check","label":"Allow Partial Used Refund","default":"0"},
+  {"fieldname":"vat_profiles_enabled","fieldtype":"Check","label":"VAT Profiles Enabled","default":"0"},
+  {"fieldname":"deferred_discount_enabled","fieldtype":"Check","label":"Deferred Discount Enabled","default":"0"},
+  {"fieldname":"cross_entity_enabled","fieldtype":"Check","label":"Cross Entity Enabled","default":"0"},
+  {"fieldname":"ecommerce_enabled","fieldtype":"Check","label":"Ecommerce Enabled","default":"0"},
+  {"fieldname":"import_enabled","fieldtype":"Check","label":"Import Enabled","default":"0"},
+  {"fieldname":"failed_token_attempt_limit","fieldtype":"Int","label":"Failed Token Attempt Limit","default":"10"},
+  {"fieldname":"public_balance_lookup_enabled","fieldtype":"Check","label":"Public Balance Lookup","default":"0"},
+  {"fieldname":"default_return_restore_mode","fieldtype":"Select","label":"Return Restore Mode","options":"Same Certificate\nReplacement Certificate\nManager Choice","default":"Same Certificate"},
+  {"fieldname":"feature_version","fieldtype":"Data","label":"Feature Version","default":"1.0","read_only":1},
+  {"fieldname":"stage0_status","fieldtype":"Select","label":"Stage 0 Status","options":"Not Run\nPassed\nFailed","default":"Not Run","read_only":1}
+ ],
+ "permissions":[{"role":"Gift Certificate Administrator","read":1,"write":1},{"role":"System Manager","read":1,"write":1}]
+}

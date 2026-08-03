@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass
 from datetime import date
@@ -290,19 +291,41 @@ def _converge_sales_order_invoice_payment(
 
     if sales_invoice is None:
         sales_invoice = _create_invoice_from_order(
+            channel,
             sales_order,
             idempotency_key,
             channel_key,
             order,
         )
+    if sales_invoice.docstatus == 0 and sales_invoice.get("ua_fulfillment_physical_location"):
+        sales_invoice = _fulfill_ecommerce_source(
+            sales_invoice,
+            channel_key=channel_key,
+            order=order,
+            idempotency_key=idempotency_key,
+        )
     _ensure_submitted(sales_invoice, "Sales Invoice")
-    payment_entry = _create_payment(channel, channel_key, order, sales_invoice)
+    invoices = _fulfillment_invoices(sales_invoice)
+    payment_total = sum((abs(float(invoice.grand_total or 0)) for invoice in invoices), 0.0)
+    if abs(payment_total - order.payment.amount) > 0.01:
+        raise ValueError("Paid order amount does not match the routed Sales Invoice total")
+    payment_entries = [
+        _create_payment(
+            channel,
+            channel_key,
+            order,
+            invoice,
+            amount=abs(float(invoice.grand_total or 0)),
+        )
+        for invoice in invoices
+    ]
     return {
         "ok": True,
         "outcome": "reconciled" if had_documents else "created",
         "sales_order": sales_order.name,
         "sales_invoice": sales_invoice.name,
-        "payment_entry": payment_entry,
+        "payment_entry": payment_entries[0],
+        "payment_entries": payment_entries,
     }
 
 
@@ -324,7 +347,7 @@ def _existing_documents(idempotency_key: str) -> dict:
             "name",
         )
         if sales_invoice:
-            result["sales_invoice"] = sales_invoice
+            result["sales_invoice"] = _resolved_fulfillment_invoice(sales_invoice)
         return result
     sales_invoice = frappe.db.get_value(
         "Sales Invoice",
@@ -332,7 +355,7 @@ def _existing_documents(idempotency_key: str) -> dict:
         "name",
     )
     if sales_invoice:
-        return {"sales_invoice": sales_invoice}
+        return {"sales_invoice": _resolved_fulfillment_invoice(sales_invoice)}
     sync_log = frappe.db.get_value(
         "Ecommerce Sync Log",
         {"idempotency_key": idempotency_key, "status": "Success"},
@@ -516,11 +539,19 @@ def _create_direct_sales_invoice(
     doc.ua_ecommerce_channel = channel_key
     doc.ua_external_order_id = order.channel_order_id
     doc.ua_ecommerce_status = order.channel_status
+    doc.ua_fulfillment_physical_location = _value(channel, "fulfillment_physical_location")
     doc.remarks = _order_remarks(order)
     for row in item_rows:
         doc.append("items", {key: value for key, value in row.items() if key != "delivery_date"})
     try:
         doc.insert(ignore_permissions=True)
+        if doc.ua_fulfillment_physical_location:
+            return _fulfill_ecommerce_source(
+                doc,
+                channel_key=channel_key,
+                order=order,
+                idempotency_key=idempotency_key,
+            )
         doc.submit()
     except frappe.DuplicateEntryError:
         existing = frappe.db.get_value("Sales Invoice", {"ua_external_order_key": idempotency_key}, "name")
@@ -530,7 +561,13 @@ def _create_direct_sales_invoice(
     return doc
 
 
-def _create_invoice_from_order(sales_order, idempotency_key: str, channel_key: str, order: NormalizedOrder):
+def _create_invoice_from_order(
+    channel: Any,
+    sales_order,
+    idempotency_key: str,
+    channel_key: str,
+    order: NormalizedOrder,
+):
     from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
 
     doc = frappe.get_doc(make_sales_invoice(sales_order.name))
@@ -538,9 +575,17 @@ def _create_invoice_from_order(sales_order, idempotency_key: str, channel_key: s
     doc.ua_ecommerce_channel = channel_key
     doc.ua_external_order_id = order.channel_order_id
     doc.ua_ecommerce_status = order.channel_status
+    doc.ua_fulfillment_physical_location = _value(channel, "fulfillment_physical_location")
     doc.remarks = _order_remarks(order)
     try:
         doc.insert(ignore_permissions=True)
+        if doc.ua_fulfillment_physical_location:
+            return _fulfill_ecommerce_source(
+                doc,
+                channel_key=channel_key,
+                order=order,
+                idempotency_key=idempotency_key,
+            )
         doc.submit()
     except frappe.DuplicateEntryError:
         # Another worker may have won the unique external-order-key race after
@@ -557,16 +602,82 @@ def _create_invoice_from_order(sales_order, idempotency_key: str, channel_key: s
     return doc
 
 
-def _create_payment(channel: Any, channel_key: str, order: NormalizedOrder, sales_invoice) -> str:
+def _fulfill_ecommerce_source(
+    source,
+    *,
+    channel_key: str,
+    order: NormalizedOrder,
+    idempotency_key: str,
+):
+    from erpnext_ua.group_stock_fifo.services.fulfillment_channels import (
+        fulfill_sales_invoice_document,
+    )
+
+    checkout = fulfill_sales_invoice_document(source, sales_channel="ECOMMERCE")
+    invoice_names = json.loads(checkout.sales_invoices or "[]")
+    if not invoice_names:
+        raise ValueError(f"Ecommerce fulfillment {checkout.name} produced no Sales Invoices")
+    for name in invoice_names:
+        invoice = frappe.get_doc("Sales Invoice", name)
+        route_id = invoice.get("ua_fulfillment_route") or name
+        frappe.db.set_value(
+            "Sales Invoice",
+            name,
+            {
+                "ua_external_order_key": f"{idempotency_key}:{route_id}",
+                "ua_ecommerce_channel": channel_key,
+                "ua_external_order_id": order.channel_order_id,
+                "ua_ecommerce_status": order.channel_status,
+            },
+            update_modified=False,
+        )
+    return frappe.get_doc("Sales Invoice", invoice_names[0])
+
+
+def _resolved_fulfillment_invoice(name: str) -> str:
+    source = frappe.db.get_value(
+        "Sales Invoice",
+        name,
+        ["ua_fulfillment_source", "ua_sale_fulfillment"],
+        as_dict=True,
+    )
+    if not source or not source.ua_fulfillment_source or not source.ua_sale_fulfillment:
+        return name
+    names = json.loads(
+        frappe.db.get_value("GSF Checkout", source.ua_sale_fulfillment, "sales_invoices") or "[]"
+    )
+    return names[0] if names else name
+
+
+def _fulfillment_invoices(primary) -> list[Any]:
+    fulfillment = _value(primary, "ua_sale_fulfillment")
+    if not fulfillment:
+        return [primary]
+    names = json.loads(frappe.db.get_value("GSF Checkout", fulfillment, "sales_invoices") or "[]")
+    return [frappe.get_doc("Sales Invoice", name) for name in names] or [primary]
+
+
+def _create_payment(
+    channel: Any,
+    channel_key: str,
+    order: NormalizedOrder,
+    sales_invoice,
+    *,
+    amount: float | None = None,
+) -> str:
     if not order.payment.paid or order.payment.amount <= 0:
         raise ValueError("Create SO+SI+Payment requires a positive paid order amount")
-    if abs(float(sales_invoice.grand_total or 0) - order.payment.amount) > 0.01:
+    payment_amount = order.payment.amount if amount is None else amount
+    if abs(float(sales_invoice.grand_total or 0) - payment_amount) > 0.01:
         raise ValueError("Paid order amount does not match the Sales Invoice grand total")
-    routes = [
-        row
-        for row in (_value(channel, "payment_routes", []) or [])
-        if str(_value(row, "channel_payment_type", "") or "").strip() == order.payment.payment_type
-    ]
+    invoice_company = _value(sales_invoice, "company") or _required(channel, "company")
+    routes = []
+    for row in (_value(channel, "payment_routes", []) or []):
+        if str(_value(row, "channel_payment_type", "") or "").strip() != order.payment.payment_type:
+            continue
+        account_company = frappe.db.get_value("Account", _value(row, "paid_to_account"), "company")
+        if account_company == invoice_company:
+            routes.append(row)
     if len(routes) != 1:
         raise ValueError(f"Exactly one payment route is required for {order.payment.payment_type}")
     route = routes[0]
@@ -580,7 +691,7 @@ def _create_payment(channel: Any, channel_key: str, order: NormalizedOrder, sale
     if (
         not account_state
         or int(account_state.is_group or 0)
-        or account_state.company != _required(channel, "company")
+        or account_state.company != invoice_company
         or str(account_state.account_currency or "").upper() != order.payment.currency
     ):
         raise ValueError("Paid To Account must be a company ledger account in the order currency")
@@ -588,15 +699,20 @@ def _create_payment(channel: Any, channel_key: str, order: NormalizedOrder, sale
         "channel": channel_key,
         "channel_order_id": order.channel_order_id,
         "sales_invoice": sales_invoice.name,
-        "amount": order.payment.amount,
+        "amount": payment_amount,
         "currency": order.payment.currency,
         "mode_of_payment": _value(route, "mode_of_payment"),
         "paid_to_account": account,
     }
-    payment_key = f"ecom:p:{canonical_hash({'channel': channel_key, 'channel_order_id': order.channel_order_id})}"
+    payment_identity = {
+        "channel": channel_key,
+        "channel_order_id": order.channel_order_id,
+        "invoice": sales_invoice.name,
+    }
+    payment_key = f"ecom:p:{canonical_hash(payment_identity)}"
     existing_payment = _find_matching_payment_entry(
         sales_invoice.name,
-        amount=order.payment.amount,
+        amount=payment_amount,
         mode_of_payment=_value(route, "mode_of_payment"),
         paid_to_account=account,
     )
@@ -638,12 +754,12 @@ def _create_payment(channel: Any, channel_key: str, order: NormalizedOrder, sale
         payment = get_payment_entry(
             "Sales Invoice",
             sales_invoice.name,
-            party_amount=order.payment.amount,
+            party_amount=payment_amount,
         )
         payment.mode_of_payment = _required(route, "mode_of_payment")
         payment.paid_to = account
-        payment.paid_amount = order.payment.amount
-        payment.received_amount = order.payment.amount
+        payment.paid_amount = payment_amount
+        payment.received_amount = payment_amount
         payment.insert(ignore_permissions=True)
         payment.submit()
     except Exception as exc:

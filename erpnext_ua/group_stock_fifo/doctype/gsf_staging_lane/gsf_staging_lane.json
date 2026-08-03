@@ -1,0 +1,194 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "creation": "2026-07-28 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "lane_code",
+  "company_group",
+  "physical_location",
+  "company",
+  "warehouse",
+  "enabled",
+  "section_consumer",
+  "consumer_type",
+  "consumer_reference",
+  "section_lock",
+  "status",
+  "current_checkout",
+  "lock_token",
+  "dirty_reason",
+  "column_break_lock",
+  "last_zero_check",
+  "last_used_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "lane_code",
+   "fieldtype": "Data",
+   "label": "Lane Code",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company_group",
+   "fieldtype": "Link",
+   "label": "Company Group",
+   "options": "GSF Company Group",
+   "reqd": 1
+  },
+  {
+   "fieldname": "physical_location",
+   "fieldtype": "Link",
+   "label": "Physical Location",
+   "options": "GSF Physical Location",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1"
+  },
+  {
+   "fieldname": "section_consumer",
+   "fieldtype": "Section Break",
+   "label": "Consumer"
+  },
+  {
+   "fieldname": "consumer_type",
+   "fieldtype": "Select",
+   "label": "Consumer Type",
+   "options": "POS_PROFILE\nWEB\nCONTRACT\nAPI\nMANUAL",
+   "default": "POS_PROFILE",
+   "reqd": 1
+  },
+  {
+   "fieldname": "consumer_reference",
+   "fieldtype": "Data",
+   "label": "Consumer Reference"
+  },
+  {
+   "fieldname": "section_lock",
+   "fieldtype": "Section Break",
+   "label": "Lock State"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "AVAILABLE\nLOCKED\nDIRTY\nDISABLED",
+   "default": "AVAILABLE",
+   "reqd": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "current_checkout",
+   "fieldtype": "Data",
+   "label": "Current Checkout",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lock_token",
+   "fieldtype": "Data",
+   "label": "Lock Token",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dirty_reason",
+   "fieldtype": "Small Text",
+   "label": "Dirty Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_lock",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "last_zero_check",
+   "fieldtype": "Datetime",
+   "label": "Last Zero Check",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_used_at",
+   "fieldtype": "Datetime",
+   "label": "Last Used At",
+   "read_only": 1
+  }
+ ],
+ "issingle": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-07-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Staging Lane",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF Stock Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "field:lane_code",
+ "title_field": "lane_code"
+}

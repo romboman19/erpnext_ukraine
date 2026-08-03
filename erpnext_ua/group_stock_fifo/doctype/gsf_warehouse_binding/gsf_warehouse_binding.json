@@ -1,0 +1,172 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "creation": "2026-07-28 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "warehouse",
+  "company",
+  "company_group",
+  "physical_location",
+  "manager_app",
+  "warehouse_role",
+  "binding_mode",
+  "enabled",
+  "section_source",
+  "source_doctype",
+  "source_name",
+  "section_audit",
+  "first_stock_posting",
+  "last_integrity_check"
+ ],
+ "fields": [
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company_group",
+   "fieldtype": "Link",
+   "label": "Company Group",
+   "options": "GSF Company Group"
+  },
+  {
+   "fieldname": "physical_location",
+   "fieldtype": "Link",
+   "label": "Physical Location",
+   "options": "GSF Physical Location"
+  },
+  {
+   "fieldname": "manager_app",
+   "fieldtype": "Select",
+   "label": "Manager App",
+   "options": "GSF\nCC\nERPNext\nEXTERNAL",
+   "default": "GSF",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "warehouse_role",
+   "fieldtype": "Data",
+   "label": "Warehouse Role",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "binding_mode",
+   "fieldtype": "Select",
+   "label": "Binding Mode",
+   "options": "MANAGED\nDISCOVERED_EXTERNAL\nREAD_ONLY",
+   "default": "MANAGED",
+   "reqd": 1
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1"
+  },
+  {
+   "fieldname": "section_source",
+   "fieldtype": "Section Break",
+   "label": "Discovery Source"
+  },
+  {
+   "fieldname": "source_doctype",
+   "fieldtype": "Link",
+   "label": "Source DocType",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "source_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Source Name",
+   "options": "source_doctype"
+  },
+  {
+   "fieldname": "section_audit",
+   "fieldtype": "Section Break",
+   "label": "Audit"
+  },
+  {
+   "fieldname": "first_stock_posting",
+   "fieldtype": "Datetime",
+   "label": "First Stock Posting",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_integrity_check",
+   "fieldtype": "Datetime",
+   "label": "Last Integrity Check",
+   "read_only": 1
+  }
+ ],
+ "issingle": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-07-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Group Stock FIFO",
+ "name": "GSF Warehouse Binding",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "GSF Stock Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "report": 1,
+   "export": 1
+  },
+  {
+   "role": "GSF Auditor",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "field:warehouse",
+ "title_field": "warehouse"
+}

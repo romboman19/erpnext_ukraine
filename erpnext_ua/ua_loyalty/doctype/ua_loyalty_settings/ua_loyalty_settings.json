@@ -1,0 +1,27 @@
+{
+ "doctype":"DocType","name":"UA Loyalty Settings","module":"UA Loyalty","engine":"InnoDB","issingle":1,
+ "field_order":["enabled","execution_mode","default_scope","default_currency","bonus_value_ratio","amount_precision","internal_precision","rounding_mode","reservation_ttl_seconds","payment_reservation_ttl_seconds","expiry_batch_size","activation_batch_size","dual_control_threshold","standard_loyalty_conflict_policy","allow_manual_sales_invoice","allow_cashier_account_creation","require_opt_in","accounting_mode","intercompany_cost_mode","last_reconciliation_at"],
+ "fields":[
+  {"fieldname":"enabled","fieldtype":"Check","label":"Увімкнено","default":"0"},
+  {"fieldname":"execution_mode","fieldtype":"Select","label":"Режим","options":"DISABLED\nPOS_ONLY\nPOS_AND_SALES_INVOICE\nREAD_ONLY","default":"DISABLED","reqd":1},
+  {"fieldname":"default_scope","fieldtype":"Link","label":"Типова область","options":"UA Loyalty Scope"},
+  {"fieldname":"default_currency","fieldtype":"Link","label":"Валюта","options":"Currency","default":"UAH"},
+  {"fieldname":"bonus_value_ratio","fieldtype":"Float","label":"Вартість бонусу","default":"1.000000","precision":"6"},
+  {"fieldname":"amount_precision","fieldtype":"Int","label":"Точність сум","default":"2"},
+  {"fieldname":"internal_precision","fieldtype":"Int","label":"Внутрішня точність","default":"6"},
+  {"fieldname":"rounding_mode","fieldtype":"Select","label":"Округлення","options":"HALF_UP","default":"HALF_UP"},
+  {"fieldname":"reservation_ttl_seconds","fieldtype":"Int","label":"TTL резерву","default":"900"},
+  {"fieldname":"payment_reservation_ttl_seconds","fieldtype":"Int","label":"TTL під час оплати","default":"3600"},
+  {"fieldname":"expiry_batch_size","fieldtype":"Int","label":"Пакет згорання","default":"500"},
+  {"fieldname":"activation_batch_size","fieldtype":"Int","label":"Пакет активації","default":"500"},
+  {"fieldname":"dual_control_threshold","fieldtype":"Currency","label":"Поріг dual control","default":"0"},
+  {"fieldname":"standard_loyalty_conflict_policy","fieldtype":"Select","label":"Конфлікт стандартної програми","options":"BLOCK","default":"BLOCK"},
+  {"fieldname":"allow_manual_sales_invoice","fieldtype":"Check","label":"Ручні Sales Invoice","default":"0"},
+  {"fieldname":"allow_cashier_account_creation","fieldtype":"Check","label":"Касир може створити рахунок","default":"0"},
+  {"fieldname":"require_opt_in","fieldtype":"Check","label":"Вимагати згоду","default":"1"},
+  {"fieldname":"accounting_mode","fieldtype":"Select","label":"Облікова модель","options":"LINE_DISCOUNT","default":"LINE_DISCOUNT","read_only":1},
+  {"fieldname":"intercompany_cost_mode","fieldtype":"Select","label":"Міжкомпанійний режим","options":"REPORT_ONLY","default":"REPORT_ONLY","read_only":1},
+  {"fieldname":"last_reconciliation_at","fieldtype":"Datetime","label":"Остання звірка","read_only":1}
+ ],
+ "permissions":[{"role":"System Manager","read":1,"write":1},{"role":"UA Loyalty Administrator","read":1,"write":1},{"role":"UA Loyalty Auditor","read":1}]
+}

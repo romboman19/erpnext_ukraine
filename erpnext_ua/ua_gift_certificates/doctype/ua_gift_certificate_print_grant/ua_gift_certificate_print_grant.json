@@ -1,0 +1,25 @@
+{
+ "doctype": "DocType",
+ "name": "UA Gift Certificate Print Grant",
+ "module": "UA Gift Certificates",
+ "autoname": "format:GC-PRINT-{########}",
+ "field_order": ["certificate", "certificate_sale", "pos_order", "purpose", "print_number", "issued_to", "approved_by", "issued_at", "expires_at", "consumed_at", "idempotency_key"],
+ "fields": [
+  {"fieldname":"certificate","fieldtype":"Link","label":"Certificate","options":"UA Gift Certificate","reqd":1},
+  {"fieldname":"certificate_sale","fieldtype":"Link","label":"Certificate Sale","options":"UA Gift Certificate Sale","reqd":1},
+  {"fieldname":"pos_order","fieldtype":"Link","label":"POS Order","options":"POS Order","reqd":1},
+  {"fieldname":"purpose","fieldtype":"Select","label":"Purpose","options":"Original\nDuplicate\nReplacement\nBatch","reqd":1},
+  {"fieldname":"print_number","fieldtype":"Int","label":"Print Number","reqd":1},
+  {"fieldname":"issued_to","fieldtype":"Link","label":"Issued To","options":"User","reqd":1},
+  {"fieldname":"approved_by","fieldtype":"Link","label":"Approved By","options":"User"},
+  {"fieldname":"issued_at","fieldtype":"Datetime","label":"Issued At","reqd":1},
+  {"fieldname":"expires_at","fieldtype":"Datetime","label":"Expires At","reqd":1},
+  {"fieldname":"consumed_at","fieldtype":"Datetime","label":"Consumed At","reqd":1},
+  {"fieldname":"idempotency_key","fieldtype":"Data","label":"Idempotency Key","unique":1,"reqd":1}
+ ],
+ "permissions": [
+  {"role":"Gift Certificate Auditor","read":1,"report":1},
+  {"role":"Gift Certificate Administrator","read":1},
+  {"role":"System Manager","read":1}
+ ]
+}

@@ -23,6 +23,20 @@ class PRROCashRegister(Document):
 			)
 			if exists and self.status == "Active":
 				frappe.throw(f"POS Profile {self.pos_profile} вже привʼязаний до активної каси {exists}")
+		if int(self.get("ecommerce_default") or 0) and self.status == "Active":
+			exists = frappe.db.exists(
+				"PRRO Cash Register",
+				{
+					"company": self.company,
+					"ecommerce_default": 1,
+					"name": ("!=", self.name),
+					"status": "Active",
+				},
+			)
+			if exists:
+				frappe.throw(
+					f"Для компанії {self.company} вже налаштована ecommerce-каса ПРРО {exists}"
+				)
 
 	def allocate_local_number(self) -> int:
 		"""Атомарно видає наступний локальний номер документа."""

@@ -29,7 +29,6 @@ from erpnext_ua.ua_pos.services.common import (
 )
 from erpnext_ua.ua_pos.terminal_service import get_adapter, resolve_terminal
 
-
 FINAL_ORDER_STATUSES = {"Completed", "Completed Print Error"}
 EDITABLE_ORDER_STATUSES = {"Building", "Held"}
 
@@ -927,16 +926,26 @@ def create_order(pos_session_token: str, idem_key: str, customer: str | None = N
 	return doc.as_dict()
 
 
-def _resolve_item(query: str) -> tuple[str, str | None]:
+def _resolve_item(query: str) -> tuple[str, str | None, str | None]:
 	barcode = frappe.db.get_value("Item Barcode", {"barcode": query}, ["parent", "barcode"], as_dict=True)
 	if barcode:
-		return barcode.parent, barcode.barcode
+		return barcode.parent, barcode.barcode, None
+	serial = frappe.db.get_value(
+		"Serial No",
+		query,
+		["item_code", "warehouse"],
+		as_dict=True,
+	)
+	if serial:
+		if not serial.warehouse:
+			frappe.throw(_("Серійний номер {0} зараз не знаходиться на складі").format(query))
+		return serial.item_code, None, query
 	if frappe.db.exists("Item", query):
-		return query, None
+		return query, None, None
 	rows = frappe.get_all("Item", filters={"item_name": ("like", f"%{query}%"), "disabled": 0}, pluck="name", limit=2)
 	if len(rows) != 1:
 		frappe.throw("Item not found or query is ambiguous")
-	return rows[0], None
+	return rows[0], None, None
 
 
 @frappe.whitelist()
@@ -946,7 +955,7 @@ def scan_item(pos_session_token: str, order: str, query: str, qty: float = 1) ->
 	qty = frappe.utils.flt(qty)
 	if qty <= 0:
 		frappe.throw(_("Кількість має бути більшою за нуль"))
-	item_code, barcode = _resolve_item(query.strip())
+	item_code, barcode, serial_no = _resolve_item(query.strip())
 	item = frappe.db.get_value(
 		"Item",
 		item_code,
@@ -955,6 +964,15 @@ def scan_item(pos_session_token: str, order: str, query: str, qty: float = 1) ->
 	)
 	if item.disabled:
 		frappe.throw(_("Товар вимкнено"))
+	if item.has_serial_no and not serial_no:
+		frappe.throw(_("Для серійного товару відскануйте конкретний серійний номер"))
+	if serial_no and qty != 1:
+		frappe.throw(_("Один серійний номер можна додати лише в кількості 1"))
+	if serial_no and any(
+		serial_no in {value.strip() for value in (row.serial_no or "").splitlines() if value.strip()}
+		for row in doc.items
+	):
+		frappe.throw(_("Серійний номер {0} уже є в чеку").format(serial_no))
 	desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
 	rate = frappe.db.get_value("Item Price", {"item_code": item_code, "selling": 1}, "price_list_rate") or 0
 	if frappe.utils.flt(rate) <= 0:
@@ -962,6 +980,7 @@ def scan_item(pos_session_token: str, order: str, query: str, qty: float = 1) ->
 	for row in doc.items:
 		if row.item_code == item_code and not row.serial_no and not row.batch_no:
 			row.qty += qty
+			_invalidate_loyalty(doc)
 			if int(doc.birthday_benefit_year or 0):
 				_allocate_order_discount(doc, discount_percent=doc.birthday_discount_percent)
 			doc.save(ignore_permissions=True)
@@ -973,12 +992,14 @@ def scan_item(pos_session_token: str, order: str, query: str, qty: float = 1) ->
 			"item_name": item.item_name,
 			"image": item.image,
 			"barcode": barcode,
+			"serial_no": serial_no,
 			"qty": qty,
 			"uom": item.stock_uom,
 			"rate": rate,
 			"warehouse": desk.warehouse,
 		},
 	)
+	_invalidate_loyalty(doc)
 	if int(doc.birthday_benefit_year or 0):
 		_allocate_order_discount(doc, discount_percent=doc.birthday_discount_percent)
 	doc.save(ignore_permissions=True)
@@ -1094,6 +1115,7 @@ def set_item_qty(pos_session_token: str, order: str, row_name: str, qty: float) 
 		doc.remove(row)
 	else:
 		row.qty = frappe.utils.flt(qty)
+	_invalidate_loyalty(doc)
 	if int(doc.birthday_benefit_year or 0):
 		_allocate_order_discount(doc, discount_percent=doc.birthday_discount_percent)
 	doc.save(ignore_permissions=True)
@@ -1120,7 +1142,9 @@ def set_order_customer(pos_session_token: str, order: str, customer: str) -> dic
 		doc.birthday_benefit_year = 0
 		doc.birthday_discount_percent = 0
 	doc.customer = customer
+	_invalidate_loyalty(doc)
 	doc.save(ignore_permissions=True)
+	_try_identify_loyalty_account(doc)
 	return doc.as_dict()
 
 
@@ -1149,13 +1173,44 @@ def _allocate_order_discount(doc, discount_percent: float = 0, discount_amount: 
 	allocated = 0.0
 	for idx, row in enumerate(doc.items):
 		gross = frappe.utils.flt(row.qty) * frappe.utils.flt(row.rate)
-		row.discount_amount = (
+		row.non_loyalty_discount_amount = (
 			frappe.utils.flt(target - allocated, 2)
 			if idx == len(doc.items) - 1
 			else frappe.utils.flt(target * gross / gross_total, 2)
 		)
-		allocated += row.discount_amount
+		allocated += row.non_loyalty_discount_amount
+	_invalidate_loyalty(doc)
 	return target
+
+
+def _invalidate_loyalty(doc):
+	if doc.get("loyalty_state") in {"RESERVED", "PAYMENT_IN_PROGRESS"}:
+		frappe.throw(_("Спочатку звільніть резерв бонусів"), title="LOYALTY_RESERVATION_STATE_CONFLICT")
+	from erpnext_ua.ua_loyalty.services.quote_service import invalidate_order
+
+	invalidate_order(doc)
+
+
+def _try_identify_loyalty_account(doc):
+	from erpnext_ua.ua_loyalty.exceptions import LoyaltyError
+	from erpnext_ua.ua_loyalty.services.account_service import account_for
+	from erpnext_ua.ua_loyalty.services.quote_service import quote_order, resolve_location
+	from erpnext_ua.ua_loyalty.services.settings import enabled_for
+
+	if not enabled_for("POS Order"):
+		return
+	try:
+		location = resolve_location(cash_desk=doc.cash_desk)
+		account = account_for(doc.customer, location.scope)
+	except LoyaltyError:
+		return
+	doc.loyalty_account = account.name
+	doc.loyalty_scope = account.scope
+	doc.loyalty_location = location.name
+	doc.loyalty_program = account.program
+	doc.loyalty_state = "IDENTIFIED"
+	doc.save(ignore_permissions=True)
+	quote_order(doc, doc.loyalty_requested_amount or 0)
 
 
 @frappe.whitelist()
@@ -1177,6 +1232,38 @@ def set_order_discount(
 	doc.save(ignore_permissions=True)
 	audit("order_discount", session, (doc.doctype, doc.name), {"amount": target, "percent": frappe.utils.flt(discount_percent)})
 	return doc.as_dict()
+
+
+@frappe.whitelist(methods=["POST"])
+def set_loyalty_redemption(pos_session_token: str, order: str, amount: str = "0") -> dict:
+	session = get_session(pos_session_token)
+	doc = _owned_order(session, order, {"Building", "Awaiting Payment"})
+	from erpnext_ua.ua_loyalty.exceptions import LoyaltyError
+	from erpnext_ua.ua_loyalty.services.quote_service import quote_order
+
+	try:
+		quote_order(doc, amount)
+	except LoyaltyError as error:
+		frappe.throw(str(error), title=error.code)
+	return frappe.get_doc("POS Order", doc.name).as_dict()
+
+
+@frappe.whitelist(methods=["POST"])
+def loyalty_identify(pos_session_token: str, order: str, identifier: str, identifier_type: str = "AUTO") -> dict:
+	from erpnext_ua.ua_loyalty.api import identify
+
+	result = identify(pos_session_token, identifier, identifier_type)
+	doc = _owned_order(get_session(pos_session_token), order, {"Building"})
+	if doc.customer != result["customer"]:
+		doc.customer = result["customer"]
+	doc.loyalty_account = result["account"]
+	doc.loyalty_card = result["card"]
+	doc.loyalty_scope = result["scope"]
+	doc.loyalty_program = result["program"]
+	doc.loyalty_state = "IDENTIFIED"
+	doc.save(ignore_permissions=True)
+	set_loyalty_redemption(pos_session_token, doc.name, "0")
+	return {"identity": result, "order": frappe.get_doc("POS Order", doc.name).as_dict()}
 
 
 @frappe.whitelist()
@@ -1221,6 +1308,15 @@ def cancel_order(pos_session_token: str, order: str) -> dict:
 	doc = frappe.get_doc("POS Order", order)
 	if doc.cash_desk != session["cash_desk"] or doc.status not in {"Building", "Held"}:
 		frappe.throw(_("Only an unpaid cart can be cancelled"), frappe.PermissionError)
+	if doc.get("order_purpose") == "Gift Certificate Sale":
+		from erpnext_ua.ua_gift_certificates.services.sale import release_pending_sale
+
+		release_pending_sale(doc, reason="ORDER_CANCELLED")
+	else:
+		from erpnext_ua.ua_gift_certificates.adapters.pos import release_checkout
+
+		release_checkout(doc, reason="ORDER_CANCELLED")
+	doc.reload()
 	doc.status = "Cancelled"
 	doc.save(ignore_permissions=True)
 	audit("order_cancelled", session, (doc.doctype, doc.name))
@@ -1243,6 +1339,18 @@ def _attempt(order, payment: dict, number: int, idem_key: str):
 			"idem_key": f"{idem_key}:{number}",
 		}
 	).insert(ignore_permissions=True)
+	if payment.get("kind") == "Gift Certificate":
+		attempt.gift_certificate = payment.get("gift_certificate")
+		attempt.reservation = payment.get("gift_certificate_reservation")
+		attempt.local_operation_id = f"gift:{order.name}:{payment.get('gift_certificate_reservation') or number}"
+		attempt.component_snapshot_json = frappe.as_json(
+			{
+				"paid": payment.get("gift_certificate_paid_amount"),
+				"promotional": payment.get("gift_certificate_promotional_amount"),
+			}
+		)
+		attempt.consume_status = "Reserved"
+		attempt.save(ignore_permissions=True)
 	return attempt
 
 
@@ -1388,6 +1496,7 @@ def create_draft_invoice(pos_session_token: str, order: str) -> dict:
 				"rate": row.rate,
 				"discount_percentage": discount_percentage,
 				"warehouse": row.warehouse,
+				"ua_pos_order_item": row.name,
 			}
 		)
 	si = frappe.get_doc(
@@ -1407,6 +1516,9 @@ def create_draft_invoice(pos_session_token: str, order: str) -> dict:
 		}
 	)
 	si.set_missing_values()
+	from erpnext_ua.ua_loyalty.adapters.sales_invoice import prepare_invoice
+
+	prepare_invoice(si, doc)
 	si.insert(ignore_permissions=True)
 	doc.draft_invoice = si.name
 	doc.status = "Invoice Draft"
@@ -1418,9 +1530,22 @@ def create_draft_invoice(pos_session_token: str, order: str) -> dict:
 
 def _post_sales_invoice(order, desk):
 	is_return = order.order_type == "Return"
+	from erpnext_ua.ua_gift_certificates.adapters.accounting import invoice_payments
+
 	original_invoice = frappe.db.get_value("POS Order", order.return_against, "sales_invoice") if is_return else None
 	if is_return and not original_invoice:
 		frappe.throw(_("Первинний чек не має проведеного Sales Invoice"))
+	from erpnext_ua.group_stock_fifo.services.pos_ua import (
+		is_gsf_return,
+		post_return,
+		post_sale,
+		scope_for_desk,
+	)
+
+	if is_return and is_gsf_return(order):
+		return post_return(order, desk)
+	if not is_return and scope_for_desk(desk):
+		return post_sale(order, desk)
 	si = frappe.get_doc(
 		{
 			"doctype": "Sales Invoice",
@@ -1443,25 +1568,82 @@ def _post_sales_invoice(order, desk):
 					"warehouse": row.warehouse,
 					"batch_no": row.batch_no,
 					"serial_no": row.serial_no,
+					"price_list_rate": row.rate,
+					"discount_percentage": frappe.utils.flt(row.discount_amount) * 100 / (frappe.utils.flt(row.qty) * frappe.utils.flt(row.rate)) if frappe.utils.flt(row.qty) * frappe.utils.flt(row.rate) else 0,
+					"ua_pos_order_item": row.name,
 				}
 				for row in order.items
-			],
-			"payments": [
-				{"mode_of_payment": row.mode_of_payment, "amount": -row.amount if is_return else row.amount}
-				for row in order.payments_plan
-				if row.status == "Confirmed"
 			],
 		}
 	)
 	si.set_missing_values()
+	si.set("payments", invoice_payments(order, is_return=is_return))
+	si.run_method("calculate_taxes_and_totals")
+	from erpnext_ua.ua_loyalty.adapters.sales_invoice import prepare_invoice
+
+	prepare_invoice(si, order)
+	from erpnext_ua.ua_gift_certificates.adapters.sales_invoice import prepare_invoice as prepare_gift_certificates
+
+	prepare_gift_certificates(si, order)
 	si.insert(ignore_permissions=True)
 	si.submit()
 	return si
 
 
-def _cash_movements(order, session):
+def _cash_movements(order, session, routes=None):
+	if routes is None:
+		return _legacy_cash_movements(order, session)
+	sources = _confirmed_payment_sources(order)
+	for route in routes:
+		for index, payment in enumerate(route.invoice.payments, 1):
+			amount = abs(frappe.utils.flt(payment.amount))
+			if not amount:
+				continue
+			source = sources.get(payment.mode_of_payment)
+			if not source:
+				frappe.throw(
+					_("Для способу оплати {0} немає підтвердженого платежу POS").format(
+						payment.mode_of_payment
+					)
+				)
+			if source.kind == "Gift Certificate":
+				continue
+			movement_idem = f"invoice-payment:{route.invoice.name}:{index}"
+			if frappe.db.exists("POS Cash Movement", {"idem_key": movement_idem}):
+				continue
+			is_cash = source.kind == "Cash"
+			is_return = order.order_type == "Return"
+			frappe.get_doc(
+				{
+					"doctype": "POS Cash Movement",
+					"cash_desk": route.cash_desk,
+					"operational_shift": route.operational_shift,
+					"employee": session["employee"],
+					"direction": "Out" if is_return else "In",
+					"movement_type": (
+						"Refund Cash"
+						if is_return and is_cash
+						else ("Sale Cash" if is_cash else "Deposit")
+					),
+					"amount": amount,
+					"currency": source.currency,
+					"mode_of_payment": payment.mode_of_payment,
+					"is_cash_drawer": 1 if is_cash else 0,
+					"fop_profile": (
+						route.route.legal_entity_name
+						if route.route.legal_entity_type == "FOP Profile"
+						else None
+					),
+					"basis_doctype": "Sales Invoice",
+					"basis_name": route.invoice.name,
+					"idem_key": movement_idem,
+				}
+			).insert(ignore_permissions=True).submit()
+
+
+def _legacy_cash_movements(order, session):
 	for payment in order.payments_plan:
-		if payment.status != "Confirmed":
+		if payment.status != "Confirmed" or payment.kind == "Gift Certificate":
 			continue
 		movement_idem = f"order-payment:{order.name}:{payment.name}"
 		if frappe.db.exists("POS Cash Movement", {"idem_key": movement_idem}):
@@ -1475,7 +1657,9 @@ def _cash_movements(order, session):
 				"operational_shift": order.operational_shift,
 				"employee": session["employee"],
 				"direction": "Out" if is_return else "In",
-				"movement_type": "Refund Cash" if (is_return and is_cash) else ("Sale Cash" if is_cash else "Deposit"),
+				"movement_type": (
+					"Refund Cash" if is_return and is_cash else ("Sale Cash" if is_cash else "Deposit")
+				),
 				"amount": payment.amount,
 				"currency": payment.currency,
 				"mode_of_payment": payment.mode_of_payment,
@@ -1487,9 +1671,19 @@ def _cash_movements(order, session):
 		).insert(ignore_permissions=True).submit()
 
 
+def _confirmed_payment_sources(order):
+	return {
+		payment.mode_of_payment: payment
+		for payment in order.payments_plan
+		if payment.status == "Confirmed"
+	}
+
+
 def _fiscalize(order, desk, si):
-	if order.fiscal_mode != "Fiscal" or not desk.prro_cash_register:
+	if order.fiscal_mode != "Fiscal":
 		return None
+	if not desk.prro_cash_register:
+		frappe.throw(_("Для каси {0} не налаштовано ПРРО").format(desk.name))
 	from erpnext_ua.ua_fiscal import orchestration
 	from erpnext_ua.ua_fiscal.sales_invoice import _invoice_lines, _invoice_taxes
 
@@ -1500,12 +1694,21 @@ def _fiscalize(order, desk, si):
 	# Фіскальні суми беремо з проведеного Sales Invoice: там уже враховані
 	# документні знижки й розподіл податків. Штрихкод лишається з POS Order.
 	items = _invoice_lines(si)
-	for item, order_row in zip(items, order.items, strict=False):
-		item["barcode"] = order_row.barcode or item.get("barcode")
+	order_rows = {row.name: row for row in order.items}
+	return_rows = {row.return_against_item: row for row in order.items if row.return_against_item}
+	for item, invoice_row in zip(items, si.items, strict=False):
+		order_row = order_rows.get(invoice_row.get("ua_pos_order_item")) or return_rows.get(
+			invoice_row.get("ua_pos_order_item")
+		)
+		if order_row:
+			item["barcode"] = order_row.barcode or item.get("barcode")
 	payments = []
-	for payment in order.payments_plan:
-		if payment.status != "Confirmed":
-			continue
+	sources = _confirmed_payment_sources(order)
+	for invoice_payment in si.payments:
+		payment = sources.get(invoice_payment.mode_of_payment)
+		if not payment:
+			frappe.throw(_("Не знайдено POS-платіж {0}").format(invoice_payment.mode_of_payment))
+		amount = abs(frappe.utils.flt(invoice_payment.amount))
 		configured_code = payment.get("prro_payment_code")
 		if configured_code in (None, ""):
 			configured_code = frappe.db.get_value("Mode of Payment", payment.mode_of_payment, "ua_payformcd")
@@ -1518,11 +1721,11 @@ def _fiscalize(order, desk, si):
 				payment.get("prro_payment_means") or payment.mode_of_payment,
 			),
 			"form": payment.get("prro_payment_form") or ("ГОТІВКА" if code == 0 else "БЕЗГОТІВКОВА"),
-			"sum": payment.amount,
+			"sum": amount,
 		}
 		if payment.kind == "Cash":
-			row["provided"] = payment.tendered_amount or payment.amount
-			row["remains"] = payment.change_amount or 0
+			row["provided"] = amount
+			row["remains"] = 0
 		if payment.kind == "Card" and payment.payment_attempt:
 			attempt = frappe.get_doc("POS Payment Attempt", payment.payment_attempt)
 			if attempt.terminal_transaction:
@@ -1541,14 +1744,14 @@ def _fiscalize(order, desk, si):
 						"device_id": terminal.device_id,
 						"epz_details": txn.card_mask,
 						"auth_code": txn.auth_code,
-						"sum": payment.amount,
+						"sum": amount,
 					}
 				]
 		payments.append(row)
-	total = abs(frappe.utils.flt(order.grand_total))
+	total = abs(frappe.utils.flt(si.rounded_total or si.grand_total))
 	no_rounding_total = abs(frappe.utils.flt(si.grand_total))
 	has_rounding = abs(total - no_rounding_total) > 0.001
-	return orchestration.fiscalize_sale(
+	receipt = orchestration.fiscalize_sale(
 		cash_register=register.name,
 		kep_key=key,
 		items=items,
@@ -1560,13 +1763,73 @@ def _fiscalize(order, desk, si):
 		sales_invoice=si.name,
 		receipt_type="Повернення" if order.order_type == "Return" else "Продаж",
 		related_receipt=(
-			frappe.db.get_value("POS Order", order.return_against, "prro_receipt")
+			frappe.db.get_value(
+				"PRRO Receipt",
+				{"sales_invoice": si.return_against, "status": ("in", ("Fiscalized", "Offline"))},
+				"name",
+				order_by="local_number desc",
+			)
 			if order.order_type == "Return"
 			else None
 		),
 		pos_order=order.name,
 		idem_key=f"{'return' if order.order_type == 'Return' else 'sale'}:{register.name}:{si.name}",
 	)
+	from erpnext_ua.ua_gift_certificates.adapters.fiscal import attach_receipt_snapshot
+
+	attach_receipt_snapshot(receipt, order, payments)
+	return receipt
+
+
+def _posted_fulfillment_routes(order, desk):
+	from erpnext_ua.group_stock_fifo.services.fulfillment_pos_routes import posted_pos_routes
+
+	return posted_pos_routes(order, desk)
+
+
+def _fiscalize_routes(order, routes):
+	receipts = []
+	for route in routes:
+		if order.fiscal_mode != "Fiscal" or route.route.fiscal_route != "FISCAL":
+			continue
+		route_desk = frappe.get_doc("POS Cash Desk", route.cash_desk)
+		receipt = _fiscalize(order, route_desk, route.invoice)
+		if receipt:
+			receipts.append(receipt)
+	return receipts
+
+
+def _route_receipt_state(order, routes):
+	receipts = []
+	complete = True
+	for route in routes:
+		if order.fiscal_mode != "Fiscal" or route.route.fiscal_route != "FISCAL":
+			continue
+		row = frappe.db.get_value(
+			"PRRO Receipt",
+			{"pos_order": order.name, "sales_invoice": route.invoice.name},
+			["name", "status"],
+			as_dict=True,
+			order_by="local_number desc",
+		)
+		if row:
+			receipts.append(row.name)
+		if not row or row.status not in {"Fiscalized", "Offline"}:
+			complete = False
+	return receipts, complete
+
+
+def _apply_route_receipt_state(order, routes, *, error: Exception | None = None):
+	receipts, complete = _route_receipt_state(order, routes)
+	order.prro_receipt = receipts[0] if receipts else None
+	order.prro_receipts_json = frappe.as_json(receipts)
+	order.status = "Completed" if complete else "Fiscal Pending"
+	order.recovery_note = (
+		None
+		if complete
+		else str(error or "Один або кілька фіскальних чеків очікують завершення")[:500]
+	)
+	return complete
 
 
 def _reconcile_existing_receipt(receipt_name: str | None, *, include_error: bool = False) -> dict | None:
@@ -1615,6 +1878,14 @@ def _return_summary(original) -> dict:
 	items = []
 	for row in original.items:
 		available = max(0, frappe.utils.flt(row.qty) - returned_by_item[row.name])
+		gift_allocated = frappe.utils.flt(
+			frappe.db.sql(
+				"""select coalesce(sum(certificate_amount), 0)
+				from `tabUA Gift Certificate Redemption Allocation`
+				where pos_order=%s and pos_order_item=%s""",
+				(original.name, row.name),
+			)[0][0]
+		) if frappe.db.table_exists("UA Gift Certificate Redemption Allocation") else 0
 		items.append(
 			{
 				"row_name": row.name,
@@ -1626,12 +1897,16 @@ def _return_summary(original) -> dict:
 				"uom": row.uom,
 				"rate": row.rate,
 				"amount": row.amount,
+				"money_paid_amount": max(0, frappe.utils.flt(row.amount) - gift_allocated),
+				"gift_certificate_amount": gift_allocated,
+				"loyalty_redeemed_amount": frappe.utils.flt(row.loyalty_redeemed_amount),
+				"loyalty_earned_amount": frappe.utils.flt(row.loyalty_earned_amount),
 			}
 		)
 	paid_by_method = defaultdict(float)
 	method_snapshot = {}
 	for row in original.payments_plan:
-		if row.status == "Confirmed":
+		if row.status == "Confirmed" and row.kind != "Gift Certificate":
 			key = (row.kind, row.mode_of_payment)
 			paid_by_method[key] += frappe.utils.flt(row.amount)
 			method_snapshot[key] = row
@@ -1669,7 +1944,17 @@ def return_details(pos_session_token: str, token: str) -> dict:
 	if original.order_type == "Return":
 		frappe.throw(_("Повернення можна оформити лише за чеком продажу"))
 	if original.cash_desk != session["cash_desk"]:
-		frappe.throw(_("Первинний чек належить іншій касі"), frappe.PermissionError)
+		allow_cross_location = bool(
+			original.loyalty_scope
+			and frappe.db.get_value("UA Loyalty Scope", original.loyalty_scope, "allow_cross_location_return")
+		)
+		if not allow_cross_location:
+			frappe.throw(_("Первинний чек належить іншій касі"), frappe.PermissionError)
+		from erpnext_ua.ua_loyalty.services.quote_service import resolve_location
+
+		current_location = resolve_location(cash_desk=session["cash_desk"])
+		if current_location.scope != original.loyalty_scope:
+			frappe.throw(_("Повернення має бути в тій самій області лояльності"), frappe.PermissionError)
 	return {"order": original.as_dict(), **_return_summary(original)}
 
 
@@ -1722,11 +2007,17 @@ def create_return_order(pos_session_token: str, token: str, items, idem_key: str
 				"warehouse": original_row.warehouse,
 				"batch_no": original_row.batch_no,
 				"serial_no": original_row.serial_no,
+				"non_loyalty_discount_amount": frappe.utils.flt(frappe.utils.flt(original_row.non_loyalty_discount_amount) / frappe.utils.flt(original_row.qty) * qty, 2),
+				"loyalty_redeemed_amount": frappe.utils.flt(frappe.utils.flt(original_row.loyalty_redeemed_amount) / frappe.utils.flt(original_row.qty) * qty, 2),
 				"discount_amount": frappe.utils.flt(discount_per_unit * qty, 2),
 				"fop_profile": original_row.fop_profile,
 				"return_against_item": original_row.name,
+				"loyalty_original_order_item": original_row.name,
 			},
 		)
+	from erpnext_ua.ua_gift_certificates.adapters.pos import prepare_return_order
+
+	prepare_return_order(doc, original)
 	doc.insert(ignore_permissions=True)
 	audit("return_created", session, (doc.doctype, doc.name), {"return_against": original.name})
 	return doc.as_dict()
@@ -1740,6 +2031,8 @@ def _validate_return_payments(order, payment_rows: list[dict]):
 	}
 	requested = defaultdict(float)
 	for row in payment_rows:
+		if row.get("kind") == "Gift Certificate":
+			continue
 		requested[(row.get("kind"), row.get("mode_of_payment"))] += frappe.utils.flt(row.get("amount"))
 	for key, amount in requested.items():
 		if amount > limits.get(key, 0) + 0.001:
@@ -1770,6 +2063,8 @@ def _record_birthday_benefit(order):
 
 
 def _complete_paid_order(doc, desk, session) -> dict:
+	if doc.get("order_purpose") == "Gift Certificate Sale":
+		return _complete_paid_certificate_order(doc, desk, session)
 	if not doc.sales_invoice:
 		doc.status = "Posting"
 		doc.save(ignore_permissions=True)
@@ -1781,31 +2076,28 @@ def _complete_paid_order(doc, desk, session) -> dict:
 			doc.sales_invoice = si.name
 			doc.status = "Posted"
 			doc.save(ignore_permissions=True)
-		_cash_movements(doc, session)
+		routes = _posted_fulfillment_routes(doc, desk)
+		_cash_movements(doc, session, routes)
 		try:
-			receipt = _fiscalize(doc, desk, si)
+			_fiscalize_routes(doc, routes)
 		except Exception as exc:
 			# The document can already be accepted by DPS even when verification
 			# of the signed ticket fails locally. Resolve by local number before
 			# returning Fiscal Pending; never submit a second sale blindly.
-			receipt = doc.prro_receipt or frappe.db.get_value(
-				"PRRO Receipt", {"pos_order": doc.name}, "name", order_by="local_number desc"
-			)
-			recovered = None
-			try:
-				recovered = _reconcile_existing_receipt(receipt)
-			except Exception:
-				frappe.log_error(frappe.get_traceback(), f"POS immediate fiscal recovery {doc.name}")
-			doc.prro_receipt = receipt
-			doc.status = "Completed" if recovered and recovered.get("status") == "Fiscalized" else "Fiscal Pending"
-			doc.recovery_note = None if doc.status == "Completed" else str(exc)[:500]
+			for receipt in frappe.get_all(
+				"PRRO Receipt",
+				filters={"pos_order": doc.name},
+				pluck="name",
+			):
+				try:
+					_reconcile_existing_receipt(receipt)
+				except Exception:
+					frappe.log_error(frappe.get_traceback(), f"POS immediate fiscal recovery {doc.name}")
+			_apply_route_receipt_state(doc, routes, error=exc)
 		else:
-			doc.prro_receipt = receipt
-			receipt_status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
-			doc.status = "Completed" if not receipt or receipt_status in {"Fiscalized", "Offline"} else "Fiscal Pending"
-			if doc.status == "Fiscal Pending":
-				doc.recovery_note = f"Фіскальний документ {receipt} має статус {receipt_status}"
+			_apply_route_receipt_state(doc, routes)
 		doc.save(ignore_permissions=True)
+		_sync_gsf_fiscal_state(doc)
 		if doc.status == "Completed":
 			_queue_print_if_configured(doc)
 		_record_birthday_benefit(doc)
@@ -1822,6 +2114,72 @@ def _complete_paid_order(doc, desk, session) -> dict:
 	)
 	frappe.db.commit()
 	return doc.as_dict()
+
+
+def _complete_paid_certificate_order(doc, desk, session) -> dict:
+	from erpnext_ua.ua_gift_certificates.services.sale import complete_pos_sale
+
+	try:
+		sale = complete_pos_sale(doc, desk, session)
+		_cash_movements(doc, session)
+		if doc.fiscal_mode == "Fiscal":
+			from erpnext_ua.ua_gift_certificates.adapters.fiscal import fiscalize_certificate_sale
+
+			try:
+				receipt = fiscalize_certificate_sale(doc, desk, sale)
+			except Exception as exc:
+				receipt = doc.prro_receipt or frappe.db.get_value(
+					"PRRO Receipt",
+					{"pos_order": doc.name},
+					"name",
+					order_by="local_number desc",
+				)
+				doc.prro_receipt = receipt
+				doc.status = "Fiscal Pending"
+				doc.gift_certificate_recovery_state = "Fiscal Pending"
+				doc.recovery_note = str(exc)[:500]
+			else:
+				doc.prro_receipt = receipt
+				sale.db_set(
+					{"prro_receipt": receipt, "status": "Completed"},
+					update_modified=False,
+				)
+				doc.status = "Completed"
+		else:
+			doc.status = "Completed"
+		doc.save(ignore_permissions=True)
+		if doc.status == "Completed":
+			_queue_print_if_configured(doc)
+	except Exception as exc:
+		doc.status = "Manual Review"
+		doc.gift_certificate_recovery_state = "Manual Review"
+		doc.recovery_note = str(exc)[:500]
+		doc.save(ignore_permissions=True)
+		raise
+	audit(
+		"gift_certificate_sale_completed",
+		session,
+		(doc.doctype, doc.name),
+		{"gift_certificate_sale": sale.name},
+	)
+	frappe.db.commit()
+	return doc.as_dict()
+
+
+def _sync_gsf_fiscal_state(doc) -> None:
+	if not doc.get("gsf_checkout") or doc.fiscal_mode != "Fiscal":
+		return
+	from erpnext_ua.group_stock_fifo.services.pos_ua import record_fiscal_result
+
+	desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
+	routes = _posted_fulfillment_routes(doc, desk)
+	receipts, complete = _route_receipt_state(doc, routes)
+	record_fiscal_result(
+		doc,
+		state="DONE" if complete else "UNCERTAIN",
+		receipt=receipts[0] if receipts else None,
+		receipts=receipts,
+	)
 
 
 def _queue_print_if_configured(doc):
@@ -1863,20 +2221,21 @@ def retry_fiscalization(pos_session_token: str, order: str) -> dict:
 		frappe.throw(_("Цей чек не очікує відновлення фіскалізації"))
 	if not doc.sales_invoice:
 		frappe.throw(_("Sales Invoice ще не створено"))
-	failed_receipt = doc.prro_receipt or frappe.db.get_value(
-		"PRRO Receipt", {"pos_order": doc.name}, "name", order_by="local_number desc"
-	)
-	# Reconcile first for both ambiguous delivery and a definite error.
-	# A retry after Error is allowed only when registrar state proves that the
-	# last local number was not consumed; orchestration enforces that invariant.
-	_reconcile_existing_receipt(failed_receipt, include_error=True)
 	desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
-	receipt = _fiscalize(doc, desk, frappe.get_doc("Sales Invoice", doc.sales_invoice))
-	status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
-	doc.prro_receipt = receipt
-	doc.status = "Completed" if not receipt or status in {"Fiscalized", "Offline"} else "Fiscal Pending"
-	doc.recovery_note = None if doc.status == "Completed" else f"Фіскальний документ {receipt}: {status}"
+	routes = _posted_fulfillment_routes(doc, desk)
+	for receipt in frappe.get_all(
+		"PRRO Receipt",
+		filters={"pos_order": doc.name},
+		pluck="name",
+	):
+		# Reconcile first for both ambiguous delivery and a definite error.
+		# A retry after Error is allowed only when registrar state proves that the
+		# last local number was not consumed; orchestration enforces that invariant.
+		_reconcile_existing_receipt(receipt, include_error=True)
+	_fiscalize_routes(doc, routes)
+	_apply_route_receipt_state(doc, routes)
 	doc.save(ignore_permissions=True)
+	_sync_gsf_fiscal_state(doc)
 	if doc.status == "Completed":
 		_queue_print_if_configured(doc)
 	frappe.db.commit()
@@ -1890,17 +2249,17 @@ def recover_pos_fiscal_pending():
 			if not doc.sales_invoice:
 				continue
 			desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
-			failed_receipt = doc.prro_receipt or frappe.db.get_value(
-				"PRRO Receipt", {"pos_order": doc.name}, "name", order_by="local_number desc"
-			)
-			_reconcile_existing_receipt(failed_receipt)
-			receipt = _fiscalize(doc, desk, frappe.get_doc("Sales Invoice", doc.sales_invoice))
-			status = frappe.db.get_value("PRRO Receipt", receipt, "status") if receipt else None
-			if not receipt or status in {"Fiscalized", "Offline"}:
-				doc.db_set("prro_receipt", receipt, update_modified=False)
-				doc.status = "Completed"
-				doc.recovery_note = None
+			routes = _posted_fulfillment_routes(doc, desk)
+			for receipt in frappe.get_all(
+				"PRRO Receipt",
+				filters={"pos_order": doc.name},
+				pluck="name",
+			):
+				_reconcile_existing_receipt(receipt)
+			_fiscalize_routes(doc, routes)
+			if _apply_route_receipt_state(doc, routes):
 				doc.save(ignore_permissions=True)
+				_sync_gsf_fiscal_state(doc)
 				_queue_print_if_configured(doc)
 		except Exception:
 			frappe.log_error(frappe.get_traceback(), f"POS fiscal recovery {name}")
@@ -1913,12 +2272,19 @@ def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) 
 	doc = _owned_order(session, order)
 	if doc.status not in {"Building", "Awaiting Payment"}:
 		return doc.as_dict()
-	if not doc.items or doc.grand_total <= 0:
-		frappe.throw(_("У чеку немає товарів до оплати"))
-	_validate_order_items(doc)
+	certificate_sale = doc.get("order_purpose") == "Gift Certificate Sale"
+	if certificate_sale:
+		if doc.items or not doc.gift_certificate_issue_rows or doc.grand_total <= 0:
+			frappe.throw(_("У продажі сертифіката немає підготовлених сертифікатів"))
+	else:
+		if not doc.items or doc.grand_total < 0:
+			frappe.throw(_("У чеку немає товарів до оплати"))
+		_validate_order_items(doc)
+		_prepare_loyalty_checkout(doc, idem_key)
+	doc.reload()
+	gift_certificate_rows = _prepare_gift_certificate_checkout(doc, idem_key)
+	doc.reload()
 	payment_rows = parse_rows(payments)
-	if not payment_rows:
-		frappe.throw(_("Вкажіть спосіб оплати"))
 	desk = frappe.get_doc("POS Cash Desk", doc.cash_desk)
 	return_methods = {}
 	if doc.order_type == "Return":
@@ -1928,6 +2294,8 @@ def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) 
 			for row in _return_summary(original)["refund_limits"]
 		}
 	for row in payment_rows:
+		if row.get("kind") == "Gift Certificate":
+			frappe.throw(_("Сертифікатна оплата додається лише сервером"), frappe.PermissionError)
 		return_snapshot = return_methods.get((row.get("mode_of_payment"), row.get("payment_form") or ""))
 		if return_snapshot and return_snapshot.get("payment_code") not in (None, ""):
 			method = {
@@ -1959,6 +2327,9 @@ def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) 
 		)
 		if method["requires_terminal"] and not desk.terminal:
 			frappe.throw(_("Для способу оплати {0} потрібен інтегрований платіжний термінал").format(method["payment_means"]))
+	payment_rows.extend(gift_certificate_rows)
+	if not payment_rows and frappe.utils.flt(doc.grand_total) > 0:
+		frappe.throw(_("Вкажіть спосіб оплати"))
 	if abs(sum(frappe.utils.flt(row.get("amount")) for row in payment_rows) - doc.grand_total) > 0.01:
 		frappe.throw(_("Сума оплат має дорівнювати сумі чека"))
 	if doc.fiscal_mode == "Non Fiscal" and len(payment_rows) > 1:
@@ -2031,9 +2402,71 @@ def checkout_start(pos_session_token: str, order: str, payments, idem_key: str) 
 	doc.status = "Payment Unknown" if unknown else ("Paid" if all(r.status == "Confirmed" for r in doc.payments_plan) else "Awaiting Payment")
 	doc.save(ignore_permissions=True)
 	if doc.status != "Paid":
+		if not unknown and certificate_sale:
+			from erpnext_ua.ua_gift_certificates.services.sale import release_pending_sale
+
+			release_pending_sale(doc, reason="PAYMENT_FAILED")
+		if not unknown and gift_certificate_rows:
+			from erpnext_ua.ua_gift_certificates.adapters.pos import release_checkout
+
+			release_checkout(doc)
+		if not unknown and doc.loyalty_reservation:
+			from erpnext_ua.ua_loyalty.services.reservation_service import release
+
+			release(
+				doc.loyalty_reservation,
+				allow_payment_in_progress=True,
+				reason_code="PAYMENT_FAILED",
+				idempotency_key=f"payment-failed:{doc.name}",
+			)
+			doc.loyalty_state = "QUOTED"
+			doc.loyalty_reservation = None
+			doc.loyalty_reserved_amount = 0
+			doc.save(ignore_permissions=True)
 		frappe.db.commit()
 		return doc.as_dict()
 	return _complete_paid_order(doc, desk, session)
+
+
+def _prepare_loyalty_checkout(doc, idem_key: str) -> None:
+	from erpnext_ua.ua_loyalty.exceptions import LoyaltyError
+	from erpnext_ua.ua_loyalty.services.quote_service import quote_order
+	from erpnext_ua.ua_loyalty.services.reservation_service import mark_payment_in_progress, reserve
+	from erpnext_ua.ua_loyalty.services.settings import enabled_for
+
+	if not enabled_for("POS Order"):
+		return
+	if not doc.loyalty_account:
+		_try_identify_loyalty_account(doc)
+		doc.reload()
+	if not doc.loyalty_account:
+		return
+	try:
+		if doc.loyalty_state != "QUOTED" or not doc.loyalty_quote_hash:
+			quote_order(doc, doc.loyalty_requested_amount or 0)
+			doc.reload()
+		reservation = reserve(
+			doc,
+			quote_hash=doc.loyalty_quote_hash,
+			idempotency_key=f"loyalty:{idem_key}",
+		)
+		if reservation:
+			mark_payment_in_progress(doc, reservation)
+			# This is the intentional transaction boundary required before the
+			# first terminal network call. A later failure leaves a durable lease.
+			frappe.db.commit()
+	except LoyaltyError as error:
+		frappe.throw(str(error), title=error.code)
+
+
+def _prepare_gift_certificate_checkout(doc, idem_key: str) -> list[dict]:
+	from erpnext_ua.ua_gift_certificates.adapters.pos import prepare_checkout
+	from erpnext_ua.ua_gift_certificates.domain.errors import GiftCertificateError
+
+	try:
+		return prepare_checkout(doc, idem_key)
+	except GiftCertificateError as error:
+		frappe.throw(str(error), title=error.code)
 
 
 @frappe.whitelist()
@@ -2077,6 +2510,16 @@ def card_status(pos_session_token: str, attempt: str) -> dict:
 	if order.status == "Paid":
 		order_payload = _complete_paid_order(order, frappe.get_doc("POS Cash Desk", order.cash_desk), session)
 	else:
+		if doc.status == "Declined":
+			if order.get("order_purpose") == "Gift Certificate Sale":
+				from erpnext_ua.ua_gift_certificates.services.sale import release_pending_sale
+
+				release_pending_sale(order, reason="PAYMENT_DECLINED")
+			else:
+				from erpnext_ua.ua_gift_certificates.adapters.pos import release_checkout
+
+				release_checkout(order, reason="PAYMENT_DECLINED")
+			order.reload()
 		frappe.db.commit()
 		order_payload = order.as_dict()
 	return {"attempt": doc.as_dict(), "order": order_payload}
@@ -2101,6 +2544,20 @@ def receipt_data(pos_session_token: str, order: str) -> dict:
 	from erpnext_ua.ua_pos.barcode import code128_svg_data_uri, encode_lookup_token
 
 	lookup_barcode = encode_lookup_token(doc.lookup_token)
+	certificate_print = None
+	if doc.get("order_purpose") == "Gift Certificate Sale":
+		from erpnext_ua.ua_gift_certificates.services.printing import claim_sale_print_payload
+
+		certificate_print = claim_sale_print_payload(
+			doc.name,
+			idempotency_key=frappe.generate_hash(length=20),
+		)
+		for certificate in certificate_print["certificates"]:
+			certificate["barcode_svg"] = code128_svg_data_uri(certificate.pop("token"))
+		frappe.local.response["headers"] = {
+			"Cache-Control": "no-store, no-cache, must-revalidate, private",
+			"Pragma": "no-cache",
+		}
 	fiscal_receipt = None
 	if doc.fiscal_mode == "Fiscal":
 		if not doc.prro_receipt:
@@ -2128,6 +2585,7 @@ def receipt_data(pos_session_token: str, order: str) -> dict:
 		"cash_desk": desk.desk_name,
 		"employee_name": employee_name,
 		"fiscal_receipt": fiscal_receipt,
+		"certificate_print": certificate_print,
 		"lookup_barcode": lookup_barcode,
 		"lookup_barcode_svg": code128_svg_data_uri(lookup_barcode),
 		"completed_at": str(doc.modified),
