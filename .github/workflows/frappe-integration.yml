@@ -127,6 +127,8 @@ jobs:
             erpnext_ua.group_stock_fifo.integration_tests.phase_7_mixed_fulfillment.run
           bench --site integration.local execute \
             erpnext_ua.group_stock_fifo.integration_tests.phase_6_serial_returns.run
+          bench --site integration.local execute \
+            erpnext_ua.group_stock_fifo.integration_tests.phase_8_batch_returns.run
 
       - name: Run loyalty and gift certificate integration tests
         working-directory: frappe-bench

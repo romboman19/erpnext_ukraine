@@ -480,12 +480,11 @@ backdated guard і закриття періоду §25; Financial Integrity §3
 Усі вісім фаз §41 пройдені. Те, що нижче, — не «недороблені фази», а конкретні
 речі, кожна з власною причиною, чому її ще немає.
 
-### Потребує Batch-фікстури
+### Tracked stock автоматизовано
 
-Serial receipt, allocation, POS sale, lineage, карантин і повернення вже
-виконуються на кожному clean-site CI. Окремого живого Batch-сценарію ще немає:
-код fail-closed для неоднозначного bundle, але його треба довести приходом,
-частковим продажем і поверненням конкретної партії.
+Serial і Batch receipt, allocation, cross-company POS sale, lineage та точне
+повернення виконуються на кожному clean-site CI. Batch acceptance окремо
+перевіряє дві партії з різною собівартістю на двох ФОП і часткове повернення.
 
 ### Потребує стека зі scheduler
 
@@ -626,16 +625,14 @@ docker exec frappe-test-backend-1 bench --site postest.local execute \
 
 Фази §41 пройдені. Порядок далі — за співвідношенням «ризик / вартість»:
 
-1. **Batch-фікстура.** Serial уже зелений у clean-site CI; додати receipt,
-   частковий sale і return конкретного batch.
-2. **Прогін на production-shaped staging** зі scheduler і workers. Дасть
+1. **Прогін на production-shaped staging** зі scheduler і workers. Дасть
    перевірку самих scheduled job і зникнення `PENDING_REPOST`, який на
    одноразовому CI доводиться зливати руками.
-3. **Навантаження й deadlock (§41 Phase 8)** — після кроку 2, на тому самому
+2. **Навантаження й deadlock (§41 Phase 8)** — після кроку 1, на тому самому
    staging зі scheduler.
-4. **Production acceptance** на анонімізованій копії реальних залишків,
+3. **Production acceptance** на анонімізованій копії реальних залишків,
    відкритих резервів і плану рахунків.
-5. **Workspace / UI** — коли стане зрозуміло, що саме операторам потрібно
+4. **Workspace / UI** — коли стане зрозуміло, що саме операторам потрібно
    бачити щодня. Зараз усе через API і desk-форми, і цього досить для
    приймання.
 

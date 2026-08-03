@@ -142,7 +142,8 @@ Feature gate модуля після встановлення вимкнений
 - Global FIFO, reservation locks, exact-value reallocation і checkout saga;
 - Multi-FOP продаж із POS, Sales Order та ручного Sales Invoice;
 - змішані GSF/консигнаційні/комісійні маршрути з поверненням тому самому ФОП;
-- Serial lineage, карантин повернень, period close та financial integrity;
+- Serial/Batch lineage, часткові повернення, карантин, period close та
+  financial integrity;
 - автоматичне read-only виявлення CC-складів: комісійний домен не можна
   випадково зареєструвати як власний пул GSF;
 - feature gate після install/migrate вимкнений і відкривається лише після
