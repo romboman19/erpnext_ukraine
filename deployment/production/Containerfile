@@ -48,6 +48,6 @@ RUN set -eu; \
         --contract /opt/frappe/production/image-contract.json \
         --commit "${ERPNEXT_UA_COMMIT}"; \
     find apps -mindepth 1 -path '*/.git' -prune -exec rm -rf '{}' +; \
-    rm -rf /opt/frappe/app-sources
+    find /opt/frappe/app-sources -mindepth 1 -maxdepth 1 -exec rm -rf '{}' +
 
 ENV ERPNEXT_UA_IMAGE_COMMIT=${ERPNEXT_UA_COMMIT}
