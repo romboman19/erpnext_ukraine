@@ -1,0 +1,15 @@
+ARG UA_BASE_IMAGE=erpnext-huntervua:v16.26.2-uaacct2-ukfull1-ecom063-7c522a7-ptags050-recv070-pd080-flow1-consign1-ean131
+FROM ${UA_BASE_IMAGE}
+
+USER root
+
+# The UAT compose stack mounts the current erpnext_ua source read-only. Keep
+# its Python runtime in sync with the package contract instead of mutating
+# backend, worker, and scheduler containers independently after every recreate.
+RUN /home/frappe/frappe-bench/env/bin/pip install --no-cache-dir \
+    "qrcode>=8.0,<9" \
+    "defusedxml>=0.7.1,<1" \
+    "paramiko>=3.5.1,<6" \
+    "requests>=2.33,<3"
+
+USER frappe

@@ -6,6 +6,7 @@
   посилання `§N` резолвяться; зведення розбіжностей у
   [`spec-reconciliation.md`](spec-reconciliation.md)
 - Стосується: `erpnext_ua` 0.9.0+, модуль `Group Stock FIFO`, префікс `GSF`
+- Phase 8 staging harness: [`runbooks/staging-acceptance.md`](runbooks/staging-acceptance.md)
 
 Це не заміна базового ТЗ, а перелік місць, де воно більше не відповідає
 дійсності, і де я вважаю його рішення помилковим. Усе, що тут не згадане,

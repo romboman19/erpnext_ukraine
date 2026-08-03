@@ -151,6 +151,9 @@ Feature gate модуля після встановлення вимкнений
 
 Архітектура, докази фаз і production runbooks:
 [`docs/group-stock-fifo/`](docs/group-stock-fifo/).
+Відтворюваний Phase 8 staging gate для scheduler, crash recovery та
+конкурентного Global FIFO:
+[`staging-acceptance.md`](docs/group-stock-fifo/runbooks/staging-acceptance.md).
 
 ### Інтеграції та Ecommerce
 

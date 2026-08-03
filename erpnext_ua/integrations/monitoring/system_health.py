@@ -17,6 +17,11 @@ def _heartbeat_window_seconds() -> int:
     return max(int(get_scheduler_tick()) * 3, MINIMUM_HEARTBEAT_WINDOW_SECONDS)
 
 
+def scheduler_heartbeat_window_seconds() -> int:
+    """Return the same bounded freshness window used by the health report."""
+    return _heartbeat_window_seconds()
+
+
 def update_scheduler_heartbeat() -> None:
     """Record an end-to-end scheduler/worker heartbeat in the shared Redis cache."""
     window = _heartbeat_window_seconds()

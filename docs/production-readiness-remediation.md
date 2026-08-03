@@ -77,9 +77,10 @@ These items are not silently enabled by this remediation:
 3. Automatic seller-FOP routing requires an approved policy for tax limits,
    stock ownership, returns, manual overrides, and audit responsibility.
 4. Serial, Batch, and mixed GSF/consignment/commission sale and return flows run
-   in clean-site CI. Sustained load, deadlock, and failure-injection scenarios
-   still require a production-shaped staging environment with scheduler and
-   workers.
+   in clean-site CI. GSF scheduler, last-stock race, sustained contention and
+   process-crash recovery passed on production-shaped staging (800/800; see
+   `docs/group-stock-fifo/release/evidence/2026-08-04-staging-acceptance.md`).
+   A separate sustained mixed-provider profile is not claimed by that evidence.
 5. The legal acceptability and custody model of the external KEP signer requires
    owner and legal/compliance approval; code tests cannot grant that approval.
 

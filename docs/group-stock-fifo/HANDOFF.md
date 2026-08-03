@@ -486,16 +486,16 @@ Serial і Batch receipt, allocation, cross-company POS sale, lineage та точ
 повернення виконуються на кожному clean-site CI. Batch acceptance окремо
 перевіряє дві партії з різною собівартістю на двох ФОП і часткове повернення.
 
-### Потребує стека зі scheduler
+### Production-shaped staging пройдено
 
-`frappe-test` не має scheduler-контейнера. `frappe-uat` має.
+На dedicated `fifoaccept.local` з живими scheduler/worker пройдено scheduled
+expiry, `SIGKILL` rollback, §37.7 last-stock race і 8 × 100 конкурентних
+reserve/release: 800/800, p95 0.962 с, 0 live allocations, 0 reserved qty.
+Evidence: `release/evidence/2026-08-04-staging-acceptance.md`.
 
-- **Load / deadlock / failure-injection тести** (§41 Phase 8). §37.7 (реальне
-  подвійне бронювання) уже доведено двома процесами в Phase 3; решта потребує
-  навантаження.
-- **Перевірка самих scheduled job** — вони зареєстровані
-  (`expire_due_allocations` кожні 10 хв, `log_critical_findings` щодня), але на
-  цьому стеку не виконуються жодного разу.
+Перші прогони виявили MariaDB error 1020 через snapshot до scope lock. Це
+виправлено в production allocator, а не обійдено в harness. Окремий sustained
+mixed-provider GSF+CC профіль цим evidence не заявляється.
 
 ### Свідомо не реалізовано
 
@@ -625,13 +625,13 @@ docker exec frappe-test-backend-1 bench --site postest.local execute \
 
 Фази §41 пройдені. Порядок далі — за співвідношенням «ризик / вартість»:
 
-1. **Прогін на production-shaped staging** зі scheduler і workers. Дасть
-   перевірку самих scheduled job і зникнення `PENDING_REPOST`, який на
-   одноразовому CI доводиться зливати руками.
-2. **Навантаження й deadlock (§41 Phase 8)** — після кроку 1, на тому самому
-   staging зі scheduler.
-3. **Production acceptance** на анонімізованій копії реальних залишків,
-   відкритих резервів і плану рахунків.
+1. **Закрити production image gates:** прибрати legacy-дублікати модулів,
+   узгодити Frappe/Flow/LiteLLM/Click, збирати код і metadata однієї версії та
+   пройти clean `pip check`.
+2. **Production acceptance** на анонімізованій копії реальних залишків,
+   відкритих резервів, Multi-FOP конфігурації й плану рахунків.
+3. **Пілот однієї Company/Location** із підписом власника, бухгалтера та
+   операторів каси, потім контрольоване розширення.
 4. **Workspace / UI** — коли стане зрозуміло, що саме операторам потрібно
    бачити щодня. Зараз усе через API і desk-форми, і цього досить для
    приймання.
