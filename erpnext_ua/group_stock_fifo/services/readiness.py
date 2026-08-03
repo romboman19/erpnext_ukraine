@@ -25,6 +25,7 @@ def readiness() -> ReadinessReport:
     _check_roles(frappe, report)
     _check_groups(frappe, report)
     _check_warehouse_bindings(frappe, report)
+    _check_cc_discovery(report)
     _check_lanes(frappe, report)
     _check_counterparty_dimension(frappe, report)
     _check_repeated_items(frappe, report)
@@ -225,6 +226,14 @@ def _check_warehouse_bindings(frappe: Any, report: ReadinessReport) -> None:
     )
     for warehouse in group_warehouses:
         report.block(f"Warehouse {warehouse} is a group warehouse")
+
+
+def _check_cc_discovery(report: ReadinessReport) -> None:
+    """§8.3/§37.24: CC ownership must be explicit before GSF is enabled."""
+    from erpnext_ua.group_stock_fifo.setup.cc_discovery import audit_cc_bindings
+
+    for issue in audit_cc_bindings():
+        report.block(issue)
 
 
 def _check_lanes(frappe: Any, report: ReadinessReport) -> None:

@@ -12,19 +12,17 @@ import uuid
 from decimal import Decimal
 
 import frappe
-from frappe.utils import nowdate
+from frappe.utils import now_datetime, nowdate
 
 from erpnext_ua.consignment_and_commission.spikes.accounting import (
     _ensure_accounts,
     _ensure_supplier,
 )
-from erpnext_ua.consignment_and_commission.spikes.fifo import (
-    _ensure_location_warehouses,
-)
 from erpnext_ua.group_stock_fifo.services.fulfillment_channels import (
     fulfill_sales_invoice_document,
     fulfill_sales_order,
 )
+from erpnext_ua.group_stock_fifo.setup.cc_discovery import audit_cc_bindings
 from erpnext_ua.group_stock_fifo.spikes.fixtures import FOPS
 from erpnext_ua.ua_pos.api import _post_sales_invoice
 
@@ -53,6 +51,7 @@ def run() -> dict:
         company_a: _ensure_cc_route(company_a, location, desks[company_a][0], run_id),
         company_b: _ensure_cc_route(company_b, location, desks[company_b][0], run_id),
     }
+    _assert_cc_registry(cc, location)
     _enable_settings(company_a, cc[company_a]["location"])
     mode = _ensure_cash_mode((company_a, company_b))
 
@@ -65,6 +64,7 @@ def run() -> dict:
         cc=cc,
         run_id=f"{run_id}-MAN",
     )
+    _assert_domain_inventory(manual_item, location)
     manual = _manual_invoice_sale(
         item_code=manual_item,
         company=company_a,
@@ -266,7 +266,10 @@ def _warehouse(company: str, title: str) -> str:
 
 
 def _ensure_cc_route(company: str, location: str, desk, run_id: str) -> dict:
-    _group, warehouses = _ensure_location_warehouses(frappe, company)
+    warehouses = {
+        model: _warehouse(company, f"P7 CC {model.title()} {run_id}")
+        for model in ("OWN", "COMMISSION", "CONSIGNMENT")
+    }
     accounts = _ensure_accounts(frappe, company, require_payment_accounts=False)
     abbr = frappe.db.get_value("Company", company, "abbr")
     supplier = _ensure_supplier(
@@ -614,6 +617,7 @@ def _assert_mixed_sale(
     assert len(invoices) == 3, [row.name for row in invoices]
     assert [row.company for row in invoices] == [seller_company, company_a, company_b]
     gsf = invoices[0]
+    assert all(row.gsf_stock_layer and not row.cc_stock_lot for row in gsf.items)
     costs = [
         abs(Decimal(str(frappe.db.sql(
             "select coalesce(sum(stock_value_difference),0) from `tabStock Ledger Entry` "
@@ -633,6 +637,94 @@ def _assert_mixed_sale(
         )
     ]
     assert cc_models == ["CONSIGNMENT", "COMMISSION"], cc_models
+    for invoice in invoices[1:]:
+        assert all(row.cc_stock_lot and not row.gsf_stock_layer for row in invoice.items)
+    assert frappe.db.count(
+        "GSF Stock Layer", {"item_code": gsf.items[0].item_code}
+    ) == 2
+
+
+def _assert_cc_registry(cc: dict, physical_location: str) -> None:
+    issues = audit_cc_bindings()
+    assert not issues, issues
+    warehouses = {
+        warehouse
+        for route in cc.values()
+        for warehouse in frappe.db.get_value(
+            "CC Location",
+            route["location"],
+            ["own_warehouse", "commission_warehouse", "consignment_warehouse"],
+        )
+    }
+    bindings = frappe.get_all(
+        "GSF Warehouse Binding",
+        filters={"warehouse": ("in", tuple(warehouses))},
+        fields=[
+            "warehouse",
+            "manager_app",
+            "binding_mode",
+            "physical_location",
+            "source_doctype",
+            "enabled",
+        ],
+    )
+    assert len(bindings) == 6, bindings
+    assert all(
+        row.manager_app == "CC"
+        and row.binding_mode == "DISCOVERED_EXTERNAL"
+        and row.physical_location == physical_location
+        and row.source_doctype == "CC Location"
+        and row.enabled
+        for row in bindings
+    ), bindings
+    warehouse = sorted(warehouses)[0]
+    company = frappe.db.get_value("Warehouse", warehouse, "company")
+    company_group = frappe.db.get_value(
+        "GSF Physical Location", physical_location, "company_group"
+    )
+    attempted_overlap = frappe.get_doc(
+        {
+            "doctype": "GSF Warehouse Binding",
+            "warehouse": warehouse,
+            "company": company,
+            "company_group": company_group,
+            "physical_location": physical_location,
+            "manager_app": "GSF",
+            "warehouse_role": "GSF_OWN_POOL",
+            "binding_mode": "MANAGED",
+            "enabled": 1,
+        }
+    )
+    try:
+        attempted_overlap.validate()
+    except frappe.ValidationError as error:
+        assert "already belongs to stock domain CC" in str(error)
+    else:
+        raise AssertionError("CC warehouse accepted as a GSF own pool")
+
+
+def _assert_domain_inventory(item_code: str, physical_location: str) -> None:
+    company_group = frappe.db.get_value(
+        "GSF Physical Location", physical_location, "company_group"
+    )
+    count = frappe.get_doc(
+        {
+            "doctype": "GSF Physical Stock Count",
+            "status": "DRAFT",
+            "company_group": company_group,
+            "physical_location": physical_location,
+            "item_code": item_code,
+            "count_datetime": now_datetime(),
+            "counted_qty": 4,
+            "adjustment_policy": "MANUAL_APPROVAL",
+        }
+    )
+    count.validate()
+    assert Decimal(str(count.gsf_total)) == Decimal("2")
+    assert Decimal(str(count.cc_total)) == Decimal("2")
+    assert Decimal(str(count.external_total)) == Decimal("0")
+    assert Decimal(str(count.system_total)) == Decimal("4")
+    assert Decimal(str(count.difference)) == Decimal("0")
 
 
 def _assert_returns(returns: list, originals: list) -> None:

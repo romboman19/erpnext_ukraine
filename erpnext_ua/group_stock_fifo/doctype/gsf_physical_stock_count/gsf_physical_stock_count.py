@@ -17,12 +17,6 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import now_datetime
 
-from erpnext_ua.group_stock_fifo.services.domain import (
-    OWN_POOL_ROLE,
-    RETURN_QUARANTINE_ROLE,
-    SALE_STAGE_ROLE,
-)
-
 
 class GSFPhysicalStockCount(Document):
     def validate(self) -> None:
@@ -82,7 +76,6 @@ class GSFPhysicalStockCount(Document):
                   and sle.is_cancelled = 0
             where binding.enabled = 1
               and binding.physical_location = %(location)s
-              and binding.warehouse_role in %(roles)s
             group by binding.warehouse, binding.company, binding.manager_app,
                      binding.warehouse_role
             order by binding.manager_app, binding.company, binding.warehouse
@@ -90,9 +83,6 @@ class GSFPhysicalStockCount(Document):
             {
                 "item": self.item_code,
                 "location": self.physical_location,
-                # Quarantine counts: the stock is physically on the shelf even
-                # though §19.3 keeps it out of the allocation queue.
-                "roles": (OWN_POOL_ROLE, SALE_STAGE_ROLE, RETURN_QUARANTINE_ROLE),
             },
             as_dict=True,
         )

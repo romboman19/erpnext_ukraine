@@ -14,6 +14,8 @@
 | scheduled jobs (Phase 8) | ✅ `expire_due_allocations` кожні 10 хв, `log_critical_findings` щодня |
 | runbooks (Phase 8) | ✅ усі 17 за §45 |
 | Financial Integrity (§31) | ✅ 5 перевірок, severity, гейт на закриття періоду |
+| Serial sale/return | ✅ clean-site acceptance створює серійні приходи, продажі й повернення |
+| GSF + CC coexistence | ✅ змішаний sale/return, domain lineage і read-only CC discovery у clean-site CI |
 | load / deadlock tests | ⬜ потребують стека зі scheduler і навантаження |
 | production acceptance | ⬜ **операція власника** — див. розділ 11 HANDOFF |
 
@@ -88,10 +90,12 @@ rollback знову `ok`.
 - **Load / deadlock / failure-injection тести (§41 Phase 8)** — потрібен стек зі
   scheduler і навантаженням. §37.7 (реальне подвійне бронювання) уже доведено
   двома процесами в Phase 3; решта потребує середовища, якого немає.
-- **Serial allocation** — fail-closed, потрібна фікстура трекінгового товару.
+- **Batch allocation/return** — Serial уже доведений clean-site фікстурою;
+  окремий Batch-сценарій ще потрібен.
 - **§18.4 renderer друку** — `gsf_display_group` на рядках готовий, самого
   renderer немає.
 - **Проводка коригувань інвентаризації** — свідомо, див. вище.
-- **CC compatibility suite (§37.24–37.29)** — жодного інтеграційного тесту
-  GSF+CC разом.
+- **CC compatibility suite (§37.24–37.29)** — основний змішаний продаж,
+  повернення, lineage, заборона overlap і фізична агрегація вже в clean-site CI;
+  навантажувальна частина лишається staging-гейтом.
 - **Production acceptance (§43)** — операція власника на копії реальних даних.

@@ -72,6 +72,7 @@ after_install = [
 	# order of domain provisioning to be fixed and explicit, not incidental.
 	"erpnext_ua.group_stock_fifo.setup.roles.ensure_roles",
 	"erpnext_ua.group_stock_fifo.setup.layer_dimension.ensure_layer_dimension",
+	"erpnext_ua.group_stock_fifo.setup.cc_discovery.discover_cc_warehouses",
 	"erpnext_ua.ua_loyalty.setup.ensure_loyalty_setup",
 	"erpnext_ua.ua_gift_certificates.setup.ensure_gift_certificate_setup",
 	"erpnext_ua.integrations.install.after_install",
@@ -100,6 +101,7 @@ after_migrate = [
 	# ADR-002: the cleanup patch must run in the same after_migrate, right after
 	# ERPNext finishes registering the dimension's custom fields.
 	"erpnext_ua.group_stock_fifo.setup.layer_dimension.ensure_layer_dimension",
+	"erpnext_ua.group_stock_fifo.setup.cc_discovery.discover_cc_warehouses",
 	"erpnext_ua.ua_loyalty.setup.ensure_loyalty_setup",
 	"erpnext_ua.ua_gift_certificates.setup.ensure_gift_certificate_setup",
 	"erpnext_ua.integrations.migrations.after_migrate",
