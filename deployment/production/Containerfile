@@ -14,6 +14,7 @@ LABEL org.opencontainers.image.source="https://github.com/romboman19/erpnext_ukr
 USER root
 
 RUN install -d -o frappe -g frappe \
+        /opt/frappe/app-sources \
         /opt/frappe/app-sources/erpnext_ua \
         /opt/frappe/production
 
