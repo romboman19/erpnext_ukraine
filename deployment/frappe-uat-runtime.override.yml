@@ -1,0 +1,18 @@
+# Test-only dependency layer for the isolated UAT compose project. Combine it
+# with that project's base and local overrides; never use it for production.
+x-ua-runtime-image: &ua_runtime_image
+  ${UA_RUNTIME_IMAGE:-erpnext-huntervua:v16.26.2-erpnext-ua-uat-runtime}
+
+services:
+  configurator:
+    image: *ua_runtime_image
+  backend:
+    image: *ua_runtime_image
+  worker:
+    image: *ua_runtime_image
+  scheduler:
+    image: *ua_runtime_image
+  websocket:
+    image: *ua_runtime_image
+  frontend:
+    image: *ua_runtime_image
