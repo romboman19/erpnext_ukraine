@@ -5,6 +5,7 @@ import frappe
 from erpnext_ua.ua_fiscal import orchestration
 from erpnext_ua.ua_fiscal.authorization import (
     default_register_key,
+    require_document_permission,
     require_receipt_reconciliation,
     require_register_control,
     require_roles,
@@ -50,3 +51,26 @@ def reconcile_receipt(receipt_name: str) -> dict:
     register = frappe.get_doc("PRRO Cash Register", receipt.cash_register)
     require_receipt_reconciliation(receipt, register)
     return orchestration.reconcile_receipt(receipt.name)
+
+
+@frappe.whitelist(methods=["POST"])
+def retry_fiscalization_job(job_name: str) -> dict:
+    require_roles(("System Manager", "Accounts Manager"))
+    job = frappe.get_doc("PRRO Fiscalization Job", job_name)
+    require_document_permission(job, "read")
+    if job.status == "Completed":
+        return job.as_dict()
+    frappe.db.set_value(
+        "PRRO Fiscalization Job",
+        job.name,
+        {
+            "status": "Pending",
+            "attempt_count": 0,
+            "next_attempt_at": None,
+            "error_message": None,
+        },
+        update_modified=False,
+    )
+    from erpnext_ua.ua_fiscal.outbox import process_job
+
+    return process_job(job.name)

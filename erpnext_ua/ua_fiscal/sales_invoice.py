@@ -268,7 +268,12 @@ def _related_receipt(si) -> str | None:
 	)
 
 
-def fiscalize_invoice(sales_invoice: str, client=None) -> str | None:
+def fiscalize_invoice(
+	sales_invoice: str,
+	client=None,
+	*,
+	cash_register: str | None = None,
+) -> str | None:
 	"""Створює й фіскалізує чек ПРРО з POS-рахунку. Ідемпотентно."""
 	existing = frappe.db.get_value(
 		"PRRO Receipt",
@@ -279,12 +284,19 @@ def fiscalize_invoice(sales_invoice: str, client=None) -> str | None:
 		return existing
 
 	si = frappe.get_doc("Sales Invoice", sales_invoice)
-	register = _register_for_invoice(si)
+	register = cash_register or _register_for_invoice(si)
 	if not register:
 		frappe.throw(
 			f"Для рахунку {sales_invoice} не знайдено активної каси ПРРО "
 			f"(POS Profile: {si.get('pos_profile') or '—'}, "
 			f"ecommerce channel: {si.get('ua_ecommerce_channel') or '—'})",
+			FiscalServerError,
+		)
+	register_company = frappe.db.get_value("PRRO Cash Register", register, "company")
+	if si.get("company") and register_company != si.company:
+		frappe.throw(
+			f"Каса ПРРО {register} належить компанії {register_company}, "
+			f"але рахунок {sales_invoice} — компанії {si.company}",
 			FiscalServerError,
 		)
 	kep_key = _kep_key_for_invoice(si, register)
@@ -325,10 +337,10 @@ def fiscalize_invoice(sales_invoice: str, client=None) -> str | None:
 
 
 def on_submit(doc, method=None):
-	"""Хук проведення Sales Invoice: авто-фіскалізація POS-рахунків.
+	"""Persist a fiscalization intent in the same transaction as POS submit.
 
-	Спрацьовує лише для is_pos при увімкненій фіскалізації та наявній касі.
-	Помилка не блокує проведення — чек лишається в статусі Error для повтору.
+	The network call runs only after commit, so a preflight or signer failure can
+	never leave a submitted invoice without a recoverable outbox record.
 	"""
 	if not doc.get("is_pos"):
 		return
@@ -341,7 +353,8 @@ def on_submit(doc, method=None):
 		return
 	if not _register_for_invoice(doc):
 		return
-	try:
-		fiscalize_invoice(doc.name)
-	except Exception:
-		frappe.log_error(frappe.get_traceback(), f"PRRO auto-fiscalize {doc.name}")
+	from erpnext_ua.ua_fiscal.outbox import enqueue_job, ensure_sales_invoice_job
+
+	job = ensure_sales_invoice_job(doc)
+	if job:
+		enqueue_job(job.name)

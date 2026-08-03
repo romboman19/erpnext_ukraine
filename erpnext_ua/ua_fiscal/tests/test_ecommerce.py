@@ -12,7 +12,7 @@ from erpnext_ua.tests.integrations.frappe_fixtures import (
     ensure_leaf_master,
     ensure_selling_price_list,
 )
-from erpnext_ua.ua_fiscal import ecommerce
+from erpnext_ua.ua_fiscal import ecommerce, outbox
 from erpnext_ua.ua_fiscal.sales_invoice import _invoice_payments
 
 
@@ -41,14 +41,14 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         payment = self._payment_entry(invoice, self.payment_mode)
         observed = {}
 
-        def fiscalize_without_external_prro(sales_invoice):
+        def fiscalize_without_external_prro(sales_invoice, **_kwargs):
             current_invoice = frappe.get_doc("Sales Invoice", sales_invoice)
             observed["outstanding_amount"] = current_invoice.outstanding_amount
             observed["payments"] = _invoice_payments(current_invoice)
             return self._mock_fiscal_receipt(current_invoice)
 
         with patch.object(
-            ecommerce,
+            outbox,
             "fiscalize_invoice",
             side_effect=fiscalize_without_external_prro,
         ) as fiscalize:
@@ -73,7 +73,10 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         self.assertEqual(invoice.outstanding_amount, 0)
         self.assertEqual(invoice.ua_ecommerce_fiscal_status, "Fiscalized")
         self.assertEqual(invoice.ua_ecommerce_fiscal_error, "")
-        fiscalize.assert_called_once_with(invoice.name)
+        self.assertEqual(fiscalize.call_args.args[0], invoice.name)
+        job = frappe.get_doc("PRRO Fiscalization Job", {"sales_invoice": invoice.name})
+        self.assertEqual(job.status, "Completed")
+        self.assertTrue(job.receipt)
 
         self._assert_missing_payment_mode_fails_closed()
 
@@ -81,12 +84,12 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         invoice = self._ecommerce_invoice()
         payment = self._payment_entry(invoice, "")
 
-        def validate_payments_without_external_prro(sales_invoice):
+        def validate_payments_without_external_prro(sales_invoice, **_kwargs):
             _invoice_payments(frappe.get_doc("Sales Invoice", sales_invoice))
             self.fail("Payment without Mode of Payment reached PRRO")
 
         with patch.object(
-            ecommerce,
+            outbox,
             "fiscalize_invoice",
             side_effect=validate_payments_without_external_prro,
         ):
@@ -99,6 +102,9 @@ class TestEcommerceFiscalization(IntegrationTestCase):
         self.assertFalse(
             frappe.db.exists("PRRO Receipt", {"sales_invoice": invoice.name})
         )
+        job = frappe.get_doc("PRRO Fiscalization Job", {"sales_invoice": invoice.name})
+        self.assertEqual(job.status, "Pending")
+        self.assertGreater(job.attempt_count, 0)
 
     def _company(self):
         if not frappe.db.exists("Warehouse Type", "Transit"):

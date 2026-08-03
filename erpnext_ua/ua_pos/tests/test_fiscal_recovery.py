@@ -37,11 +37,20 @@ class TestFiscalRecovery(unittest.TestCase):
 			{"name": "RECEIPT-3", "status": "Fiscalized"},
 		)
 
-	@patch("erpnext_ua.ua_pos.api._fiscalize", side_effect=["RECEIPT-A", "RECEIPT-B"])
-	@patch("erpnext_ua.ua_pos.api.frappe.get_doc")
-	def test_each_fiscal_legal_route_gets_its_own_receipt(self, get_doc, fiscalize):
-		get_doc.side_effect = lambda _doctype, name: types.SimpleNamespace(name=name)
-		order = types.SimpleNamespace(fiscal_mode="Fiscal")
+	@patch(
+		"erpnext_ua.ua_fiscal.outbox.process_job",
+		side_effect=[
+			{"receipt": "RECEIPT-A"},
+			{"receipt": "RECEIPT-B"},
+		],
+	)
+	@patch("erpnext_ua.ua_pos.api._ensure_fiscal_jobs")
+	def test_each_fiscal_legal_route_gets_its_own_receipt(self, ensure_jobs, process_job):
+		ensure_jobs.return_value = {
+			"SINV-A": types.SimpleNamespace(name="JOB-A"),
+			"SINV-B": types.SimpleNamespace(name="JOB-B"),
+		}
+		order = types.SimpleNamespace(name="POS-1", fiscal_mode="Fiscal")
 		routes = [
 			_route("FISCAL", "DESK-A", "SINV-A"),
 			_route("NON_FISCAL", "DESK-N", "SINV-N"),
@@ -52,8 +61,11 @@ class TestFiscalRecovery(unittest.TestCase):
 
 		self.assertEqual(receipts, ["RECEIPT-A", "RECEIPT-B"])
 		self.assertEqual(
-			[(call.args[1].name, call.args[2].name) for call in fiscalize.call_args_list],
-			[("DESK-A", "SINV-A"), ("DESK-B", "SINV-B")],
+			[(call.args, call.kwargs) for call in process_job.call_args_list],
+			[
+				(("JOB-A",), {"raise_on_error": True}),
+				(("JOB-B",), {"raise_on_error": True}),
+			],
 		)
 
 	@patch("erpnext_ua.ua_pos.api.frappe.db.get_value")

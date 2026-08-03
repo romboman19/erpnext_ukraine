@@ -19,7 +19,8 @@
   {"hidden": 0, "is_query_report": 0, "label": "Cash Registers", "link_count": 0, "link_to": "PRRO Cash Register", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Fiscal Documents", "link_count": 0, "onboard": 0, "type": "Card Break"},
   {"hidden": 0, "is_query_report": 0, "label": "PRRO Shifts", "link_count": 0, "link_to": "PRRO Shift", "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "PRRO Receipts", "link_count": 0, "link_to": "PRRO Receipt", "link_type": "DocType", "onboard": 0, "type": "Link"}
+  {"hidden": 0, "is_query_report": 0, "label": "PRRO Receipts", "link_count": 0, "link_to": "PRRO Receipt", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Fiscalization Outbox", "link_count": 0, "link_to": "PRRO Fiscalization Job", "link_type": "DocType", "onboard": 0, "type": "Link"}
  ],
  "modified": "2026-07-15 13:30:00.000000",
  "modified_by": "Administrator",

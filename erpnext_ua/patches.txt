@@ -11,3 +11,4 @@ erpnext_ua.patches.v0_6.register_ecommerce_module_and_sync_mapping
 [post_model_sync]
 erpnext_ua.patches.v0_5.backfill_ecommerce_item_mapping
 erpnext_ua.patches.v0_6.create_ocstore_defaults_and_migrate_channels
+erpnext_ua.patches.v0_12.backfill_prro_fiscalization_jobs
