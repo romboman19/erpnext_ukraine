@@ -15,6 +15,7 @@ from happening, and all three have to hold at once:
 
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from contextlib import contextmanager
 from decimal import Decimal
@@ -34,6 +35,7 @@ from .reservation import (
     LIVE_ALLOCATION_STATUSES,
     ReservationRequest,
     allocation_identity,
+    allocation_retry_delay,
     needs_compensation,
     reservation_fingerprint,
     scope_lock_identity,
@@ -114,6 +116,7 @@ def reserve(request: ReservationRequest) -> Any:
                 raise GSFError(
                     "Concurrent identical allocation did not settle", "ALLOCATION_CONFLICT"
                 ) from None
+            _wait_before_retry(request, attempt)
         except frappe.QueryDeadlockError:
             # A deadlock rolls back the whole transaction, not just a savepoint.
             frappe.db.rollback()
@@ -121,11 +124,17 @@ def reserve(request: ReservationRequest) -> Any:
                 raise GSFError(
                     "Concurrent allocation deadlock did not settle", "ALLOCATION_CONFLICT"
                 ) from None
+            _wait_before_retry(request, attempt)
         except GSFError as error:
             frappe.db.rollback(save_point=savepoint)
             if error.code != "ALLOCATION_CONFLICT" or attempt == retry_limit:
                 raise
+            _wait_before_retry(request, attempt)
     raise GSFError("Reservation retry limit was exhausted", "ALLOCATION_CONFLICT")
+
+
+def _wait_before_retry(request: ReservationRequest, attempt: int) -> None:
+    time.sleep(allocation_retry_delay(request.idempotency_key, attempt))
 
 
 def lock_scope(request: ReservationRequest) -> str:

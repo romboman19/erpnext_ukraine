@@ -21,6 +21,7 @@ from erpnext_ua.group_stock_fifo.services.reservation import (
     GSF_SOURCE_METHOD,
     ReservationRequest,
     allocation_identity,
+    allocation_retry_delay,
     needs_compensation,
     reservation_fingerprint,
     scope_lock_identity,
@@ -136,6 +137,18 @@ class FingerprintTests(TestCase):
             with self.subTest(coordinate=name):
                 self.assertNotEqual(base, fingerprint)
         self.assertEqual(len(set(fingerprints.values())), len(fingerprints))
+
+
+class RetryDelayTests(TestCase):
+    def test_delay_is_deterministic_and_key_specific(self) -> None:
+        first = allocation_retry_delay("checkout-1:row-1", 1)
+        self.assertEqual(first, allocation_retry_delay("checkout-1:row-1", 1))
+        self.assertNotEqual(first, allocation_retry_delay("checkout-2:row-1", 1))
+
+    def test_delay_is_positive_and_bounded(self) -> None:
+        delays = [allocation_retry_delay("checkout-1:row-1", attempt) for attempt in range(1, 20)]
+        self.assertTrue(all(0 < delay <= 0.5 for delay in delays))
+        self.assertGreater(delays[3], delays[0])
 
 
 class IdentityTests(TestCase):

@@ -69,6 +69,8 @@ STAGED_STATUSES = frozenset({ALLOCATION_PREPARING, ALLOCATION_PREPARED})
 
 ALLOCATION_ID_PREFIX = "GSFA-"
 SCOPE_LOCK_ID_PREFIX = "GSFSL-"
+RETRY_BASE_SECONDS = 0.02
+RETRY_MAX_SECONDS = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +144,15 @@ def reservation_fingerprint(request: ReservationRequest) -> str:
     }
     canonical = json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def allocation_retry_delay(idempotency_key: str, attempt: int) -> float:
+    """Bounded deterministic jitter prevents deadlock victims retrying in lockstep."""
+    bounded_attempt = max(int(attempt), 1)
+    retry_window = min(RETRY_BASE_SECONDS * (2 ** (bounded_attempt - 1)), RETRY_MAX_SECONDS)
+    digest = hashlib.sha256(f"{idempotency_key}:{bounded_attempt}".encode()).digest()
+    jitter = int.from_bytes(digest[:2], "big") / 65_535
+    return min(retry_window * (0.75 + 0.5 * jitter), RETRY_MAX_SECONDS)
 
 
 def allocation_identity(*, idempotency_key: str, fingerprint: str) -> str:
