@@ -1,0 +1,68 @@
+# syntax=docker/dockerfile:1.7
+
+ARG ERPNEXT_IMAGE
+FROM ${ERPNEXT_IMAGE}
+
+ARG ERPNEXT_UA_COMMIT
+ARG PRINT_DESIGNER_COMMIT
+ARG PRINT_DESIGNER_URL=https://github.com/frappe/print_designer.git
+ARG CHROMIUM_URL
+ARG CHROMIUM_SHA256
+ARG CHROMIUM_RUNTIME_PACKAGE
+
+LABEL org.opencontainers.image.source="https://github.com/romboman19/erpnext_ukraine" \
+      org.opencontainers.image.revision="${ERPNEXT_UA_COMMIT}" \
+      ua.erpnext.print-designer-revision="${PRINT_DESIGNER_COMMIT}" \
+      ua.erpnext.chromium-sha256="${CHROMIUM_SHA256}"
+
+USER root
+
+RUN set -eu; \
+    test -n "${CHROMIUM_RUNTIME_PACKAGE}"; \
+    mkdir -p /var/lib/apt/lists/partial; \
+    apt-get update; \
+    apt-get install --no-install-recommends --yes "${CHROMIUM_RUNTIME_PACKAGE}"; \
+    rm -rf /var/lib/apt/lists/*; \
+    install -d -o frappe -g frappe \
+        /opt/frappe/app-sources \
+        /opt/frappe/app-sources/erpnext_ua \
+        /opt/frappe/production
+
+COPY --chown=frappe:frappe pyproject.toml README.md LICENSE /opt/frappe/app-sources/erpnext_ua/
+COPY --chown=frappe:frappe erpnext_ua /opt/frappe/app-sources/erpnext_ua/erpnext_ua
+COPY --chown=frappe:frappe deployment/production/image-contract.json /opt/frappe/production/image-contract.json
+COPY --chown=frappe:frappe deployment/production/source-lock.json /opt/frappe/production/source-lock.json
+COPY --chmod=755 tools/validate_production_image.py /usr/local/bin/validate-production-image
+COPY --chmod=755 tools/install_locked_chromium.py /usr/local/bin/install-locked-chromium
+
+USER frappe
+WORKDIR /home/frappe/frappe-bench
+
+RUN set -eu; \
+    test -n "${ERPNEXT_UA_COMMIT}"; \
+    test -n "${PRINT_DESIGNER_COMMIT}"; \
+    git clone --filter=blob:none "${PRINT_DESIGNER_URL}" /opt/frappe/app-sources/print_designer; \
+    git -C /opt/frappe/app-sources/print_designer checkout --detach "${PRINT_DESIGNER_COMMIT}"; \
+    test "$(git -C /opt/frappe/app-sources/print_designer rev-parse HEAD)" = "${PRINT_DESIGNER_COMMIT}"; \
+    bench get-app --skip-assets /opt/frappe/app-sources/print_designer; \
+    install-locked-chromium \
+        --bench-root /home/frappe/frappe-bench \
+        --url "${CHROMIUM_URL}" \
+        --sha256 "${CHROMIUM_SHA256}"; \
+    mv /opt/frappe/app-sources/erpnext_ua apps/erpnext_ua; \
+    uv pip install --quiet --python env/bin/python -e apps/erpnext_ua; \
+    printf '\nerpnext_ua\n' >> sites/apps.txt; \
+    sed -i '/^[[:space:]]*$/d' sites/apps.txt; \
+    sort -u -o sites/apps.txt sites/apps.txt; \
+    rm -rf sites/assets; \
+    ln -s /home/frappe/frappe-bench/assets sites/assets; \
+    bench build --app print_designer; \
+    bench build --app erpnext_ua; \
+    validate-production-image \
+        --bench-root /home/frappe/frappe-bench \
+        --contract /opt/frappe/production/image-contract.json \
+        --commit "${ERPNEXT_UA_COMMIT}"; \
+    find apps -mindepth 1 -path '*/.git' -prune -exec rm -rf '{}' +; \
+    find /opt/frappe/app-sources -mindepth 1 -maxdepth 1 -exec rm -rf '{}' +
+
+ENV ERPNEXT_UA_IMAGE_COMMIT=${ERPNEXT_UA_COMMIT}

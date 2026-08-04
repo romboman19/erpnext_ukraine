@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "application_versions": {
+    "erpnext": "16.26.2",
+    "erpnext_ua": "0.16.0",
+    "frappe": "16.26.3",
+    "print_designer": "1.6.5"
+  },
+  "image_apps": [
+    "erpnext",
+    "erpnext_ua",
+    "frappe",
+    "print_designer"
+  ],
+  "site_apps": [
+    "erpnext",
+    "erpnext_ua",
+    "frappe",
+    "print_designer"
+  ],
+  "retired_apps": [
+    "erpnext_consignment_and_commission",
+    "ukrainian_integrations"
+  ],
+  "excluded_apps": {
+    "flow": "Flow develop requires LiteLLM 1.83.7, which pins click==8.1.8, while Frappe 16.26.3 requires Click~=8.3.1. Reintroduce Flow only after its dependency graph passes pip check."
+  },
+  "build_metadata": {
+    "commit_environment_variable": "ERPNEXT_UA_IMAGE_COMMIT",
+    "commit_pattern": "^[0-9a-f]{40}$"
+  },
+  "runtime_artifacts": {
+    "print_designer_chromium": {
+      "version": "133.0.6943.35",
+      "executable": "chromium/chrome-linux/headless_shell",
+      "runtime_packages": {
+        "libatk-bridge2.0-0": "2.46.0-5"
+      }
+    }
+  }
+}

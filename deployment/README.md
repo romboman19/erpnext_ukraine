@@ -1,5 +1,9 @@
 # Production deployment runbook
 
+Незмінний clean-image contract, build і single-app cutover описані окремо в
+[`deployment/production/README.md`](production/README.md). Перед будь-яким
+rollout цей image gate є обов'язковим.
+
 Цей runbook розгортає модуль `Consignment and Commission` без автоматичної
 активації операцій. До `erpnext_ua` 0.9.0 модуль постачався окремим застосунком
 `erpnext_consignment_and_commission` release `1.1.0`; тепер він входить до

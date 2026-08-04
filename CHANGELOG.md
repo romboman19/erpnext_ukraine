@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- додано immutable production image contract: exact ERPNext base digest,
+  зовнішні app commits, OCI source revision, bench virtualenv `pip check` і
+  runtime/site validator;
+- clean image містить один `erpnext_ua` із Global FIFO, Multi-FOP, Commission та
+  інтеграціями; окремі legacy apps виключені без видалення бізнес-даних;
+- Flow відокремлено від production profile, доки його актуальний
+  Flow → LiteLLM → Click graph несумісний із Frappe 16.26.3;
+- CI збирає production image з тих самих locked inputs, які використовує
+  deployment runbook;
+- Chromium для Print Designer зафіксовано версією та SHA-256, вбудовано в
+  image і додано до runtime validator, щоб workers не залежали від завантаження
+  browser після запуску.
+
 ## 0.11.0 — 2026-07-31
 
 - додано модуль `UA Loyalty` зі scoped shared accounts, окремими signed bonus і
