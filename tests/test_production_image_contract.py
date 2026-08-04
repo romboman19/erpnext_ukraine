@@ -49,7 +49,7 @@ class ProductionImageContractTest(unittest.TestCase):
         self.assertEqual(apps, {"frappe", "erpnext_ua"})
 
     def test_source_contract_matches_project_and_lock(self):
-        root = Path(__file__).resolve().parents[2]
+        root = Path(__file__).resolve().parents[1]
         contract = json.loads((root / "deployment/production/image-contract.json").read_text())
         lock = json.loads((root / "deployment/production/source-lock.json").read_text())
 

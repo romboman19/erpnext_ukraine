@@ -48,6 +48,7 @@ jobs:
 
       - name: Run framework-independent tests
         run: |
+          python -m unittest discover -s tests -p "test*.py"
           python -m unittest discover -s erpnext_ua/tests -p "test*.py"
           pytest -q erpnext_ua/consignment_and_commission/tests erpnext_ua/group_stock_fifo/tests
 
