@@ -10,9 +10,9 @@ Global FIFO gates**. Це не дозвіл на production go-live: §43 accept
 | Параметр | Значення |
 | --- | --- |
 | PR | `#25`, `agent/p0-production-image-contract` |
-| фінальний image source | `83b29392e3c368c1a6f6992843266f3b90ff8581` |
-| локальний image | `erpnext-ua:uat-83b2939` |
-| image ID | `sha256:20ba24fc458a8307c80c40c466beee6b77061b7fe7b648cea7934d4936f59f6f` |
+| фінальний image source | `4eb8760838e623079e0f232c88b4b923bff01aa8` |
+| локальний image | `erpnext-ua:uat-4eb8760` |
+| image ID | `sha256:8a56705fde34547f5f6e63e5f49338f1c64347aeebeacea0f5e2a8eb4dc17053` |
 | Frappe / ERPNext | 16.26.3 / 16.26.2 |
 | ERPNext Ukraine | 0.16.0 |
 | Print Designer | 1.6.5, commit `e4faa7e48118b4bdfea8a522368e4ea62e6cc210` |
@@ -56,23 +56,27 @@ Legacy apps прибрані тільки з app registry; `uninstall-app` не
 
 Повний staging harness виконував scheduled expiry через реальний worker,
 rollback після `SIGKILL`, гонку двох DB-сесій за останні 10 одиниць і
-паралельні reserve/release. Бізнес-код `erpnext_ua` між load revision
-`8cb66a88b02a74f4f9d3384051ec7a3e10f95c07` та фінальним image не змінювався;
-на фінальному revision окремо повторено інтегрований smoke після міграцій.
+паралельні reserve/release. Після повних load-прогонів CI виявив синхронні
+повтори deadlock victims у `reserve()`. На revision `4eb8760` додано bounded
+deterministic jitter без зміни FIFO-порядку або acceptance gates, після чого
+інтегрований smoke повністю повторено на image з цим runtime-кодом.
 
 | Прогін | Результат | p95 | max | Throughput | Deadlocks | Залишки |
 | --- | --- | ---: | ---: | ---: | ---: | --- |
 | clean image smoke 4 × 50 | 200/200 PASS | 0.649350 с | 0.905918 с | 16.318 ops/s | 0 | 0 live, 0 reserved, 0 repost |
 | clean image release 8 × 100 | 800/800 PASS | 0.668038 с | 15.326335 с | 14.519 ops/s | 0 | 0 live, 0 reserved, 0 repost |
-| final revision integrated smoke 4 × 20 | 80/80 PASS | 0.809784 с | 1.406841 с | 10.673 ops/s | 0 | 0 live, 0 reserved, 0 repost |
+| final revision integrated smoke 4 × 20 | 80/80 PASS | 0.704081 с | 0.843549 с | 10.716 ops/s | 0 | 0 live, 0 reserved, 0 repost |
 
 В обох зарахованих прогонах scheduled expiry, crash recovery, last-stock
 winner/loser, p95 gate, worker і scheduler heartbeat пройшли. Перший
 4 × 50 запуск мав 200/200 і p95 0.391032 с, але був чесно відхилений через
 відсутній heartbeat одразу після recreate; run-id очищено, після реального
-scheduler tick повторний прогін пройшов. Фінальний smoke на `83b2939` так само
-підтвердив scheduled expiry, crash rollback, рівно одного переможця гонки за
-останні 10 одиниць і свіжий heartbeat.
+scheduler tick повторний прогін пройшов. Перший smoke на `4eb8760` мав 80/80,
+p95 0.863310 с, 0 deadlocks і 0 leaks, але теж був відхилений: він стартував
+до першого heartbeat після recreate. Після реального scheduler job повторний
+run `final-4eb8760-r2` пройшов усі gates і підтвердив scheduled expiry, crash
+rollback, рівно одного переможця гонки за останні 10 одиниць та свіжий
+heartbeat.
 
 ## Дефекти, знайдені цим етапом
 
@@ -89,7 +93,12 @@ scheduler tick повторний прогін пройшов. Фінальни�
 4. Teardown fixture поставив 1203 стандартні `delete_dynamic_links` jobs.
    Scheduler залишався вимкненим, штатний worker спорожнив default queue до
    нуля; додаткові workers не запускалися. Фінальний smoke створив ще 107
-   таких cleanup jobs, і вони також дреновані до нуля тим самим worker.
+   таких cleanup jobs, а smoke на `4eb8760` — 184; усі вони дреновані до нуля
+   тим самим worker.
+5. Clean-site CI зафіксував три вичерпані `ALLOCATION_CONFLICT` при 15 InnoDB
+   deadlocks: потерпілі транзакції повторювалися синхронно без паузи. Retry-path
+   отримав bounded exponential window із deterministic key-specific jitter;
+   повторний clean-site і фінальний UAT завершилися без помилок і deadlocks.
 
 ## Безпечний фінальний стан і межі висновку
 
