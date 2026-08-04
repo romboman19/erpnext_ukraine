@@ -105,6 +105,23 @@ def collect_source_errors(source_root: Path, contract: Mapping[str, Any], lock: 
         if not re.fullmatch(r"[0-9a-f]{40}", str(commit)):
             errors.append(f"{name} must be locked to a 40-character commit")
 
+    artifacts = _artifact_map(contract, errors)
+    locked_artifacts = lock.get("runtime_artifacts", {})
+    if not isinstance(locked_artifacts, dict):
+        errors.append("source lock runtime_artifacts must be an object")
+        locked_artifacts = {}
+    for name, artifact in artifacts.items():
+        locked_artifact = locked_artifacts.get(name)
+        if not isinstance(locked_artifact, dict):
+            errors.append(f"{name} is missing from source lock runtime_artifacts")
+            continue
+        if locked_artifact.get("version") != artifact.get("version"):
+            errors.append(f"{name} version does not match the source lock")
+        if not str(locked_artifact.get("url", "")).startswith("https://"):
+            errors.append(f"{name} source lock URL must use HTTPS")
+        if not re.fullmatch(r"[0-9a-f]{64}", str(locked_artifact.get("sha256", ""))):
+            errors.append(f"{name} source lock must contain a SHA-256 digest")
+
     return errors
 
 
@@ -126,6 +143,12 @@ def collect_bench_errors(
     apps_txt = bench_root / "sites" / "apps.txt"
     listed_apps = {line.strip() for line in apps_txt.read_text().splitlines() if line.strip()}
     _compare_app_sets("sites/apps.txt", expected_apps, listed_apps, errors)
+
+    for name, artifact in _artifact_map(contract, errors).items():
+        executable = artifact.get("executable")
+        executable_path = bench_root / str(executable)
+        if not executable_path.is_file() or not os.access(executable_path, os.X_OK):
+            errors.append(f"{name} executable is missing or not executable: {executable}")
 
     versions_result = runner(("bench", "version", "--format", "plain"), bench_root)
     if versions_result.returncode:
@@ -172,6 +195,34 @@ def _string_set(contract: Mapping[str, Any], key: str, errors: list[str]) -> set
     if len(value) != len(set(value)):
         errors.append(f"{key} contains duplicate application names")
     return set(value)
+
+
+def _artifact_map(contract: Mapping[str, Any], errors: list[str]) -> dict[str, Mapping[str, Any]]:
+    artifacts = contract.get("runtime_artifacts")
+    if not isinstance(artifacts, dict) or not artifacts:
+        errors.append("runtime_artifacts must be a non-empty object")
+        return {}
+
+    valid_artifacts: dict[str, Mapping[str, Any]] = {}
+    for name, artifact in artifacts.items():
+        if not isinstance(name, str) or not name or not isinstance(artifact, dict):
+            errors.append("runtime_artifacts entries must be named objects")
+            continue
+        version = artifact.get("version")
+        executable = artifact.get("executable")
+        executable_path = Path(str(executable))
+        if not isinstance(version, str) or not version:
+            errors.append(f"{name} runtime version is missing")
+        if (
+            not isinstance(executable, str)
+            or not executable
+            or executable_path.is_absolute()
+            or ".." in executable_path.parts
+        ):
+            errors.append(f"{name} executable must be a safe bench-relative path")
+            continue
+        valid_artifacts[name] = artifact
+    return valid_artifacts
 
 
 def _compare_app_sets(label: str, expected: set[str], actual: set[str], errors: list[str]) -> None:

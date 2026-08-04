@@ -28,5 +28,11 @@
   "build_metadata": {
     "commit_environment_variable": "ERPNEXT_UA_IMAGE_COMMIT",
     "commit_pattern": "^[0-9a-f]{40}$"
+  },
+  "runtime_artifacts": {
+    "print_designer_chromium": {
+      "version": "133.0.6943.35",
+      "executable": "chromium/chrome-linux/headless_shell"
+    }
   }
 }

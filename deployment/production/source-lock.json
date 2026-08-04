@@ -17,5 +17,12 @@
       "ref": "build-context",
       "version": "0.16.0"
     }
+  },
+  "runtime_artifacts": {
+    "print_designer_chromium": {
+      "version": "133.0.6943.35",
+      "url": "https://storage.googleapis.com/chrome-for-testing-public/133.0.6943.35/linux64/chrome-headless-shell-linux64.zip",
+      "sha256": "4e5fa57a0338b28e35e16693a15c985c377eae58e54321f5642ff5adc5d9ae87"
+    }
   }
 }

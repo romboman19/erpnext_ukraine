@@ -1,0 +1,12 @@
+# Removes the checkout bind mount from the isolated UAT services so acceptance
+# exercises only the application source baked into UA_RUNTIME_IMAGE.
+services:
+  backend:
+    volumes: !override
+      - sites:/home/frappe/frappe-bench/sites
+  worker:
+    volumes: !override
+      - sites:/home/frappe/frappe-bench/sites
+  scheduler:
+    volumes: !override
+      - sites:/home/frappe/frappe-bench/sites

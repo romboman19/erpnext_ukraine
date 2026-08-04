@@ -33,3 +33,4 @@ jobs:
         run: |
           test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "erpnext-ua:ci-${GITHUB_SHA}")" = "${GITHUB_SHA}"
           test -n "$(docker image inspect --format '{{index .Config.Labels "ua.erpnext.print-designer-revision"}}' "erpnext-ua:ci-${GITHUB_SHA}")"
+          test "$(docker image inspect --format '{{index .Config.Labels "ua.erpnext.chromium-sha256"}}' "erpnext-ua:ci-${GITHUB_SHA}")" = "$(jq -r '.runtime_artifacts.print_designer_chromium.sha256' deployment/production/source-lock.json)"

@@ -17,9 +17,11 @@
 ## Незмінні входи
 
 [`source-lock.json`](source-lock.json) фіксує digest базового ERPNext image та
-commit зовнішнього `print_designer`. Код `erpnext_ua` завжди копіюється з
-чистого git checkout, а його commit записується в OCI label і
-`ERPNEXT_UA_IMAGE_COMMIT`.
+commit зовнішнього `print_designer`. Там само зафіксовано URL, версію і SHA-256
+Chromium headless shell, потрібного Print Designer: browser завантажується під
+час build і має бути executable у кожному backend/worker image, а не
+довантажуватися після запуску. Код `erpnext_ua` завжди копіюється з чистого git
+checkout, а його commit записується в OCI label і `ERPNEXT_UA_IMAGE_COMMIT`.
 
 Зміна будь-якої версії або digest вимагає одночасно оновити
 [`image-contract.json`](image-contract.json), source lock, пройти CI і повторити
@@ -35,10 +37,15 @@ tools/build_production_image.sh registry.example/erpnext-ua:0.16.0-<commit>
 ```
 
 Скрипт перевіряє source contract, збирає image, запускає `pip check` саме в
-bench virtualenv та повторно запускає runtime validator. CI виконує ту саму
-команду. Офіційний Frappe Docker також радить передавати custom app manifest як
-BuildKit secret; цей repo не передає credentials узагалі, бо всі build inputs
-публічні й зафіксовані commit/digest.
+bench virtualenv, наявність зафіксованого Chromium та повторно запускає runtime
+validator. CI виконує ту саму команду. Офіційний Frappe Docker також радить
+передавати custom app manifest як BuildKit secret; цей repo не передає
+credentials узагалі, бо всі build inputs публічні й зафіксовані commit/digest.
+
+Для UAT цей image підставляється через `frappe-uat-runtime.override.yml`, а
+[`frappe-uat-clean-image.override.yml`](../frappe-uat-clean-image.override.yml)
+прибирає checkout bind mount із backend/worker/scheduler. Без другого override
+тест перевіряв би host source, а не код, запечений в image.
 
 ## Cutover на копії production site
 
@@ -69,6 +76,7 @@ read-only підтвердження, що немає Agent, Trigger, Run, Sessi
 - `bench --site <site> list-apps --format json` містить рівно чотири apps;
 - `bench --site <site> doctor` бачить scheduler і workers;
 - `env/bin/python -m pip check` не має помилок;
+- `chromium/chrome-linux/headless_shell` є executable без runtime-download;
 - повторний `migrate` є no-op;
 - `erpnext_ua.install.assert_modules_registered` проходить;
 - GSF/CC diagnostics, FIFO last-stock race, POS sale/return і fiscal outbox

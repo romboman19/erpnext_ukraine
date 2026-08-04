@@ -6,10 +6,13 @@ FROM ${ERPNEXT_IMAGE}
 ARG ERPNEXT_UA_COMMIT
 ARG PRINT_DESIGNER_COMMIT
 ARG PRINT_DESIGNER_URL=https://github.com/frappe/print_designer.git
+ARG CHROMIUM_URL
+ARG CHROMIUM_SHA256
 
 LABEL org.opencontainers.image.source="https://github.com/romboman19/erpnext_ukraine" \
       org.opencontainers.image.revision="${ERPNEXT_UA_COMMIT}" \
-      ua.erpnext.print-designer-revision="${PRINT_DESIGNER_COMMIT}"
+      ua.erpnext.print-designer-revision="${PRINT_DESIGNER_COMMIT}" \
+      ua.erpnext.chromium-sha256="${CHROMIUM_SHA256}"
 
 USER root
 
@@ -23,6 +26,7 @@ COPY --chown=frappe:frappe erpnext_ua /opt/frappe/app-sources/erpnext_ua/erpnext
 COPY --chown=frappe:frappe deployment/production/image-contract.json /opt/frappe/production/image-contract.json
 COPY --chown=frappe:frappe deployment/production/source-lock.json /opt/frappe/production/source-lock.json
 COPY --chmod=755 tools/validate_production_image.py /usr/local/bin/validate-production-image
+COPY --chmod=755 tools/install_locked_chromium.py /usr/local/bin/install-locked-chromium
 
 USER frappe
 WORKDIR /home/frappe/frappe-bench
@@ -34,6 +38,10 @@ RUN set -eu; \
     git -C /opt/frappe/app-sources/print_designer checkout --detach "${PRINT_DESIGNER_COMMIT}"; \
     test "$(git -C /opt/frappe/app-sources/print_designer rev-parse HEAD)" = "${PRINT_DESIGNER_COMMIT}"; \
     bench get-app --skip-assets /opt/frappe/app-sources/print_designer; \
+    install-locked-chromium \
+        --bench-root /home/frappe/frappe-bench \
+        --url "${CHROMIUM_URL}" \
+        --sha256 "${CHROMIUM_SHA256}"; \
     mv /opt/frappe/app-sources/erpnext_ua apps/erpnext_ua; \
     uv pip install --quiet --python env/bin/python -e apps/erpnext_ua; \
     printf '\nerpnext_ua\n' >> sites/apps.txt; \
