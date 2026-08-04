@@ -32,7 +32,10 @@
   "runtime_artifacts": {
     "print_designer_chromium": {
       "version": "133.0.6943.35",
-      "executable": "chromium/chrome-linux/headless_shell"
+      "executable": "chromium/chrome-linux/headless_shell",
+      "runtime_packages": {
+        "libatk-bridge2.0-0": "2.46.0-5"
+      }
     }
   }
 }

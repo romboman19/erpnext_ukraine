@@ -34,6 +34,7 @@ CONTRACT = {
         "print_designer_chromium": {
             "version": "133.0.6943.35",
             "executable": "chromium/chrome-linux/headless_shell",
+            "runtime_packages": {"libatk-bridge2.0-0": "2.46.0-5"},
         }
     },
 }
@@ -67,6 +68,8 @@ class ProductionImageContractTest(unittest.TestCase):
 
             def runner(command, cwd):
                 del cwd
+                if command[-1:] == ("--version",):
+                    return CommandResult(0, "HeadlessChrome/133.0.6943.35\n", "")
                 if command[-3:] == ("version", "--format", "plain"):
                     output = "\n".join(
                         f"{app} {version} ()" for app, version in CONTRACT["application_versions"].items()
@@ -97,6 +100,8 @@ class ProductionImageContractTest(unittest.TestCase):
 
             def runner(command, cwd):
                 del cwd
+                if command[-1:] == ("--version",):
+                    return CommandResult(0, "HeadlessChrome/133.0.6943.35\n", "")
                 if command[-3:] == ("version", "--format", "plain"):
                     output = "\n".join(
                         f"{app} {version} ()" for app, version in CONTRACT["application_versions"].items()

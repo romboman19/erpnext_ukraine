@@ -8,6 +8,7 @@ ARG PRINT_DESIGNER_COMMIT
 ARG PRINT_DESIGNER_URL=https://github.com/frappe/print_designer.git
 ARG CHROMIUM_URL
 ARG CHROMIUM_SHA256
+ARG CHROMIUM_RUNTIME_PACKAGE
 
 LABEL org.opencontainers.image.source="https://github.com/romboman19/erpnext_ukraine" \
       org.opencontainers.image.revision="${ERPNEXT_UA_COMMIT}" \
@@ -16,7 +17,13 @@ LABEL org.opencontainers.image.source="https://github.com/romboman19/erpnext_ukr
 
 USER root
 
-RUN install -d -o frappe -g frappe \
+RUN set -eu; \
+    test -n "${CHROMIUM_RUNTIME_PACKAGE}"; \
+    mkdir -p /var/lib/apt/lists/partial; \
+    apt-get update; \
+    apt-get install --no-install-recommends --yes "${CHROMIUM_RUNTIME_PACKAGE}"; \
+    rm -rf /var/lib/apt/lists/*; \
+    install -d -o frappe -g frappe \
         /opt/frappe/app-sources \
         /opt/frappe/app-sources/erpnext_ua \
         /opt/frappe/production

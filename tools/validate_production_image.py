@@ -121,6 +121,8 @@ def collect_source_errors(source_root: Path, contract: Mapping[str, Any], lock: 
             errors.append(f"{name} source lock URL must use HTTPS")
         if not re.fullmatch(r"[0-9a-f]{64}", str(locked_artifact.get("sha256", ""))):
             errors.append(f"{name} source lock must contain a SHA-256 digest")
+        if locked_artifact.get("runtime_packages") != artifact.get("runtime_packages"):
+            errors.append(f"{name} runtime packages do not match the source lock")
 
     return errors
 
@@ -149,6 +151,12 @@ def collect_bench_errors(
         executable_path = bench_root / str(executable)
         if not executable_path.is_file() or not os.access(executable_path, os.X_OK):
             errors.append(f"{name} executable is missing or not executable: {executable}")
+            continue
+        version_result = runner((str(executable_path), "--version"), bench_root)
+        if version_result.returncode:
+            errors.append(_command_error(f"{name} --version", version_result))
+        elif str(artifact.get("version")) not in version_result.stdout + version_result.stderr:
+            errors.append(f"{name} executable does not report version {artifact.get('version')}")
 
     versions_result = runner(("bench", "version", "--format", "plain"), bench_root)
     if versions_result.returncode:
@@ -210,6 +218,7 @@ def _artifact_map(contract: Mapping[str, Any], errors: list[str]) -> dict[str, M
             continue
         version = artifact.get("version")
         executable = artifact.get("executable")
+        runtime_packages = artifact.get("runtime_packages")
         executable_path = Path(str(executable))
         if not isinstance(version, str) or not version:
             errors.append(f"{name} runtime version is missing")
@@ -220,6 +229,19 @@ def _artifact_map(contract: Mapping[str, Any], errors: list[str]) -> dict[str, M
             or ".." in executable_path.parts
         ):
             errors.append(f"{name} executable must be a safe bench-relative path")
+            continue
+        if (
+            not isinstance(runtime_packages, dict)
+            or not runtime_packages
+            or any(
+                not isinstance(package, str)
+                or not package
+                or not isinstance(package_version, str)
+                or not package_version
+                for package, package_version in runtime_packages.items()
+            )
+        ):
+            errors.append(f"{name} runtime_packages must lock package names to versions")
             continue
         valid_artifacts[name] = artifact
     return valid_artifacts
