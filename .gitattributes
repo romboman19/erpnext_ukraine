@@ -1,2 +1,4 @@
 # Translation source strings may intentionally contain trailing whitespace.
 erpnext_ua/translations/*.csv -whitespace
+# Official DPS XSD files are kept byte-identical (windows-1251, CRLF).
+erpnext_ua/ua_fiscal/schemas/*.xsd -whitespace

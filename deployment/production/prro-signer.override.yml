@@ -1,0 +1,35 @@
+# PRRO signer for the production compose project (frappe_docker base +
+# this repo's image overrides). The signer joins the project's default
+# network only: backend/worker reach it as http://prro-signer:8080, and no
+# port is published to the host. It needs outbound HTTPS to the KNEDP TSP
+# named in the signing certificate.
+#
+# Required environment (e.g. in the compose .env, never in git):
+#   PRRO_SIGNER_IMAGE         repository and optional tag, without a digest, e.g.
+#                             registry.example/erpnext-ukraine-prro-signer:0.2.1
+#   PRRO_SIGNER_IMAGE_DIGEST  manifest digest, e.g. sha256:<64 hex>; it is a
+#                             separate required variable, so a bare mutable tag
+#                             cannot start the signer
+#   PRRO_SIGNER_API_KEY       random secret, at least 32 characters; the same value
+#                             goes into PRRO Settings
+services:
+  prro-signer:
+    image: ${PRRO_SIGNER_IMAGE:?set PRRO_SIGNER_IMAGE (repository[:tag], no digest)}@${PRRO_SIGNER_IMAGE_DIGEST:?set PRRO_SIGNER_IMAGE_DIGEST to sha256:<digest>}
+    restart: unless-stopped
+    environment:
+      API_KEY: ${PRRO_SIGNER_API_KEY:?set PRRO_SIGNER_API_KEY (min 32 chars)}
+      NODE_ENV: production
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"

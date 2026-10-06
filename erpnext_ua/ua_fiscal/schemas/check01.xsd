@@ -349,10 +349,12 @@
 			<xs:element name="UID" type="xs:string" minOccurs="1" maxOccurs="1"/>
 			<!--ЄДРПОУ/ДРФО/№ паспорта продавця (10 символів)-->
 			<xs:element name="TIN" type="DGDrfo" minOccurs="1" maxOccurs="1"/>
-			<!--Податковий номер або Індивідуальний номер платника ПДВ (12 символів)-->
+			<!--Індивідуальний податковий номер платника ПДВ продавця (12 символів)-->
 			<xs:element name="IPN" type="DGHIPN0" minOccurs="0" maxOccurs="1"/>
 			<!--Найменування продавця (256 символів)-->
 			<xs:element name="ORGNM" type="DGStr256" minOccurs="1" maxOccurs="1"/>
+			<!--Індивідуальний податковий номер платника ПДВ отримувача (покупця) (12 символів)-->
+			<xs:element name="IPNBUYER" type="DGHIPN0" minOccurs="0" maxOccurs="1"/>
 			<!--Найменування точки продажу (256 символів)-->
 			<xs:element name="POINTNM" type="DGStr256" minOccurs="1" maxOccurs="1"/>
 			<!--Адреса точки продажу (256 символів)-->

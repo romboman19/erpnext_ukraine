@@ -47,6 +47,31 @@ credentials узагалі, бо всі build inputs публічні й заф�
 прибирає checkout bind mount із backend/worker/scheduler. Без другого override
 тест перевіряв би host source, а не код, запечений в image.
 
+## PRRO signer
+
+[`prro-signer.override.yml`](prro-signer.override.yml) додає
+`erpnext_ukraine_prro_signer` у той самий compose project. Signer не має
+опублікованих портів, працює read-only без Linux capabilities і доступний
+backend/worker як `http://prro-signer:8080`. Образ збирається з тегу signer-а
+і підставляється тільки за digest:
+
+```bash
+git clone --branch v0.2.1 https://github.com/romboman19/erpnext_ukraine_prro_signer
+docker build -t registry.example/erpnext-ukraine-prro-signer:0.2.1 erpnext_ukraine_prro_signer
+docker push registry.example/erpnext-ukraine-prro-signer:0.2.1
+# у .env compose project (не в git):
+# PRRO_SIGNER_IMAGE=registry.example/erpnext-ukraine-prro-signer:0.2.1
+# PRRO_SIGNER_IMAGE_DIGEST=sha256:<digest із виводу docker push>
+# PRRO_SIGNER_API_KEY=<openssl rand -hex 32>
+docker compose -f compose.yaml <image overrides> \
+  -f /path/to/erpnext_ukraine/deployment/production/prro-signer.override.yml up -d
+```
+
+Після старту перевірте з backend-контейнера `curl -fsS http://prro-signer:8080/health`
+і переконайтеся, що на host-і порт 8080 не слухає. Signer потребує вихідного
+HTTPS до TSP КНЕДП із сертифіката; якщо egress обмежено allowlist-ом, додайте
+TSP-адресу вашого КНЕДП.
+
 ## Cutover на копії production site
 
 Команди нижче спочатку виконуються тільки на UAT-копії з перевіреним backup.

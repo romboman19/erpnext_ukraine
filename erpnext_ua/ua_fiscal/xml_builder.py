@@ -9,6 +9,7 @@ check01.xsd / zrep01.xsd (дзеркало: /home/romboman19/prro_docs), іна�
 """
 
 import os
+import re
 import uuid
 from functools import lru_cache
 from xml.sax.saxutils import escape
@@ -57,7 +58,7 @@ SUBTYPE_STORNO = 5
 
 # Порядок елементів CHECKHEAD (CHead) за check01.xsd
 _CHECKHEAD_ORDER = [
-	"DOCTYPE", "DOCSUBTYPE", "UID", "TIN", "IPN", "ORGNM", "POINTNM", "POINTADDR",
+	"DOCTYPE", "DOCSUBTYPE", "UID", "TIN", "IPN", "ORGNM", "IPNBUYER", "POINTNM", "POINTADDR",
 	"ORDERDATE", "ORDERTIME", "ORDERNUM", "CASHDESKNUM", "CASHREGISTERNUM",
 	"ORDERRETCASHREGNUM", "ORDERRETDATE", "ORDERRETNUM", "ORDERSTORNUM", "OPERTYPENM",
 	"VEHICLERN", "REVOKELASTONLINEDOC", "CASHIER", "LOGOURL", "COMMENT", "VER",
@@ -109,6 +110,14 @@ def _common_head(fop: dict, register: dict, local_number, cashier_name, dt) -> d
 	return head
 
 
+def normalize_buyer_ipn(value) -> str:
+	"""ІПН покупця-платника ПДВ для IPNBUYER: рівно 12 цифр."""
+	value = str(value).strip()
+	if not re.fullmatch(r"[0-9]{12}", value):
+		raise ValueError("ІПН покупця-платника ПДВ має складатися з 12 цифр")
+	return value
+
+
 def build_check_head(
 	*,
 	doctype: int,
@@ -127,12 +136,19 @@ def build_check_head(
 	order_ret_date: str | None = None,
 	order_storno_num: str | None = None,
 	revoke_last_online_document: bool = False,
+	buyer_ipn: str | None = None,
 ) -> dict:
 	dt = posting_datetime or frappe.utils.now_datetime()
 	head = _common_head(fop, register, local_number, cashier_name, dt)
 	head["DOCTYPE"] = doctype
 	if subtype is not None:
 		head["DOCSUBTYPE"] = subtype
+	if buyer_ipn:
+		# IPNBUYER (редакція API 17.08.2026): ІПН покупця-платника ПДВ, лише у
+		# чеках реалізації/повернення.
+		if doctype != DOCTYPE_SALE or subtype not in (None, SUBTYPE_GOODS, SUBTYPE_RETURN):
+			raise ValueError("IPNBUYER допустимий лише для чеків реалізації та повернення")
+		head["IPNBUYER"] = normalize_buyer_ipn(buyer_ipn)
 	if order_ret_num:
 		head["ORDERRETNUM"] = order_ret_num
 	if order_ret_cash_register:
