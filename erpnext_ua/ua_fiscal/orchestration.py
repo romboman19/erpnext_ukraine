@@ -757,6 +757,7 @@ def _queue_offline_sale(
 	related_receipt,
 	idem_key,
 	client,
+	buyer_ipn=None,
 ):
 	session = frappe.get_doc("PRRO Offline Session", register.active_offline_session)
 	_offline_limits(session)
@@ -789,6 +790,7 @@ def _queue_offline_sale(
 		order_ret_num=related_fiscal,
 		order_ret_cash_register=related_register,
 		order_ret_date=related_date,
+		buyer_ipn=buyer_ipn,
 	)
 	xml = xb.build_sale_check(
 		head,
@@ -848,8 +850,15 @@ def fiscalize_sale(
 	client: FiscalClient | None = None,
 	pos_order: str | None = None,
 	idem_key: str | None = None,
+	buyer_ipn: str | None = None,
 ) -> str:
 	client = client or FiscalClient()
+	if buyer_ipn:
+		# Перевіряємо до видачі локального номера, щоб помилка не споживала ORDERNUM.
+		try:
+			buyer_ipn = xb.normalize_buyer_ipn(buyer_ipn)
+		except ValueError as exc:
+			frappe.throw(str(exc), FiscalServerError)
 	receipt_kind = "Return" if receipt_type == "Повернення" else "Sale"
 	idem_key = idem_key or _idem_key(
 		receipt_kind.lower(), cash_register, sales_invoice or pos_order
@@ -888,6 +897,7 @@ def fiscalize_sale(
 			related_receipt=related_receipt,
 			idem_key=idem_key,
 			client=client,
+			buyer_ipn=buyer_ipn,
 		).name
 
 	_assert_no_unresolved(register.name)
@@ -914,6 +924,7 @@ def fiscalize_sale(
 		order_ret_num=related_fiscal,
 		order_ret_cash_register=related_register,
 		order_ret_date=related_date,
+		buyer_ipn=buyer_ipn,
 	)
 	xml = xb.build_sale_check(
 		head,
@@ -996,6 +1007,7 @@ def fiscalize_sale(
 			related_receipt=related_receipt,
 			idem_key=idem_key,
 			client=client,
+			buyer_ipn=buyer_ipn,
 		).name
 	receipt.reload()
 	frappe.db.set_value(

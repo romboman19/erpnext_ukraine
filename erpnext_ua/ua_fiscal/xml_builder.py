@@ -110,6 +110,14 @@ def _common_head(fop: dict, register: dict, local_number, cashier_name, dt) -> d
 	return head
 
 
+def normalize_buyer_ipn(value) -> str:
+	"""ІПН покупця-платника ПДВ для IPNBUYER: рівно 12 цифр."""
+	value = str(value).strip()
+	if not re.fullmatch(r"[0-9]{12}", value):
+		raise ValueError("ІПН покупця-платника ПДВ має складатися з 12 цифр")
+	return value
+
+
 def build_check_head(
 	*,
 	doctype: int,
@@ -138,12 +146,9 @@ def build_check_head(
 	if buyer_ipn:
 		# IPNBUYER (редакція API 17.08.2026): ІПН покупця-платника ПДВ, лише у
 		# чеках реалізації/повернення.
-		buyer_ipn = str(buyer_ipn).strip()
-		if doctype != DOCTYPE_SALE:
+		if doctype != DOCTYPE_SALE or subtype not in (None, SUBTYPE_GOODS, SUBTYPE_RETURN):
 			raise ValueError("IPNBUYER допустимий лише для чеків реалізації та повернення")
-		if not re.fullmatch(r"[0-9]{12}", buyer_ipn):
-			raise ValueError("ІПН покупця-платника ПДВ має складатися з 12 цифр")
-		head["IPNBUYER"] = buyer_ipn
+		head["IPNBUYER"] = normalize_buyer_ipn(buyer_ipn)
 	if order_ret_num:
 		head["ORDERRETNUM"] = order_ret_num
 	if order_ret_cash_register:

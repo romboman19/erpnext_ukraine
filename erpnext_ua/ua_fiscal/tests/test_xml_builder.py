@@ -9,7 +9,7 @@ class TestFiscalTotals(unittest.TestCase):
 	def _head(**kwargs):
 		return xb.build_check_head(
 			doctype=kwargs.pop("doctype", xb.DOCTYPE_SALE),
-			subtype=xb.SUBTYPE_GOODS,
+			subtype=kwargs.pop("subtype", xb.SUBTYPE_GOODS),
 			fop={
 				"tax_id": "3184710691",
 				"fop_full_name": "Тест Тестович",
@@ -141,6 +141,15 @@ class TestFiscalTotals(unittest.TestCase):
 	def test_buyer_vat_number_is_rejected_for_service_documents(self):
 		with self.assertRaises(ValueError):
 			self._head(doctype=xb.DOCTYPE_OPEN_SHIFT, buyer_ipn="123456789012")
+
+	def test_buyer_vat_number_is_rejected_for_service_cash_subtypes(self):
+		for subtype in (xb.SUBTYPE_SERVICE_DEPOSIT, xb.SUBTYPE_SERVICE_ISSUE, xb.SUBTYPE_STORNO):
+			with self.subTest(subtype=subtype), self.assertRaises(ValueError):
+				self._head(subtype=subtype, buyer_ipn="123456789012")
+
+	def test_buyer_vat_number_is_allowed_on_returns(self):
+		head = self._head(subtype=xb.SUBTYPE_RETURN, buyer_ipn="123456789012")
+		self.assertEqual(head["IPNBUYER"], "123456789012")
 
 
 if __name__ == "__main__":

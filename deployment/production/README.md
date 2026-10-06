@@ -60,7 +60,8 @@ git clone --branch v0.2.1 https://github.com/romboman19/erpnext_ukraine_prro_sig
 docker build -t registry.example/erpnext-ukraine-prro-signer:0.2.1 erpnext_ukraine_prro_signer
 docker push registry.example/erpnext-ukraine-prro-signer:0.2.1
 # у .env compose project (не в git):
-# PRRO_SIGNER_IMAGE=registry.example/erpnext-ukraine-prro-signer:0.2.1@sha256:<digest>
+# PRRO_SIGNER_IMAGE=registry.example/erpnext-ukraine-prro-signer:0.2.1
+# PRRO_SIGNER_IMAGE_DIGEST=sha256:<digest із виводу docker push>
 # PRRO_SIGNER_API_KEY=<openssl rand -hex 32>
 docker compose -f compose.yaml <image overrides> \
   -f /path/to/erpnext_ukraine/deployment/production/prro-signer.override.yml up -d

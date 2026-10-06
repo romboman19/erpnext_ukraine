@@ -5,13 +5,16 @@
 # named in the signing certificate.
 #
 # Required environment (e.g. in the compose .env, never in git):
-#   PRRO_SIGNER_IMAGE    immutable reference, e.g.
-#                        registry.example/erpnext-ukraine-prro-signer:0.2.1@sha256:<digest>
-#   PRRO_SIGNER_API_KEY  random secret, at least 32 characters; the same value
-#                        goes into PRRO Settings
+#   PRRO_SIGNER_IMAGE         repository and optional tag, without a digest, e.g.
+#                             registry.example/erpnext-ukraine-prro-signer:0.2.1
+#   PRRO_SIGNER_IMAGE_DIGEST  manifest digest, e.g. sha256:<64 hex>; it is a
+#                             separate required variable, so a bare mutable tag
+#                             cannot start the signer
+#   PRRO_SIGNER_API_KEY       random secret, at least 32 characters; the same value
+#                             goes into PRRO Settings
 services:
   prro-signer:
-    image: ${PRRO_SIGNER_IMAGE:?set PRRO_SIGNER_IMAGE to a digest-pinned signer image}
+    image: ${PRRO_SIGNER_IMAGE:?set PRRO_SIGNER_IMAGE (repository[:tag], no digest)}@${PRRO_SIGNER_IMAGE_DIGEST:?set PRRO_SIGNER_IMAGE_DIGEST to sha256:<digest>}
     restart: unless-stopped
     environment:
       API_KEY: ${PRRO_SIGNER_API_KEY:?set PRRO_SIGNER_API_KEY (min 32 chars)}
