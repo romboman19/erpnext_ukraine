@@ -6,9 +6,9 @@ from erpnext_ua.ua_fiscal import xml_builder as xb
 
 class TestFiscalTotals(unittest.TestCase):
 	@staticmethod
-	def _head():
+	def _head(**kwargs):
 		return xb.build_check_head(
-			doctype=xb.DOCTYPE_SALE,
+			doctype=kwargs.pop("doctype", xb.DOCTYPE_SALE),
 			subtype=xb.SUBTYPE_GOODS,
 			fop={
 				"tax_id": "3184710691",
@@ -24,6 +24,7 @@ class TestFiscalTotals(unittest.TestCase):
 			local_number=1,
 			cashier_name="Касир Тестовий",
 			testing=True,
+			**kwargs,
 		)
 
 	def test_registered_name_is_copied_to_orgnm_verbatim(self):
@@ -113,6 +114,33 @@ class TestFiscalTotals(unittest.TestCase):
 		self.assertEqual(row.findtext("DISCOUNTTYPE"), "0")
 		self.assertEqual(row.findtext("DISCOUNTPERCENT"), "10.00")
 		self.assertEqual(row.findtext("DISCOUNTSUM"), "20.00")
+
+	def test_buyer_vat_number_follows_orgnm_and_is_xsd_valid(self):
+		xml = xb.build_sale_check(
+			self._head(buyer_ipn=" 123456789012 "),
+			items=[{
+				"code": "SKU", "name": "Товар", "uom": "шт", "qty": 1,
+				"price": 100, "amount": 100,
+			}],
+			payments=[{"code": 0, "name": "ГОТІВКА", "sum": 100}],
+			total=100,
+		)
+		xb.validate_document(xml)
+		head = [child.tag for child in ET.fromstring(xml).find("CHECKHEAD")]
+		self.assertEqual(head[head.index("ORGNM") + 1], "IPNBUYER")
+		self.assertEqual(ET.fromstring(xml).findtext("CHECKHEAD/IPNBUYER"), "123456789012")
+
+	def test_buyer_vat_number_is_omitted_by_default(self):
+		self.assertNotIn("IPNBUYER", self._head())
+
+	def test_buyer_vat_number_must_have_twelve_digits(self):
+		for value in ("12345678901", "1234567890123", "12345678901A"):
+			with self.subTest(value=value), self.assertRaises(ValueError):
+				self._head(buyer_ipn=value)
+
+	def test_buyer_vat_number_is_rejected_for_service_documents(self):
+		with self.assertRaises(ValueError):
+			self._head(doctype=xb.DOCTYPE_OPEN_SHIFT, buyer_ipn="123456789012")
 
 
 if __name__ == "__main__":

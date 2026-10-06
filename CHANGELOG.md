@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- XSD `check01`/`zrep01` оновлено до редакції опису API ДПС від 17.08.2026;
+  протокол, команди й адреси фіскального сервера не змінилися. `build_check_head`
+  приймає необов'язковий `buyer_ipn` і формує `IPNBUYER` (12 цифр) лише для
+  чеків реалізації/повернення;
 - додано immutable production image contract: exact ERPNext base digest,
   зовнішні app commits, OCI source revision, bench virtualenv `pip check` і
   runtime/site validator;
