@@ -25,13 +25,16 @@ bench --site <site> clear-cache
 ## 3. Signer
 
 Згенеруйте окремий секрет щонайменше 32 символи. Не публікуйте порт 8080 назовні.
+Для compose-розгортання використовуйте
+[`deployment/production/prro-signer.override.yml`](../deployment/production/prro-signer.override.yml)
+з digest-pinned образом; ручний варіант:
 
 ```bash
-docker build -t erpnext-ukraine-prro-signer:0.2 .
+docker build -t erpnext-ukraine-prro-signer:0.2.1 .
 docker run -d --restart unless-stopped --name prro-signer \
   --network <private-frappe-network> \
   -e API_KEY='<random-secret-at-least-32-chars>' \
-  erpnext-ukraine-prro-signer:0.2
+  erpnext-ukraine-prro-signer:0.2.1
 ```
 
 У `PRRO Settings` задайте `http://prro-signer:8080`, той самий API key, timeout

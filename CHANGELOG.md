@@ -6,6 +6,9 @@
   протокол, команди й адреси фіскального сервера не змінилися. `build_check_head`
   приймає необов'язковий `buyer_ipn` і формує `IPNBUYER` (12 цифр) лише для
   чеків реалізації/повернення;
+- `deployment/production/prro-signer.override.yml` додає PRRO signer 0.2.1 у
+  production compose project: digest-pinned image, без опублікованих портів,
+  read-only, без capabilities, з лімітами пам'яті/процесів;
 - додано immutable production image contract: exact ERPNext base digest,
   зовнішні app commits, OCI source revision, bench virtualenv `pip check` і
   runtime/site validator;
