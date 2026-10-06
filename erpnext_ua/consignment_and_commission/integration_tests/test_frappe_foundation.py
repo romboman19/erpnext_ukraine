@@ -221,8 +221,23 @@ def _ensure_supplier() -> frappe.model.document.Document:
     return supplier.insert(ignore_permissions=True)
 
 
+def _restore_cc_settings(values: dict) -> None:
+    for field, value in values.items():
+        frappe.db.set_single_value("CC Settings", field, value)
+    frappe.db.commit()
+
+
 class TestFrappeFoundation(IntegrationTestCase):
     def test_clean_site_master_data_round_trip_and_overlap_guard(self) -> None:
+        # Earlier acceptance steps (GSF phase 7) may leave CC enabled; this test
+        # asserts clean-site readiness, so it runs with the feature off and puts
+        # the previous settings back last, after the record cleanup below.
+        original_settings = {
+            field: frappe.db.get_single_value("CC Settings", field)
+            for field in ("enabled", "default_company", "default_location")
+        }
+        self.addCleanup(_restore_cc_settings, original_settings)
+        frappe.db.set_single_value("CC Settings", "enabled", 0)
         _cleanup_integration_records()
         self.addCleanup(_cleanup_integration_records)
 
