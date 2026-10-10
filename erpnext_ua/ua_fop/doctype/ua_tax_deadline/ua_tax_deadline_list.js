@@ -5,6 +5,7 @@ frappe.listview_settings["UA Tax Deadline"] = {
 			"Скоро термін": "orange",
 			"Прострочено": "red",
 			"Виконано": "green",
+			"Скасовано": "gray",
 		};
 		return [__(doc.status), colors[doc.status] || "gray", "status,=," + doc.status];
 	},
