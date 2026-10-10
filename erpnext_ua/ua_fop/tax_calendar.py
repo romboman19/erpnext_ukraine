@@ -9,12 +9,20 @@ import frappe
 from frappe import _
 
 from erpnext_ua.ua_fop.tax_rules import (
+	ESV_MODE_ABOVE_MINIMUM,
+	ESV_MODE_EXEMPT,
+	ESV_MODE_MINIMUM,
+	ESVContext,
 	TaxAmounts,
 	build_deadline_rows,
+	esv_period_labels,
 	is_official_source,
 	missing_parameter_fields,
 	official_source_urls,
 )
+
+CANCELLED_STATUS = "Скасовано"
+CLOSED_STATUSES = ("Виконано", CANCELLED_STATUS)
 
 PARAMETER_LABELS = {
 	"minimum_wage": "мінімальна зарплата",
@@ -96,10 +104,56 @@ def _fixed_rate_provenance(fop, year: int, params) -> dict:
 	}
 
 
+def esv_context(fop, year: int) -> ESVContext:
+	"""Обставини ЄСВ одного ФОП на рік, без залежності від самого Document.
+
+	Підтверджена сума ФОП застосовується лише до свого року: інакше календар
+	наступного року молча порахував би минулорічну суму.
+	"""
+	mode = fop.get("esv_mode") or ESV_MODE_MINIMUM
+	override = frappe.utils.flt(fop.get("esv_monthly_override"), 2)
+	override_year = int(fop.get("esv_rate_year") or 0)
+	usable_override = override if override > 0 and override_year == year else None
+
+	if usable_override is not None:
+		sources = official_source_urls(fop.get("esv_sources"))
+		if not sources or any(not is_official_source(source) for source in sources):
+			frappe.throw(
+				_("Для {0} вкажіть офіційне gov.ua джерело підтвердженої суми ЄСВ").format(fop.name),
+				FOPTaxRateConfigurationError,
+			)
+
+	if mode == ESV_MODE_ABOVE_MINIMUM and usable_override is None:
+		frappe.throw(
+			_("Для {0} не підтверджено суму ЄСВ на {1} рік. Календар не створено.").format(
+				fop.name, year
+			),
+			FOPTaxRateConfigurationError,
+		)
+	if mode == ESV_MODE_EXEMPT and not fop.get("esv_exemption_from"):
+		frappe.throw(
+			_("Для {0} вибрано звільнення від ЄСВ без першого місяця пільги.").format(fop.name),
+			FOPTaxRateConfigurationError,
+		)
+
+	return ESVContext(
+		mode=mode,
+		monthly_override=usable_override,
+		exemption_from=(
+			frappe.utils.getdate(fop.esv_exemption_from) if fop.get("esv_exemption_from") else None
+		),
+		exemption_to=(
+			frappe.utils.getdate(fop.esv_exemption_to) if fop.get("esv_exemption_to") else None
+		),
+		exemption_reason=fop.get("esv_exemption_reason") or "",
+	)
+
+
 def _rows_for_group(year: int, fop):
 	group = fop.single_tax_group
 	params = _get_params(year, group)
 	rate_provenance = _fixed_rate_provenance(fop, year, params)
+	esv = esv_context(fop, year)
 	amounts = TaxAmounts(
 		single_tax_monthly=(
 			fop.single_tax_monthly_amount if group in ("1", "2") else params.single_tax_monthly
@@ -110,7 +164,7 @@ def _rows_for_group(year: int, fop):
 		single_tax_percent_vat=params.single_tax_percent_vat,
 		military_levy_percent=params.military_levy_percent,
 	)
-	return params, rate_provenance, build_deadline_rows(year, group, amounts)
+	return params, rate_provenance, build_deadline_rows(year, group, amounts, esv)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -159,8 +213,60 @@ def _generate_deadlines(fop_profile: str, year: int | None = None) -> dict:
 		doc.update(rate_provenance)
 		doc.insert(ignore_permissions=True)
 		created += 1
+	cancelled = _cancel_exempt_esv_deadlines(fop, year, rows)
 	frappe.db.commit()
-	return {"created": created, "updated": updated, "skipped": skipped, "year": year}
+	return {
+		"created": created,
+		"updated": updated,
+		"skipped": skipped,
+		"cancelled": cancelled,
+		"year": year,
+	}
+
+
+def _cancel_exempt_esv_deadlines(fop, year: int, rows) -> int:
+	"""Згасити рядки ЄСВ, яких у цьому році більше немає через звільнення.
+
+	Рядок не видаляється — історія зобовʼязання лишається видимою. Уже сплачений
+	(«Виконано») квартал не чіпаємо: платіж відбувся і його зміст не змінюється.
+	Повторний прогін нічого не робить, бо рядок уже «Скасовано».
+	"""
+	expected = {row.period_label for row in rows if row.tax_type == "ЄСВ"}
+	superseded = [label for label in esv_period_labels(year) if label not in expected]
+	if not superseded:
+		return 0
+
+	names = frappe.get_all(
+		"UA Tax Deadline",
+		filters={
+			"company": fop.company,
+			"tax_type": "ЄСВ",
+			"period_label": ("in", superseded),
+			"status": ("not in", CLOSED_STATUSES),
+		},
+		pluck="name",
+	)
+	for name in names:
+		frappe.db.set_value(
+			"UA Tax Deadline",
+			name,
+			{
+				"status": CANCELLED_STATUS,
+				"fop_profile": fop.name,
+				"notified_due_soon": 1,
+				"notified_overdue": 1,
+				"notes": _cancellation_note(fop),
+			},
+			update_modified=False,
+		)
+	return len(names)
+
+
+def _cancellation_note(fop) -> str:
+	reason = fop.get("esv_exemption_reason") or "звільнення зафіксовано у профілі ФОП"
+	return _("Знято: ЄСВ «за себе» не нараховується. Підстава: {0} (ст. 4 Закону 2464-VI).").format(
+		reason
+	)
 
 
 def _refresh_deadline(
@@ -186,6 +292,8 @@ def _refresh_deadline(
 			frappe.db.set_value("UA Tax Deadline", doc.name, provenance, update_modified=False)
 		return bool(provenance)
 
+	# Зобовʼязання повернулося (звільнення зняли або скінчилося) — рядок оживає.
+	was_cancelled = doc.status == CANCELLED_STATUS
 	due_date_changed = frappe.utils.getdate(doc.due_date) != row["due_date"]
 	values = {
 		**row,
@@ -194,14 +302,18 @@ def _refresh_deadline(
 		"fop_profile": fop.name,
 		"tax_parameters": tax_parameters,
 	}
-	changed = due_date_changed or any(
-		_not_equal(doc.get(fieldname), value, fieldname) for fieldname, value in values.items()
+	changed = (
+		due_date_changed
+		or was_cancelled
+		or any(
+			_not_equal(doc.get(fieldname), value, fieldname) for fieldname, value in values.items()
+		)
 	)
 	if not changed:
 		return False
 
 	doc.update(values)
-	if due_date_changed:
+	if due_date_changed or was_cancelled:
 		doc.status = "Заплановано"
 		doc.notified_due_soon = 0
 		doc.notified_overdue = 0
@@ -271,7 +383,7 @@ def _repair_existing_deadline_dates(fop_profile: str, year: int) -> None:
 			"tax_parameters": params.name,
 			"statutory_due_date": rule.statutory_due_date,
 		}
-		if doc.status != "Виконано":
+		if doc.status not in CLOSED_STATUSES:
 			values["due_date"] = rule.due_date
 			if frappe.utils.getdate(doc.due_date) != rule.due_date:
 				values.update(
@@ -291,7 +403,7 @@ def update_statuses_and_notify():
 	soon = today + timedelta(days=3)
 	open_deadlines = frappe.get_all(
 		"UA Tax Deadline",
-		filters={"status": ("!=", "Виконано")},
+		filters={"status": ("not in", CLOSED_STATUSES)},
 		fields=[
 			"name",
 			"company",

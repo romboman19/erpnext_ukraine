@@ -30,6 +30,17 @@
   "column_break_fixed_tax_rate",
   "single_tax_rate_verified_on",
   "single_tax_rate_sources",
+  "section_esv",
+  "esv_mode",
+  "esv_exemption_reason",
+  "esv_exemption_note",
+  "esv_exemption_from",
+  "esv_exemption_to",
+  "column_break_esv",
+  "esv_monthly_override",
+  "esv_rate_year",
+  "esv_verified_on",
+  "esv_sources",
   "section_bank",
   "iban",
   "column_break_bank",
@@ -206,6 +217,78 @@
    "fieldname": "single_tax_rate_sources",
    "fieldtype": "Small Text",
    "label": "Джерела фактичної ставки"
+  },
+  {
+   "fieldname": "section_esv",
+   "fieldtype": "Section Break",
+   "label": "ЄСВ «за себе»"
+  },
+  {
+   "default": "Мінімальний внесок",
+   "description": "«Звільнений» — за ст. 4 ч. 4 або ч. 6 Закону 2464-VI. «Більше мінімуму» — коли ФОП свідомо сплачує більшу суму; тоді потрібне підтвердження суми з джерелом.",
+   "fieldname": "esv_mode",
+   "fieldtype": "Select",
+   "label": "Режим ЄСВ",
+   "options": "Мінімальний внесок\nЗвільнений\nБільше мінімуму",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.esv_mode == 'Звільнений'",
+   "fieldname": "esv_exemption_reason",
+   "fieldtype": "Select",
+   "label": "Підстава звільнення",
+   "mandatory_depends_on": "eval:doc.esv_mode == 'Звільнений'",
+   "options": "\nПенсіонер за віком\nОсоба з інвалідністю, отримує пенсію або соцдопомогу\nЄСВ сплачує роботодавець за основним місцем роботи\nІнше (вказати)"
+  },
+  {
+   "depends_on": "eval:doc.esv_mode == 'Звільнений'",
+   "description": "Обовʼязково для підстави «Інше (вказати)». Не вносьте сюди номер пенсійного посвідчення, довідки МСЕК чи інші персональні дані.",
+   "fieldname": "esv_exemption_note",
+   "fieldtype": "Small Text",
+   "label": "Пояснення до звільнення"
+  },
+  {
+   "depends_on": "eval:doc.esv_mode == 'Звільнений'",
+   "description": "Перший місяць, за який ЄСВ уже не нараховується. Пільга застосовується з точністю до місяця; який саме місяць перший — визначає Фінансист.",
+   "fieldname": "esv_exemption_from",
+   "fieldtype": "Date",
+   "label": "Звільнення з (перший місяць)",
+   "mandatory_depends_on": "eval:doc.esv_mode == 'Звільнений'"
+  },
+  {
+   "depends_on": "eval:doc.esv_mode == 'Звільнений'",
+   "description": "Останній місяць звільнення. Порожнє поле означає «безстроково».",
+   "fieldname": "esv_exemption_to",
+   "fieldtype": "Date",
+   "label": "Звільнення до (останній місяць)"
+  },
+  {
+   "fieldname": "column_break_esv",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Фактична сума ЄСВ на місяць цього ФОП. Має приоритет над мінімальним ЄСВ із UA Tax Parameters. Порожнє поле означає мінімальний внесок року.",
+   "fieldname": "esv_monthly_override",
+   "fieldtype": "Currency",
+   "label": "ЄСВ, грн/міс (сума ФОП)",
+   "mandatory_depends_on": "eval:doc.esv_mode == 'Більше мінімуму'"
+  },
+  {
+   "description": "Рік, на який підтверджено суму. Календар бере суму лише для свого року.",
+   "fieldname": "esv_rate_year",
+   "fieldtype": "Int",
+   "label": "Рік суми ЄСВ"
+  },
+  {
+   "fieldname": "esv_verified_on",
+   "fieldtype": "Date",
+   "label": "Суму ЄСВ перевірено станом на"
+  },
+  {
+   "description": "Один HTTPS URL у домені gov.ua на рядок.",
+   "fieldname": "esv_sources",
+   "fieldtype": "Small Text",
+   "label": "Джерела суми ЄСВ"
   },
   {
    "fieldname": "section_bank",

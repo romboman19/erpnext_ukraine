@@ -35,6 +35,28 @@ COMMON_PARAMETER_FIELDS = (
 	"official_sources",
 	"verified_on",
 )
+
+# Режими ЄСВ «за себе» для одного ФОП. Звільнення — ст. 4 ч. 4 та ч. 6 Закону
+# 2464-VI; ставка 22% мінімальної зарплати живе в UA Tax Parameters, не тут.
+ESV_MODE_MINIMUM = "Мінімальний внесок"
+ESV_MODE_EXEMPT = "Звільнений"
+ESV_MODE_ABOVE_MINIMUM = "Більше мінімуму"
+ESV_MODES = (ESV_MODE_MINIMUM, ESV_MODE_EXEMPT, ESV_MODE_ABOVE_MINIMUM)
+
+ESV_EXEMPTION_REASONS = (
+	"Пенсіонер за віком",
+	"Особа з інвалідністю, отримує пенсію або соцдопомогу",
+	"ЄСВ сплачує роботодавець за основним місцем роботи",
+	"Інше (вказати)",
+)
+ESV_EXEMPTION_OTHER = ESV_EXEMPTION_REASONS[-1]
+
+# Збережено дослівно: цей текст уже стоїть у згенерованих рядках ЄСВ, і зміна
+# формулювання переписала б примітки в наявних записах без зміни змісту.
+ESV_MINIMUM_QUARTER_NOTE = (
+	"Мінімальний ЄСВ «за себе» за 3 місяці; строк «до 20 числа» означає 19-те. "
+	"Перевірте індивідуальні пільги та звільнення."
+)
 GROUP_PARAMETER_FIELDS = {
 	"1": ("subsistence_minimum", "single_tax_monthly", "military_levy_monthly"),
 	"2": ("single_tax_monthly", "military_levy_monthly"),
@@ -60,6 +82,46 @@ class TaxAmounts:
 	single_tax_percent_no_vat: float | None = None
 	single_tax_percent_vat: float | None = None
 	military_levy_percent: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ESVContext:
+	"""Обставини ЄСВ «за себе» одного ФОП, без залежності від Document.
+
+	`exemption_from` / `exemption_to` трактуються з точністю до місяця: місяць
+	вважається звільненим, якщо він потрапляє в інтервал. Який саме місяць є
+	першим звільненим (наприклад наступний після набуття статусу пенсіонера) —
+	вирішує власник або Фінансист і вводить у профіль; код цього не домислює.
+	"""
+
+	mode: str = ESV_MODE_MINIMUM
+	monthly_override: float | None = None
+	exemption_from: date | None = None
+	exemption_to: date | None = None
+	exemption_reason: str = ""
+
+	def monthly_amount(self, parameter_monthly: float | None) -> float | None:
+		"""Підтверджена сума ФОП має приоритет над параметром року."""
+		return self.monthly_override if self.monthly_override is not None else parameter_monthly
+
+	def is_month_exempt(self, year: int, month: int) -> bool:
+		if self.mode != ESV_MODE_EXEMPT:
+			return False
+		if self.exemption_from is None:
+			# Без дати початку звільнення немає чого відраховувати; нараховуємо.
+			return False
+		index = _month_index(year, month)
+		if index < _month_index(self.exemption_from.year, self.exemption_from.month):
+			return False
+		if self.exemption_to is not None and index > _month_index(
+			self.exemption_to.year, self.exemption_to.month
+		):
+			return False
+		return True
+
+
+def _month_index(year: int, month: int) -> int:
+	return year * 12 + month
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,11 +167,19 @@ def _quarter_payment_due(quarter_end: date, days_after: int) -> tuple[date, date
 	return statutory, next_working_day(statutory)
 
 
-def build_deadline_rows(year: int, group: str, amounts: TaxAmounts) -> tuple[DeadlineRow, ...]:
+def build_deadline_rows(
+	year: int,
+	group: str,
+	amounts: TaxAmounts,
+	esv: ESVContext | None = None,
+) -> tuple[DeadlineRow, ...]:
 	"""Build operational deadlines from the statutory calendar-day rules.
 
 	Only weekends are calculated. Exceptional non-operating bank days must be
 	checked by the accountant against the current DPS calendar.
+
+	`esv` описує ЄСВ «за себе» саме цього ФОП. Без нього поведінка така сама, як
+	до появи пільг: мінімальний внесок за всі чотири квартали.
 	"""
 	if group not in GROUP_PARAMETER_FIELDS:
 		raise ValueError(f"Unsupported single-tax group: {group}")
@@ -130,8 +200,13 @@ def build_deadline_rows(year: int, group: str, amounts: TaxAmounts) -> tuple[Dea
 	else:
 		rows.extend(_third_group_rows(year, amounts))
 
-	rows.extend(_esv_rows(year, amounts.esv_monthly))
+	rows.extend(_esv_rows(year, amounts.esv_monthly, esv or ESVContext()))
 	return tuple(rows)
+
+
+def esv_period_labels(year: int) -> tuple[str, ...]:
+	"""Усі можливі періоди ЄСВ року — для пошуку рядків, які стали зайвими."""
+	return tuple(f"{quarter} квартал {year}" for quarter in range(1, 5))
 
 
 def _monthly_advance_rows(year: int, amounts: TaxAmounts) -> list[DeadlineRow]:
@@ -207,10 +282,25 @@ def _third_group_rows(year: int, amounts: TaxAmounts) -> list[DeadlineRow]:
 	return rows
 
 
-def _esv_rows(year: int, esv_monthly: float | None) -> list[DeadlineRow]:
-	quarter_amount = round(esv_monthly * 3, 2) if esv_monthly is not None else None
+def _esv_rows(year: int, esv_monthly: float | None, esv: ESVContext) -> list[DeadlineRow]:
+	"""Квартальні рядки ЄСВ з урахуванням звільнення цього ФОП.
+
+	Звільнений квартал не отримує рядка взагалі — нульове зобовʼязання і
+	відсутнє зобовʼязання це різні речі. Частково звільнений квартал
+	нараховується пропорційно місяцях без пільги.
+	"""
+	monthly = esv.monthly_amount(esv_monthly)
 	rows = []
 	for quarter in range(1, 5):
+		first_month, last_month = QUARTERS[quarter]
+		payable_months = [
+			month
+			for month in range(first_month, last_month + 1)
+			if not esv.is_month_exempt(year, month)
+		]
+		if not payable_months:
+			continue
+
 		quarter_end = _quarter_end(year, quarter)
 		next_month = (quarter_end.month % 12) + 1
 		next_year = quarter_end.year + (1 if quarter == 4 else 0)
@@ -222,11 +312,28 @@ def _esv_rows(year: int, esv_monthly: float | None) -> list[DeadlineRow]:
 				period_label=f"{quarter} квартал {year}",
 				statutory_due_date=statutory,
 				due_date=next_working_day(statutory),
-				amount=quarter_amount,
-				notes=(
-					"Мінімальний ЄСВ «за себе» за 3 місяці; строк «до 20 числа» означає 19-те. "
-					"Перевірте індивідуальні пільги та звільнення."
-				),
+				amount=round(monthly * len(payable_months), 2) if monthly is not None else None,
+				notes=_esv_note(year, esv, payable_months),
 			)
 		)
 	return rows
+
+
+def _esv_note(year: int, esv: ESVContext, payable_months: list[int]) -> str:
+	if len(payable_months) == 3 and esv.monthly_override is None:
+		return ESV_MINIMUM_QUARTER_NOTE
+
+	months = ", ".join(f"{MONTH_NAMES[month - 1]} {year}" for month in payable_months)
+	basis = (
+		"за підтвердженою сумою ЄСВ цього ФОП"
+		if esv.monthly_override is not None
+		else "за мінімальним внеском"
+	)
+	note = (
+		f"ЄСВ «за себе» {basis} за {len(payable_months)} міс. ({months}); "
+		"строк «до 20 числа» означає 19-те."
+	)
+	if len(payable_months) < 3:
+		reason = esv.exemption_reason or "звільнення зафіксовано у профілі ФОП"
+		note += f" Решта місяців кварталу звільнена: {reason}."
+	return note

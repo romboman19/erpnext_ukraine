@@ -11,6 +11,10 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 TAX_SOURCE_BUDGET_2026 = "https://zakon.rada.gov.ua/laws/show/4695-20"
 TAX_SOURCE_GROUPS_1_2_2026 = "https://tax.gov.ua/media-tsentr/novini/968282.html"
 TAX_SOURCE_GROUP_3_2026 = "https://mk.tax.gov.ua/media-ark/news-ark/976670.html"
+# Закон 2464-VI: ст. 8 ч. 5 — ставка 22%, мінімальна база = мінімальна зарплата;
+# ст. 4 ч. 4 і ч. 6 — перелік осіб, звільнених від сплати єдиного внеску за себе.
+TAX_SOURCE_ESV_LAW = "https://zakon.rada.gov.ua/laws/show/2464-17"
+ESV_SOURCES = f"{TAX_SOURCE_BUDGET_2026}\n{TAX_SOURCE_ESV_LAW}"
 TAX_PARAMETERS = [
 	{
 		"year": 2026,
@@ -21,7 +25,7 @@ TAX_PARAMETERS = [
 		"single_tax_monthly": 332.80,
 		"military_levy_monthly": 864.70,
 		"esv_monthly": 1902.34,
-		"official_sources": f"{TAX_SOURCE_BUDGET_2026}\n{TAX_SOURCE_GROUPS_1_2_2026}",
+		"official_sources": f"{ESV_SOURCES}\n{TAX_SOURCE_GROUPS_1_2_2026}",
 		"verified_on": "2026-08-03",
 	},
 	{
@@ -33,7 +37,7 @@ TAX_PARAMETERS = [
 		"single_tax_monthly": 1729.40,
 		"military_levy_monthly": 864.70,
 		"esv_monthly": 1902.34,
-		"official_sources": f"{TAX_SOURCE_BUDGET_2026}\n{TAX_SOURCE_GROUPS_1_2_2026}",
+		"official_sources": f"{ESV_SOURCES}\n{TAX_SOURCE_GROUPS_1_2_2026}",
 		"verified_on": "2026-08-03",
 	},
 	{
@@ -46,7 +50,7 @@ TAX_PARAMETERS = [
 		"single_tax_percent_vat": 3,
 		"military_levy_percent": 1,
 		"esv_monthly": 1902.34,
-		"official_sources": f"{TAX_SOURCE_BUDGET_2026}\n{TAX_SOURCE_GROUP_3_2026}",
+		"official_sources": f"{ESV_SOURCES}\n{TAX_SOURCE_GROUP_3_2026}",
 		"verified_on": "2026-08-03",
 	},
 ]

@@ -83,7 +83,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Статус",
-   "options": "Заплановано\nСкоро термін\nПрострочено\nВиконано"
+   "options": "Заплановано\nСкоро термін\nПрострочено\nВиконано\nСкасовано"
   },
   {
    "fieldname": "section_amount",
