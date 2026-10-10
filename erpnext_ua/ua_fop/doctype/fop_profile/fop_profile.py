@@ -5,7 +5,14 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt
 
-from erpnext_ua.ua_fop.tax_rules import is_official_source, official_source_urls
+from erpnext_ua.ua_fop.tax_rules import (
+	ESV_EXEMPTION_OTHER,
+	ESV_MODE_ABOVE_MINIMUM,
+	ESV_MODE_EXEMPT,
+	ESV_MODE_MINIMUM,
+	is_official_source,
+	official_source_urls,
+)
 
 RNOKPP_WEIGHTS = (-1, 5, 7, 9, 4, 6, 10, 5, 7)
 
@@ -30,6 +37,7 @@ class FOPProfile(Document):
 		self.validate_tax_id()
 		self.validate_tax_mode()
 		self.validate_fixed_single_tax_rate()
+		self.validate_esv()
 		self.validate_iban()
 
 	def validate_tax_id(self):
@@ -102,6 +110,64 @@ class FOPProfile(Document):
 				)
 			)
 		self.single_tax_rate_sources = "\n".join(sources)
+
+	def validate_esv(self):
+		"""Правила ЄСВ «за себе». Серверна перевірка, бо API та імпорт її не минають."""
+		self.esv_mode = self.esv_mode or ESV_MODE_MINIMUM
+
+		if self.esv_mode == ESV_MODE_EXEMPT:
+			self._validate_esv_exemption()
+		else:
+			self.esv_exemption_reason = None
+			self.esv_exemption_note = None
+			self.esv_exemption_from = None
+			self.esv_exemption_to = None
+
+		if self.esv_mode == ESV_MODE_ABOVE_MINIMUM and flt(self.esv_monthly_override, 2) <= 0:
+			frappe.throw(
+				_("Для режиму ЄСВ «{0}» вкажіть фактичну суму ЄСВ на місяць").format(self.esv_mode)
+			)
+		self._validate_esv_override_provenance()
+
+	def _validate_esv_exemption(self):
+		if not self.esv_exemption_reason:
+			frappe.throw(_("Для звільнення від ЄСВ вкажіть підставу (ст. 4 Закону 2464-VI)"))
+		if self.esv_exemption_reason == ESV_EXEMPTION_OTHER and not (self.esv_exemption_note or "").strip():
+			frappe.throw(
+				_("Для підстави «{0}» опишіть її у полі «Пояснення до звільнення»").format(
+					ESV_EXEMPTION_OTHER
+				)
+			)
+		if not self.esv_exemption_from:
+			frappe.throw(_("Вкажіть перший місяць звільнення від ЄСВ"))
+		if self.esv_exemption_to and frappe.utils.getdate(self.esv_exemption_to) < frappe.utils.getdate(
+			self.esv_exemption_from
+		):
+			frappe.throw(_("Останній місяць звільнення від ЄСВ не може бути раніше за перший"))
+
+	def _validate_esv_override_provenance(self):
+		"""Підтверджена сума ЄСВ — це число з джерелом, а не просто число."""
+		if flt(self.esv_monthly_override, 2) <= 0:
+			self.esv_monthly_override = None
+			return
+		missing = [
+			fieldname
+			for fieldname in ("esv_rate_year", "esv_verified_on", "esv_sources")
+			if self.get(fieldname) in (None, "", 0)
+		]
+		if missing:
+			frappe.throw(
+				_("Заповніть усі поля підтвердження суми ЄСВ: {0}").format(", ".join(missing))
+			)
+		sources = official_source_urls(self.esv_sources)
+		invalid = [source for source in sources if not is_official_source(source)]
+		if invalid:
+			frappe.throw(
+				_("Джерело суми ЄСВ має бути HTTPS-посиланням на офіційний домен gov.ua: {0}").format(
+					", ".join(invalid)
+				)
+			)
+		self.esv_sources = "\n".join(sources)
 
 	@frappe.whitelist()
 	def get_current_tax_parameters(self):

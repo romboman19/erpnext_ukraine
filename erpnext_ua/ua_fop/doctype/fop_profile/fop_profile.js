@@ -28,12 +28,10 @@ frappe.ui.form.on("FOP Profile", {
 						.then((r) => {
 							const m = r.message;
 							frappe.msgprint(
-								__("Календар на {0}: створено {1}, оновлено {2}, без змін {3}", [
-									m.year,
-									m.created,
-									m.updated,
-									m.skipped,
-								])
+								__(
+									"Календар на {0}: створено {1}, оновлено {2}, без змін {3}, знято {4}",
+									[m.year, m.created, m.updated, m.skipped, m.cancelled || 0]
+								)
 							);
 						});
 				},
@@ -223,8 +221,22 @@ function render_headline(frm) {
 				parts.push(`ЄП: <b>${p.single_tax_percent_vat}% + ПДВ</b>`);
 			if (p.military_levy_monthly) parts.push(`ВЗ: <b>${fmt(p.military_levy_monthly)}/міс</b>`);
 			if (p.military_levy_percent) parts.push(`ВЗ: <b>${p.military_levy_percent}%</b>`);
-			if (p.esv_monthly) parts.push(`ЄСВ: <b>${fmt(p.esv_monthly)}/міс</b>`);
+			parts.push(esv_headline(frm, p));
 		}
-		if (parts.length) frm.dashboard.set_headline(parts.join(" · "));
+		const filled = parts.filter(Boolean);
+		if (filled.length) frm.dashboard.set_headline(filled.join(" · "));
 	});
+}
+
+function esv_headline(frm, params) {
+	const fmt = (v) => format_currency(v, "UAH");
+	if (frm.doc.esv_mode === "Звільнений") {
+		const reason = frm.doc.esv_exemption_reason || __("підстава не вказана");
+		return `ЄСВ: <b style="color:green">${escaped(__("звільнено"))}</b> (${escaped(reason)})`;
+	}
+	const currentYear = new Date().getFullYear();
+	if (frm.doc.esv_monthly_override && frm.doc.esv_rate_year === currentYear) {
+		return `ЄСВ: <b>${fmt(frm.doc.esv_monthly_override)}/міс</b> (${escaped(__("сума ФОП"))})`;
+	}
+	return params && params.esv_monthly ? `ЄСВ: <b>${fmt(params.esv_monthly)}/міс</b>` : "";
 }
