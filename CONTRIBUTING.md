@@ -8,6 +8,10 @@
 - Structured logging
 - Tests or smoke checks passed
 
+## Agent skills
+Frappe agent skills live in `.claude/skills/` and are versioned with the code.
+Scope, update commands and limits: [docs/agent-skills.md](docs/agent-skills.md).
+
 ## PR Checklist
 - [ ] No secrets in code
 - [ ] Migration-safe changes
