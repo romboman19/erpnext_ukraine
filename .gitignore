@@ -18,6 +18,10 @@ node_modules/
 .venv/
 .vscode/
 
+# Локальні налаштування агентів: абсолютні шляхи і дозволи конкретної машини.
+# Самі скіли (.claude/skills/) версіонуються — див. docs/agent-skills.md.
+.claude/settings.local.json
+
 # Frappe-generated artifacts
 *.css.map
 *.js.map
